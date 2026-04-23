@@ -145,68 +145,74 @@ async def process_black_day(message: Message, state: FSMContext):
         
         await message.answer(
             text="✅ Отлично!\n\n"
-                 "А теперь о приятном: ради какой большой цели мы всё это затеяли?\n"
-                 "Напиши название мечты и её цену"
+                 "А теперь о приятном: ради какой большой цели мы всё это затеяли?\n\n"
+                 "Напиши название и сумму одним сообщением:\n"
+                 "Например: Ноутбук 50000"
         )
         await state.set_state(BudgetSetup.waiting_for_wishlist_name)
     except ValueError:
         await message.answer("❌ Введи число. Например: 5000")
 
 
+import re
+
 @router.message(BudgetSetup.waiting_for_wishlist_name)
 async def process_wishlist_name(message: Message, state: FSMContext):
-    await state.update_data(wishlist_name=message.text)
+    text = message.text.strip()
+    
+    # Parse "Название X" or "Название X0" or just "X"
+    numbers = re.findall(r'[\d ]+', text.replace(',', '.'))
+    
+    name = text
+    price = 0
+    for num_str in numbers:
+        try:
+            price = float(num_str.replace(" ", ""))
+            if price > 0:
+                # Extract name = remove this number from text
+                name = text.replace(num_str, "").strip()
+                if not name:
+                    name = "Мечта"
+                break
+        except:
+            continue
+    
+    await state.update_data(wishlist_name=name, wishlist_price=price)
+    
+    data = await state.get_data()
+    user = await get_or_create_user(
+        telegram_id=message.from_user.id,
+        first_name=message.from_user.first_name,
+        username=message.from_user.username
+    )
+    
+    month = datetime.now().strftime("%Y-%m")
+    
+    wishlist_name = data.get("wishlist_name", "Мечта")
+    wishlist_price = data.get("wishlist_price", price)
+    
+    await save_budget(
+        user_id=user.telegram_id,
+        month=month,
+        income=data["income"],
+        mandatory=data["mandatory"],
+        black_day=data["black_day"],
+        wishlist_name=wishlist_name,
+        wishlist_price=wishlist_price
+    )
+    
+    daily_limit = (data["income"] - data["mandatory"] - data["black_day"] - wishlist_price) / 30
+    daily_limit = max(daily_limit, 0)
     
     await message.answer(
-        text=f"✅ \"{message.text}\" — отличная цель!\n\n"
-             "А сколько она стоит? Напиши сумму."
+        text=f"🎉 <b>Готово!</b>\n\n"
+             f"📊 Бюджет на {month}:\n"
+             f"• Общий доход: {data['income']:,.0f}₽\n"
+             f"• Обязательные: {data['mandatory']:,.0f}₽\n"
+             f"• Чёрный день: {data['black_day']:,.0f}₽\n"
+             f"• {wishlist_name}: {wishlist_price:,.0f}₽\n\n"
+             f"💰 <b>Дневной лимит: {daily_limit:,.0f}₽</b>\n\n"
+             f"Теперь пиши /add чтобы добавить трату!"
     )
-    await state.set_state(BudgetSetup.waiting_for_wishlist_price)
-
-
-@router.message(BudgetSetup.waiting_for_wishlist_price)
-async def process_wishlist_price(message: Message, state: FSMContext):
-    try:
-        amount = float(message.text.replace(" ", "").replace(",", "."))
-        await state.update_data(wishlist_price=amount)
-        
-        data = await state.get_data()
-        
-        user = await get_or_create_user(
-            telegram_id=message.from_user.id,
-            first_name=message.from_user.first_name,
-            username=message.from_user.username
-        )
-        
-        month = datetime.now().strftime("%Y-%m")
-        
-        await save_budget(
-            user_id=user.telegram_id,
-            month=month,
-            income=data["income"],
-            mandatory=data["mandatory"],
-            black_day=data["black_day"],
-            wishlist_name=data.get("wishlist_name", "Мечта"),
-            wishlist_price=amount
-        )
-        
-        daily_limit = (data["income"] - data["mandatory"] - data["black_day"] - amount) / 30
-        daily_limit = max(daily_limit, 0)
-        
-        wishlist_name = data.get("wishlist_name", "Мечта")
-        
-        await message.answer(
-            text=f"🎉 <b>Готово!</b>\n\n"
-                 f"📊 Бюджет на {month}:\n"
-                 f"• Общий доход: {data['income']:,.0f}₽\n"
-                 f"• Обязательные: {data['mandatory']:,.0f}₽\n"
-                 f"• Чёрный день: {data['black_day']:,.0f}₽\n"
-                 f"• {wishlist_name}: {amount:,.0f}₽\n\n"
-                 f"💰 <b>Дневной лимит: {daily_limit:,.0f}₽</b>\n\n"
-                 f"Теперь пиши /add чтобы добавить трату!"
-        )
-        
-        await state.clear()
-        
-    except ValueError:
-        await message.answer("❌ Введи число. Например: 50000")
+    
+    await state.clear()
