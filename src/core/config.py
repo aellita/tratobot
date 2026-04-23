@@ -1,8 +1,7 @@
 import os
 from pydantic_settings import BaseSettings
-from dotenv import load_dotenv
 
-load_dotenv()
+# Don't use load_dotenv - Railway provides env vars directly
 
 
 class Settings(BaseSettings):
@@ -17,11 +16,10 @@ class Settings(BaseSettings):
             # Convert postgresql:// to postgresql+asyncpg://
             return railway_db.replace("postgresql://", "postgresql+asyncpg://")
         
-        # Default to SQLite if no DATABASE_URL
+        # Default to local SQLite
         return self.DATABASE_URL
 
     class Config:
-        env_file = ".env"
         extra = "allow"
 
 
