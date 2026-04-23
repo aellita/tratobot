@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
@@ -8,12 +9,14 @@ class Settings(BaseSettings):
     BOT_TOKEN: str = ""
     DATABASE_URL: str = "sqlite+aiosqlite:///tratobot.db"
     
+    # PostgreSQL settings ( Railway)
     POSTGRES_USER: str = ""
     POSTGRES_PASSWORD: str = ""
     POSTGRES_HOST: str = ""
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = ""
     
+    # Enable PostgreSQL ( Railway uses this)
     USE_POSTGRES: bool = False
     
     @property
@@ -24,6 +27,12 @@ class Settings(BaseSettings):
     
     @property
     def db_url(self) -> str:
+        # Check for Railway DATABASE_URL first
+        railway_db = os.getenv("DATABASE_URL")
+        if railway_db:
+            # Convert railway url to asyncpg format
+            return railway_db.replace("postgresql://", "postgresql+asyncpg://")
+        
         if self.USE_POSTGRES:
             return self.postgres_url
         return self.DATABASE_URL

@@ -4,7 +4,7 @@ from ..db.models.models import Base
 
 
 engine = create_async_engine(
-    settings.postgres_url,
+    settings.db_url,
     echo=False,
 )
 
