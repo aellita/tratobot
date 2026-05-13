@@ -4,10 +4,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from .handlers.commands import router as handlers_router
-from .handlers.budget import router as budget_router
-from .handlers.settings import router as settings_router
-from .handlers.add_expense import router as add_expense_router
+from .handlers.menu import router as menu_router
 from ..core.config import settings
 from ..db.database import init_db, close_db
 
@@ -21,10 +18,7 @@ bot = Bot(
 dp = Dispatcher()
 
 
-dp.include_router(handlers_router)
-dp.include_router(budget_router)
-dp.include_router(settings_router)
-dp.include_router(add_expense_router)
+dp.include_router(menu_router)
 
 
 async def on_startup():

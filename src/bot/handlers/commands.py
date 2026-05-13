@@ -1,6 +1,6 @@
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
 
 from ...db.database import async_session_maker
@@ -9,18 +9,49 @@ from ...db.models.models import User, Budget, Expense
 router = Router()
 
 
+def get_main_menu_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📊 Бюджет", callback_data="menu_budget")],
+        [InlineKeyboardButton(text="💸 Добавить трату", callback_data="menu_add")],
+        [InlineKeyboardButton(text="📈 Статус", callback_data="menu_status")],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu_settings")],
+        [InlineKeyboardButton(text="📋 Помощь", callback_data="menu_help")],
+    ])
+
+
+@router.message(Command("start"))
+async def cmd_start(message: Message):
+    user_name = message.from_user.first_name or "друг"
+    await message.answer(
+        text=f"👋 Привет, {user_name}!\n\n"
+             "Я — твой финансовый помощник. Давай не дадим деньгам утекать!\n\n"
+             "Выбери действие:",
+        reply_markup=get_main_menu_keyboard()
+    )
+
+
+@router.message(Command("menu"))
+async def cmd_menu(message: Message):
+    user_name = message.from_user.first_name or "друг"
+    await message.answer(
+        text=f"👋 {user_name}, выбери действие:",
+        reply_markup=get_main_menu_keyboard()
+    )
+
+
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     user_name = message.from_user.first_name or "друг"
     await message.answer(
         text=f"👋 Привет, {user_name}!\n\n"
-             "📋 <b>Доступные команды:</b>\n\n"
-             "/start — Начать или обновить бюджет\n"
-             "/budget — Настроить бюджет\n"
-             "/settings — Редактировать бюджет\n"
-             "/add — Добавить трату\n"
-             "/status — Показать статус\n"
-             "/help — Помощь"
+             "📋 <b>Что я умею:</b>\n\n"
+             "📊 <b>Бюджет</b> — настроить и посмотреть\n"
+             "💸 <b>Добавить трату</b> — записать расход\n"
+             "📈 <b>Статус</b> — сколько осталось\n"
+             "⚙️ <b>Настройки</b> — изменить бюджет\n\n"
+             "Или просто напиши сумму и описание:\n"
+             "\"500 кофе\", \"200 такси\" — я сама разберусь! 😊",
+        reply_markup=get_main_menu_keyboard()
     )
 
 
@@ -38,7 +69,8 @@ async def cmd_status(message: Message):
         if not user:
             await message.answer(
                 text=f"👋 Привет, {user_name}!\n\n"
-                     "У тебя пока нет бюджета. Напиши /start чтобы настроить!"
+                     "У тебя пока нет бюджета. Нажми /start!",
+                reply_markup=get_main_menu_keyboard()
             )
             return
         
@@ -54,14 +86,15 @@ async def cmd_status(message: Message):
         if not budget:
             await message.answer(
                 text=f"👋 Привет, {user_name}!\n\n"
-                     "У тебя нет бюджета на этот месяц. Напиши /start!"
+                     "У тебя нет бюджета на этот месяц. Нажми /start!",
+                reply_markup=get_main_menu_keyboard()
             )
             return
         
         result = await session.execute(
             select(func.sum(Expense.amount)).where(
                 Expense.user_id == user.telegram_id,
-                func.date(Expense.date) >= datetime.now().replace(day=1)
+                Expense.date >= datetime.now().replace(day=1, hour=0, minute=0, second=0)
             )
         )
         spent = result.scalar() or 0
@@ -71,14 +104,12 @@ async def cmd_status(message: Message):
         
         await message.answer(
             text=f"📊 <b>Статус на {datetime.now().strftime('%d %B')}:</b>\n\n"
-                 f"👋 Привет, {user_name}!\n\n"
                  f"💰 <b>Дневной лимит:</b> {daily:,.0f}₽\n"
-                 f"📈 <b>Общий доход:</b> {budget.total_income:,.0f}₽\n"
+                 f"📈 <b>Общий:</b> {budget.total_income:,.0f}₽\n"
                  f"📉 <b>Потрачено:</b> {spent:,.0f}₽\n"
                  f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
                  f"🆘 <b>Чёрный день:</b> {budget.black_day_fund:,.0f}₽\n"
                  f"🎯 <b>{budget.wishlist_name}:</b> {budget.wishlist_target:,.0f}₽\n\n"
-                 f"💵 <b>Осталось:</b> {remaining:,.0f}₽\n\n"
-                 "Используй /add чтобы записать трату\n"
-                 "Используй /settings чтобы изменить бюджет"
+                 f"💵 <b>Осталось:</b> {remaining:,.0f}₽",
+            reply_markup=get_main_menu_keyboard()
         )
