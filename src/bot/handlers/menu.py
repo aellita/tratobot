@@ -1,6 +1,6 @@
 from aiogram import Router, F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime
@@ -184,6 +184,22 @@ async def menu_help(callback: CallbackQuery):
              "\"500 кофе\", \"200 такси\" — я сама разберусь! 😊",
         reply_markup=get_main_menu_keyboard()
     )
+
+
+@router.message(Command("start"))
+async def cmd_start(message: Message, state: FSMContext):
+    user_name = message.from_user.first_name or "друг"
+    import random
+    greeting = random.choice(GREETINGS)
+    await message.answer(text=greeting)
+    await message.answer(
+        text="📊 Давай настроим бюджет!\n\n"
+             "Начнём с фундамента: сколько ресурсов у нас в распоряжении на этот месяц?\n"
+             "Чистая математика, никакого осуждения.\n\n"
+             "Введи общую сумму (например: 50000)",
+        reply_markup=get_cancel_keyboard()
+    )
+    await state.set_state(BudgetSetup.waiting_for_income)
 
 
 @router.callback_query(F.data == "menu_status")
