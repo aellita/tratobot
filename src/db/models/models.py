@@ -32,7 +32,7 @@ class Budget(Base):
     __tablename__ = "budgets"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     month: Mapped[str] = mapped_column(String(7))
     
     total_income: Mapped[float] = mapped_column(Float, default=0)
@@ -55,7 +55,7 @@ class Category(Base):
     __tablename__ = "categories"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     name: Mapped[str] = mapped_column(String(100))
     type: Mapped[CategoryType] = mapped_column(SQLEnum(CategoryType))
     keywords: Mapped[str] = mapped_column(Text, default="")
@@ -65,7 +65,7 @@ class Expense(Base):
     __tablename__ = "expenses"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     amount: Mapped[float] = mapped_column(Float)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -78,7 +78,7 @@ class Wishlist(Base):
     __tablename__ = "wishlists"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     name: Mapped[str] = mapped_column(String(255))
     target_amount: Mapped[float] = mapped_column(Float)
     current_amount: Mapped[float] = mapped_column(Float, default=0)
@@ -90,7 +90,7 @@ class BlackDayFund(Base):
     __tablename__ = "black_day_funds"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     month: Mapped[str] = mapped_column(String(7))
     amount: Mapped[float] = mapped_column(Float, default=0)
     used_amount: Mapped[float] = mapped_column(Float, default=0)
@@ -100,7 +100,7 @@ class UserSettings(Base):
     __tablename__ = "user_settings"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
     morning_report_time: Mapped[str] = mapped_column(String(5), default="08:00")
     evening_report_time: Mapped[str] = mapped_column(String(5), default="22:00")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
