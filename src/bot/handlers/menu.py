@@ -109,6 +109,7 @@ async def _save_msg_id(state: FSMContext, msg: Message):
 
 @router.callback_query(F.data == "menu_back")
 async def menu_back(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.clear()
     user_name = callback.from_user.first_name or "друг"
     await callback.message.edit_text(
@@ -120,6 +121,7 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "menu_help")
 async def menu_help(callback: CallbackQuery):
+    await callback.answer()
     user_name = callback.from_user.first_name or "друг"
     await callback.message.edit_text(
         text=f"👋 Привет, {user_name}!\n\n"
@@ -153,6 +155,7 @@ async def cmd_start(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "menu_status")
 async def menu_status(callback: CallbackQuery):
+    await callback.answer()
     user_name = callback.from_user.first_name or "друг"
 
     user = await get_user_or_none(callback.from_user.id)
@@ -213,6 +216,7 @@ async def menu_status(callback: CallbackQuery):
 
 @router.callback_query(F.data == "skip_step")
 async def skip_step(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     current_state = await state.get_state()
 
     if current_state == BudgetSetup.waiting_for_income.state:
@@ -406,6 +410,7 @@ async def process_wishlist_name(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "menu_add")
 async def menu_add(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     user_name = callback.from_user.first_name or "друг"
     await state.set_state(AddExpense.waiting_for_amount)
     await callback.message.edit_text(
@@ -475,6 +480,7 @@ async def process_expense(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "menu_settings")
 async def menu_settings(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     user_name = callback.from_user.first_name or "друг"
 
     budget = await get_budget_or_none(callback.from_user.id)
@@ -499,6 +505,7 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "edit_income")
 async def edit_income(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.set_state(EditBudget.waiting_for_income)
     await callback.message.edit_text(
         text="💰 Введи новую сумму дохода (заменит текущую):",
@@ -509,6 +516,7 @@ async def edit_income(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "add_income")
 async def add_income(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.set_state(EditBudget.waiting_for_add_income)
     await callback.message.edit_text(
         text="➕ Введи сумму, которую хочешь добавить к текущему доходу:",
@@ -519,6 +527,7 @@ async def add_income(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "edit_mandatory")
 async def edit_mandatory(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.set_state(EditBudget.waiting_for_mandatory)
     await callback.message.edit_text(
         text="📌 Введи новую сумму обязательных:",
@@ -529,6 +538,7 @@ async def edit_mandatory(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "edit_black_day")
 async def edit_black_day(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.set_state(EditBudget.waiting_for_black_day)
     await callback.message.edit_text(
         text="🆘 Введи новую сумму чёрного дня:",
@@ -539,6 +549,7 @@ async def edit_black_day(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "edit_wishlist")
 async def edit_wishlist(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.set_state(EditBudget.waiting_for_wishlist)
     await callback.message.edit_text(
         text="🎯 Введи название и сумму хотелки:\n"
@@ -663,6 +674,7 @@ async def save_wishlist(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "cancel")
 async def cancel(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.clear()
     user_name = callback.from_user.first_name or "друг"
     await callback.message.edit_text(
