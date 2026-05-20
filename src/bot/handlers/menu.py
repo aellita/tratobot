@@ -33,6 +33,7 @@ class BudgetSetup(StatesGroup):
 
 class EditBudget(StatesGroup):
     waiting_for_income = State()
+    waiting_for_add_income = State()
     waiting_for_mandatory = State()
     waiting_for_black_day = State()
     waiting_for_wishlist = State()
@@ -472,7 +473,16 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
 async def edit_income(callback: CallbackQuery, state: FSMContext):
     await state.set_state(EditBudget.waiting_for_income)
     await callback.message.edit_text(
-        text="💰 Введи новый доход:",
+        text="💰 Введи новую сумму дохода (заменит текущую):",
+        reply_markup=get_cancel_keyboard()
+    )
+
+
+@router.callback_query(F.data == "add_income")
+async def add_income(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(EditBudget.waiting_for_add_income)
+    await callback.message.edit_text(
+        text="➕ Введи сумму, которую хочешь добавить к текущему доходу:",
         reply_markup=get_cancel_keyboard()
     )
 
@@ -518,6 +528,28 @@ async def save_income(message: Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.answer("❌ Введи число. Например: 50000")
+
+
+@router.message(EditBudget.waiting_for_add_income)
+async def save_add_income(message: Message, state: FSMContext):
+    try:
+        amount = float(message.text.replace(" ", "").replace(",", "."))
+        budget = await get_budget_or_none(message.from_user.id)
+        if not budget:
+            await message.answer("❌ Сначала настрой бюджет через /start")
+            await state.clear()
+            return
+        new_total = budget.total_income + amount
+        await update_budget_field(message.from_user.id, "total_income", new_total)
+        user_name = message.from_user.first_name or "друг"
+        await message.answer(
+            text=f"✅ Готово, {user_name}! Доход увеличен на {amount:,.0f}₽\n"
+                 f"💰 Текущий доход: {new_total:,.0f}₽",
+            reply_markup=get_main_menu_keyboard()
+        )
+        await state.clear()
+    except ValueError:
+        await message.answer("❌ Введи число. Например: 10000")
 
 
 @router.message(EditBudget.waiting_for_mandatory)

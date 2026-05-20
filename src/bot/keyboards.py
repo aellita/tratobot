@@ -12,7 +12,8 @@ def get_main_menu_keyboard():
 
 def get_settings_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💰 Доход", callback_data="edit_income")],
+        [InlineKeyboardButton(text="💰 Обновить доход", callback_data="edit_income")],
+        [InlineKeyboardButton(text="➕ Добавить доход", callback_data="add_income")],
         [InlineKeyboardButton(text="📌 Обязательные", callback_data="edit_mandatory")],
         [InlineKeyboardButton(text="🆘 Чёрный день", callback_data="edit_black_day")],
         [InlineKeyboardButton(text="🎯 Хотелка", callback_data="edit_wishlist")],
