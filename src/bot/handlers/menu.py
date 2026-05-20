@@ -66,6 +66,26 @@ async def get_budget_or_none(telegram_id: int) -> Budget | None:
         return result.scalar_one_or_none()
 
 
+_last_keyboard = {}  # chat_id -> message_id
+
+
+async def _cleanup_keyboard(bot: Bot, chat_id: int):
+    msg_id = _last_keyboard.pop(chat_id, None)
+    if msg_id:
+        try:
+            await bot.edit_message_reply_markup(
+                chat_id=chat_id,
+                message_id=msg_id,
+                reply_markup=None
+            )
+        except Exception:
+            pass
+
+
+def _track_keyboard(chat_id: int, message_id: int):
+    _last_keyboard[chat_id] = message_id
+
+
 async def _cleanup_old_buttons(state: FSMContext, bot: Bot):
     data = await state.get_data()
     msg_id = data.get("_last_msg_id")
@@ -95,6 +115,7 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
         text=f"👋 {user_name}, выбери действие:",
         reply_markup=get_main_menu_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "menu_help")
@@ -110,6 +131,7 @@ async def menu_help(callback: CallbackQuery):
              "\"500 кофе\", \"200 такси\" — я сама разберусь! 😊",
         reply_markup=get_main_menu_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.message(Command("start"))
@@ -184,6 +206,7 @@ async def menu_status(callback: CallbackQuery):
              f"💵 <b>Осталось:</b> {remaining:,.0f}₽",
         reply_markup=get_main_menu_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 # ============ ONBOARDING / SKIP ============
@@ -391,6 +414,7 @@ async def menu_add(callback: CallbackQuery, state: FSMContext):
              "Например: 500 кофе",
         reply_markup=get_cancel_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.message(AddExpense.waiting_for_amount)
@@ -435,13 +459,16 @@ async def process_expense(message: Message, state: FSMContext):
 
     await state.clear()
     user_name = message.from_user.first_name or "друг"
-    await message.answer(
+
+    await _cleanup_keyboard(message.bot, message.chat.id)
+    msg = await message.answer(
         text=f"✅ Записано, {user_name}!\n\n"
              f"💰 Сумма: {amount:,.0f}₽\n"
              f"{category_emoji} Категория: {category.capitalize()}\n"
              f"📝 Описание: {description or '—'}",
         reply_markup=get_main_menu_keyboard()
     )
+    _track_keyboard(message.chat.id, msg.message_id)
 
 
 # ============ SETTINGS ============
@@ -467,6 +494,7 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
              f"• {budget.wishlist_name}: {budget.wishlist_target:,.0f}₽",
         reply_markup=get_settings_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "edit_income")
@@ -476,6 +504,7 @@ async def edit_income(callback: CallbackQuery, state: FSMContext):
         text="💰 Введи новую сумму дохода (заменит текущую):",
         reply_markup=get_cancel_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "add_income")
@@ -485,6 +514,7 @@ async def add_income(callback: CallbackQuery, state: FSMContext):
         text="➕ Введи сумму, которую хочешь добавить к текущему доходу:",
         reply_markup=get_cancel_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "edit_mandatory")
@@ -494,6 +524,7 @@ async def edit_mandatory(callback: CallbackQuery, state: FSMContext):
         text="📌 Введи новую сумму обязательных:",
         reply_markup=get_cancel_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "edit_black_day")
@@ -503,6 +534,7 @@ async def edit_black_day(callback: CallbackQuery, state: FSMContext):
         text="🆘 Введи новую сумму чёрного дня:",
         reply_markup=get_cancel_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "edit_wishlist")
@@ -513,6 +545,7 @@ async def edit_wishlist(callback: CallbackQuery, state: FSMContext):
              "Например: Ноутбук 50000",
         reply_markup=get_cancel_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.message(EditBudget.waiting_for_income)
@@ -521,10 +554,13 @@ async def save_income(message: Message, state: FSMContext):
         amount = float(message.text.replace(" ", "").replace(",", "."))
         await update_budget_field(message.from_user.id, "total_income", amount)
         user_name = message.from_user.first_name or "друг"
-        await message.answer(
+
+        await _cleanup_keyboard(message.bot, message.chat.id)
+        msg = await message.answer(
             text=f"✅ Готово, {user_name}! Доход: {amount:,.0f}₽",
             reply_markup=get_main_menu_keyboard()
         )
+        _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
     except ValueError:
         await message.answer("❌ Введи число. Например: 50000")
@@ -542,11 +578,14 @@ async def save_add_income(message: Message, state: FSMContext):
         new_total = budget.total_income + amount
         await update_budget_field(message.from_user.id, "total_income", new_total)
         user_name = message.from_user.first_name or "друг"
-        await message.answer(
+
+        await _cleanup_keyboard(message.bot, message.chat.id)
+        msg = await message.answer(
             text=f"✅ Готово, {user_name}! Доход увеличен на {amount:,.0f}₽\n"
                  f"💰 Текущий доход: {new_total:,.0f}₽",
             reply_markup=get_main_menu_keyboard()
         )
+        _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
     except ValueError:
         await message.answer("❌ Введи число. Например: 10000")
@@ -558,10 +597,13 @@ async def save_mandatory(message: Message, state: FSMContext):
         amount = float(message.text.replace(" ", "").replace(",", "."))
         await update_budget_field(message.from_user.id, "mandatory_payments", amount)
         user_name = message.from_user.first_name or "друг"
-        await message.answer(
+
+        await _cleanup_keyboard(message.bot, message.chat.id)
+        msg = await message.answer(
             text=f"✅ Готово, {user_name}! Обязательные: {amount:,.0f}₽",
             reply_markup=get_main_menu_keyboard()
         )
+        _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
     except ValueError:
         await message.answer("❌ Введи число. Например: 15000")
@@ -573,10 +615,13 @@ async def save_black_day(message: Message, state: FSMContext):
         amount = float(message.text.replace(" ", "").replace(",", "."))
         await update_budget_field(message.from_user.id, "black_day_fund", amount)
         user_name = message.from_user.first_name or "друг"
-        await message.answer(
+
+        await _cleanup_keyboard(message.bot, message.chat.id)
+        msg = await message.answer(
             text=f"✅ Готово, {user_name}! Чёрный день: {amount:,.0f}₽",
             reply_markup=get_main_menu_keyboard()
         )
+        _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
     except ValueError:
         await message.answer("❌ Введи число. Например: 5000")
@@ -604,10 +649,13 @@ async def save_wishlist(message: Message, state: FSMContext):
     await update_budget_field(message.from_user.id, "wishlist_target", price)
 
     user_name = message.from_user.first_name or "друг"
-    await message.answer(
+
+    await _cleanup_keyboard(message.bot, message.chat.id)
+    msg = await message.answer(
         text=f"✅ Готово, {user_name}! Хотелка: {name} — {price:,.0f}₽",
         reply_markup=get_main_menu_keyboard()
     )
+    _track_keyboard(message.chat.id, msg.message_id)
     await state.clear()
 
 
@@ -621,6 +669,7 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
         text=f"⬅️ Вернулись, {user_name}!",
         reply_markup=get_main_menu_keyboard()
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 # ============ UNSUPPORTED CONTENT ============
@@ -678,20 +727,25 @@ async def handle_text(message: Message, state: FSMContext):
 
                 user_name = message.from_user.first_name or "друг"
 
-                await message.answer(
+                await _cleanup_keyboard(message.bot, message.chat.id)
+                msg = await message.answer(
                     text=f"✅ Записано, {user_name}!\n\n"
                          f"💰 {amount:,.0f}₽ — {description or category.capitalize()}\n"
                          f"{category_emoji}",
                     reply_markup=get_main_menu_keyboard()
                 )
+                _track_keyboard(message.chat.id, msg.message_id)
                 return
         except:
             continue
 
     user_name = message.from_user.first_name or "друг"
-    await message.answer(
+
+    await _cleanup_keyboard(message.bot, message.chat.id)
+    msg = await message.answer(
         text=f"👋 {user_name}, не поняла...\n\n"
              "Напиши сумму и описание, например:\n"
              "\"500 кофе\" или нажми кнопку в меню",
         reply_markup=get_main_menu_keyboard()
     )
+    _track_keyboard(message.chat.id, msg.message_id)
