@@ -2,7 +2,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
-from ..db.models.models import Budget
+from ..db.models.models import Budget, User
 
 
 async def save_budget(user_id: int, month: str, income: float, mandatory: float, black_day: float, wishlist_name: str = None, wishlist_price: float = 0):
@@ -36,12 +36,19 @@ async def save_budget(user_id: int, month: str, income: float, mandatory: float,
         await session.commit()
 
 
-async def update_budget_field(user_id: int, field: str, value):
+async def update_budget_field(telegram_id: int, field: str, value):
     month = datetime.now().strftime("%Y-%m")
     async with async_session_maker() as session:
+        user = await session.execute(
+            select(User).where(User.telegram_id == telegram_id)
+        )
+        user = user.scalar_one_or_none()
+        if not user:
+            return
+
         result = await session.execute(
             select(Budget).where(
-                Budget.user_id == user_id,
+                Budget.user_id == user.id,
                 Budget.month == month
             )
         )

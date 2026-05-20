@@ -2,7 +2,7 @@ import random
 import re
 from datetime import datetime
 
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -13,9 +13,13 @@ from ...db.database import async_session_maker
 from ...db.models.models import User, Budget, Expense
 from ...services.budget_service import save_budget, update_budget_field
 from ...services.categorization import CATEGORIES, GREETINGS, detect_category
-from ...services.expense_service import create_expense
 from ...services.user_service import get_or_create_user
-from ..keyboards import get_cancel_keyboard, get_main_menu_keyboard, get_settings_keyboard
+from ..keyboards import (
+    get_cancel_keyboard,
+    get_main_menu_keyboard,
+    get_onboarding_keyboard,
+    get_settings_keyboard,
+)
 
 router = Router()
 
@@ -28,7 +32,6 @@ class BudgetSetup(StatesGroup):
 
 
 class EditBudget(StatesGroup):
-    choosing_field = State()
     waiting_for_income = State()
     waiting_for_mandatory = State()
     waiting_for_black_day = State()
@@ -62,10 +65,30 @@ async def get_budget_or_none(telegram_id: int) -> Budget | None:
         return result.scalar_one_or_none()
 
 
+async def _cleanup_old_buttons(state: FSMContext, bot: Bot):
+    data = await state.get_data()
+    msg_id = data.get("_last_msg_id")
+    chat_id = data.get("_last_chat_id")
+    if msg_id and chat_id:
+        try:
+            await bot.edit_message_reply_markup(
+                chat_id=chat_id,
+                message_id=msg_id,
+                reply_markup=None
+            )
+        except Exception:
+            pass
+
+
+async def _save_msg_id(state: FSMContext, msg: Message):
+    await state.update_data(_last_msg_id=msg.message_id, _last_chat_id=msg.chat.id)
+
+
 # ============ MENU HANDLERS ============
 
 @router.callback_query(F.data == "menu_back")
-async def menu_back(callback: CallbackQuery):
+async def menu_back(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
     user_name = callback.from_user.first_name or "друг"
     await callback.message.edit_text(
         text=f"👋 {user_name}, выбери действие:",
@@ -79,7 +102,6 @@ async def menu_help(callback: CallbackQuery):
     await callback.message.edit_text(
         text=f"👋 Привет, {user_name}!\n\n"
              "📋 <b>Что я умею:</b>\n\n"
-             "📊 <b>Бюджет</b> — настроить и посмотреть\n"
              "💸 <b>Добавить трату</b> — записать расход\n"
              "📈 <b>Статус</b> — сколько осталось\n"
              "⚙️ <b>Настройки</b> — изменить бюджет\n\n"
@@ -94,13 +116,15 @@ async def cmd_start(message: Message, state: FSMContext):
     user_name = message.from_user.first_name or "друг"
     greeting = random.choice(GREETINGS)
     await message.answer(text=greeting)
-    await message.answer(
+
+    sent = await message.answer(
         text="📊 Давай настроим бюджет!\n\n"
              "Начнём с фундамента: сколько ресурсов у нас в распоряжении на этот месяц?\n"
              "Чистая математика, никакого осуждения.\n\n"
              "Введи общую сумму (например: 50000)",
-        reply_markup=get_cancel_keyboard()
+        reply_markup=get_onboarding_keyboard()
     )
+    await _save_msg_id(state, sent)
     await state.set_state(BudgetSetup.waiting_for_income)
 
 
@@ -146,6 +170,8 @@ async def menu_status(callback: CallbackQuery):
     remaining = budget.total_income - budget.mandatory_payments - budget.black_day_fund - budget.wishlist_target - spent
     daily = budget.daily_limit
 
+    remaining_today = max(daily - spent, 0)
+
     await callback.message.edit_text(
         text=f"📊 <b>Статус на {datetime.now().strftime('%d %B')}:</b>\n\n"
              f"💰 <b>Дневной лимит:</b> {daily:,.0f}₽\n"
@@ -159,77 +185,182 @@ async def menu_status(callback: CallbackQuery):
     )
 
 
-# ============ BUDGET SETUP ============
+# ============ ONBOARDING / SKIP ============
 
-@router.callback_query(F.data == "menu_budget")
-async def menu_budget(callback: CallbackQuery, state: FSMContext):
-    greeting = random.choice(GREETINGS)
+@router.callback_query(F.data == "skip_step")
+async def skip_step(callback: CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
 
-    await callback.message.edit_text(text=greeting)
-    await callback.message.answer(
-        text="📊 Давай настроим бюджет!\n\n"
-             "Начнём с фундамента: сколько ресурсов у нас в распоряжении на этот месяц?\n"
-             "Чистая математика, никакого осуждения.\n\n"
-             "Введи общую сумму (например: 50000)"
+    if current_state == BudgetSetup.waiting_for_income.state:
+        await state.update_data(income=0)
+        await _advance_onboarding(callback, state, income_skipped=True)
+    elif current_state == BudgetSetup.waiting_for_mandatory.state:
+        await state.update_data(mandatory=0)
+        await _advance_onboarding(callback, state)
+    elif current_state == BudgetSetup.waiting_for_black_day.state:
+        await state.update_data(black_day=0)
+        await _advance_onboarding(callback, state)
+    elif current_state == BudgetSetup.waiting_for_wishlist_name.state:
+        await state.update_data(wishlist_name="", wishlist_price=0)
+        await _finish_onboarding(callback, state)
+    else:
+        await callback.answer()
+
+
+async def _advance_onboarding(source: CallbackQuery | Message, state: FSMContext, income_skipped: bool = False):
+    current_state = await state.get_state()
+
+    if current_state == BudgetSetup.waiting_for_income.state or income_skipped:
+        await state.set_state(BudgetSetup.waiting_for_mandatory)
+        if isinstance(source, CallbackQuery):
+            await source.message.edit_text(
+                text="✅ Хорошо, начнём без дохода.\n\n"
+                     "Теперь отсечем всё лишнее: аренду, счета и прочую бытовую рутину.\n"
+                     "Сколько у нас уходит на обязательные платежи?",
+                reply_markup=get_onboarding_keyboard()
+            )
+        else:
+            await source.answer(
+                text="✅ Хорошо, начнём без дохода.\n\n"
+                     "Теперь отсечем всё лишнее: аренду, счета и прочую бытовую рутину.\n"
+                     "Сколько у нас уходит на обязательные платежи?",
+                reply_markup=get_onboarding_keyboard()
+            )
+    elif current_state == BudgetSetup.waiting_for_mandatory.state:
+        await state.set_state(BudgetSetup.waiting_for_black_day)
+        kw = get_onboarding_keyboard() if isinstance(source, CallbackQuery) else None
+        text = "✅ Хорошо.\n\nОк. А теперь давай создадим твою подушку безопасности на случай внезапных приключений.\nСколько будем откладывать в месяц в \"Чёрный день\"?"
+        if isinstance(source, CallbackQuery):
+            await source.message.edit_text(text=text, reply_markup=kw)
+        else:
+            await source.answer(text=text, reply_markup=get_onboarding_keyboard())
+    elif current_state == BudgetSetup.waiting_for_black_day.state:
+        await state.set_state(BudgetSetup.waiting_for_wishlist_name)
+        text = ("✅ Отлично!\n\n"
+                "А теперь о приятном: ради какой большой цели мы всё это затеяли?\n\n"
+                "Напиши название и сумму одним сообщением:\n"
+                "Например: Ноутбук 50000\n\n"
+                "Или нажми «Пропустить»")
+        if isinstance(source, CallbackQuery):
+            await source.message.edit_text(text=text, reply_markup=get_onboarding_keyboard())
+        else:
+            await source.answer(text=text, reply_markup=get_onboarding_keyboard())
+
+
+async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext):
+    data = await state.get_data()
+    telegram_id = source.from_user.id if isinstance(source, CallbackQuery) else source.from_user.id
+
+    user = await get_or_create_user(
+        telegram_id=telegram_id,
+        first_name=source.from_user.first_name,
+        username=source.from_user.username
     )
-    await state.set_state(BudgetSetup.waiting_for_income)
 
+    month = datetime.now().strftime("%Y-%m")
+    wishlist_name = data.get("wishlist_name", "Мечта") or "Мечта"
+    wishlist_price = data.get("wishlist_price", 0)
+
+    await save_budget(
+        user_id=user.id,
+        month=month,
+        income=data.get("income", 0),
+        mandatory=data.get("mandatory", 0),
+        black_day=data.get("black_day", 0),
+        wishlist_name=wishlist_name,
+        wishlist_price=wishlist_price
+    )
+
+    daily_limit = max((data.get("income", 0) - data.get("mandatory", 0) - data.get("black_day", 0) - wishlist_price) / 30, 0)
+
+    user_name = source.from_user.first_name or "друг"
+
+    text = (f"🎉 <b>Готово!</b> {user_name}!\n\n"
+            f"📊 Бюджет на {month}:\n"
+            f"• Общий доход: {data.get('income', 0):,.0f}₽\n"
+            f"• Обязательные: {data.get('mandatory', 0):,.0f}₽\n"
+            f"• Чёрный день: {data.get('black_day', 0):,.0f}₽\n"
+            f"• {wishlist_name}: {wishlist_price:,.0f}₽\n\n"
+            f"💰 <b>Дневной лимит: {daily_limit:,.0f}₽</b>")
+
+    if isinstance(source, CallbackQuery):
+        await source.message.edit_text(text=text, reply_markup=get_main_menu_keyboard())
+    else:
+        await source.answer(text=text, reply_markup=get_main_menu_keyboard())
+
+    await state.clear()
+
+
+# ============ BUDGET SETUP STEPS ============
 
 @router.message(BudgetSetup.waiting_for_income)
 async def process_income(message: Message, state: FSMContext):
     try:
         amount = float(message.text.replace(" ", "").replace(",", "."))
-        await state.update_data(income=amount)
-
-        await message.answer(
-            text="✅ Запомнил!\n\n"
-                 "Теперь отсечем всё лишнее: аренду, счета и прочую бытовую рутину.\n"
-                 "Сколько у нас уходит на обязательные платежи?"
-        )
-        await state.set_state(BudgetSetup.waiting_for_mandatory)
     except ValueError:
         await message.answer("❌ Введи число. Например: 50000")
+        return
+
+    await _cleanup_old_buttons(state, message.bot)
+    await state.update_data(income=amount)
+    await state.set_state(BudgetSetup.waiting_for_mandatory)
+    sent = await message.answer(
+        text="✅ Запомнил!\n\n"
+             "Теперь отсечем всё лишнее: аренду, счета и прочую бытовую рутину.\n"
+             "Сколько у нас уходит на обязательные платежи?",
+        reply_markup=get_onboarding_keyboard()
+    )
+    await _save_msg_id(state, sent)
 
 
 @router.message(BudgetSetup.waiting_for_mandatory)
 async def process_mandatory(message: Message, state: FSMContext):
     try:
         amount = float(message.text.replace(" ", "").replace(",", "."))
-        await state.update_data(mandatory=amount)
-
-        await message.answer(
-            text="✅ Хорошо.\n\n"
-                 "Ок. А теперь давай создадим твою подушку безопасности на случай внезапных приключений.\n"
-                 "Сколько будем откладывать в месяц в \"Чёрный день\", чтобы ты спал(а) спокойно?"
-        )
-        await state.set_state(BudgetSetup.waiting_for_black_day)
     except ValueError:
         await message.answer("❌ Введи число. Например: 15000")
+        return
+
+    await _cleanup_old_buttons(state, message.bot)
+    await state.update_data(mandatory=amount)
+    await state.set_state(BudgetSetup.waiting_for_black_day)
+    sent = await message.answer(
+        text="✅ Хорошо.\n\n"
+             "Ок. А теперь давай создадим твою подушку безопасности на случай внезапных приключений.\n"
+             "Сколько будем откладывать в месяц в \"Чёрный день\", чтобы ты спал(а) спокойно?",
+        reply_markup=get_onboarding_keyboard()
+    )
+    await _save_msg_id(state, sent)
 
 
 @router.message(BudgetSetup.waiting_for_black_day)
 async def process_black_day(message: Message, state: FSMContext):
     try:
         amount = float(message.text.replace(" ", "").replace(",", "."))
-        await state.update_data(black_day=amount)
-
-        await message.answer(
-            text="✅ Отлично!\n\n"
-                 "А теперь о приятном: ради какой большой цели мы всё это затеяли?\n\n"
-                 "Напиши название и сумму одним сообщением:\n"
-                 "Например: Ноутбук 50000"
-        )
-        await state.set_state(BudgetSetup.waiting_for_wishlist_name)
     except ValueError:
         await message.answer("❌ Введи число. Например: 5000")
+        return
+
+    await _cleanup_old_buttons(state, message.bot)
+    await state.update_data(black_day=amount)
+    await state.set_state(BudgetSetup.waiting_for_wishlist_name)
+    sent = await message.answer(
+        text="✅ Отлично!\n\n"
+             "А теперь о приятном: ради какой большой цели мы всё это затеяли?\n\n"
+             "Напиши название и сумму одним сообщением:\n"
+             "Например: Ноутбук 50000\n\n"
+             "Или нажми «Пропустить»",
+        reply_markup=get_onboarding_keyboard()
+    )
+    await _save_msg_id(state, sent)
 
 
 @router.message(BudgetSetup.waiting_for_wishlist_name)
 async def process_wishlist_name(message: Message, state: FSMContext):
+    await _cleanup_old_buttons(state, message.bot)
+
     text = message.text.strip()
-
     numbers = re.findall(r'[\d ]+', text.replace(',', '.'))
-
     name = text
     price = 0
     for num_str in numbers:
@@ -244,46 +375,7 @@ async def process_wishlist_name(message: Message, state: FSMContext):
             continue
 
     await state.update_data(wishlist_name=name, wishlist_price=price)
-
-    data = await state.get_data()
-    user = await get_or_create_user(
-        telegram_id=message.from_user.id,
-        first_name=message.from_user.first_name,
-        username=message.from_user.username
-    )
-
-    month = datetime.now().strftime("%Y-%m")
-
-    wishlist_name = data.get("wishlist_name", "Мечта")
-    wishlist_price = data.get("wishlist_price", price)
-
-    await save_budget(
-        user_id=user.id,
-        month=month,
-        income=data["income"],
-        mandatory=data["mandatory"],
-        black_day=data["black_day"],
-        wishlist_name=wishlist_name,
-        wishlist_price=wishlist_price
-    )
-
-    daily_limit = (data["income"] - data["mandatory"] - data["black_day"] - wishlist_price) / 30
-    daily_limit = max(daily_limit, 0)
-
-    user_name = message.from_user.first_name or "друг"
-
-    await message.answer(
-        text=f"🎉 <b>Готово!</b> {user_name}!\n\n"
-             f"📊 Бюджет на {month}:\n"
-             f"• Общий доход: {data['income']:,.0f}₽\n"
-             f"• Обязательные: {data['mandatory']:,.0f}₽\n"
-             f"• Чёрный день: {data['black_day']:,.0f}₽\n"
-             f"• {wishlist_name}: {wishlist_price:,.0f}₽\n\n"
-             f"💰 <b>Дневной лимит: {daily_limit:,.0f}₽</b>",
-        reply_markup=get_main_menu_keyboard()
-    )
-
-    await state.clear()
+    await _finish_onboarding(message, state)
 
 
 # ============ ADD EXPENSE ============
@@ -340,8 +432,8 @@ async def process_expense(message: Message, state: FSMContext):
         session.add(expense)
         await session.commit()
 
+    await state.clear()
     user_name = message.from_user.first_name or "друг"
-
     await message.answer(
         text=f"✅ Записано, {user_name}!\n\n"
              f"💰 Сумма: {amount:,.0f}₽\n"
@@ -349,8 +441,6 @@ async def process_expense(message: Message, state: FSMContext):
              f"📝 Описание: {description or '—'}",
         reply_markup=get_main_menu_keyboard()
     )
-
-    await state.clear()
 
 
 # ============ SETTINGS ============
@@ -465,7 +555,6 @@ async def save_wishlist(message: Message, state: FSMContext):
     text = message.text.strip()
 
     numbers = re.findall(r'[\d ]+', text.replace(',', '.'))
-
     name = text
     price = 0
     for num_str in numbers:
@@ -490,15 +579,33 @@ async def save_wishlist(message: Message, state: FSMContext):
     await state.clear()
 
 
-# ============ CANCEL ============
+# ============ CANCEL / BACK ============
 
 @router.callback_query(F.data == "cancel")
 async def cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     user_name = callback.from_user.first_name or "друг"
     await callback.message.edit_text(
-        text=f"❌ Отменено, {user_name}!",
+        text=f"⬅️ Вернулись, {user_name}!",
         reply_markup=get_main_menu_keyboard()
+    )
+
+
+# ============ UNSUPPORTED CONTENT ============
+
+@router.message(F.voice)
+async def handle_voice(message: Message):
+    await message.answer(
+        "🎤 Я не умею обрабатывать голосовые сообщения.\n"
+        "Напиши сумму и описание текстом, например: 500 кофе"
+    )
+
+
+@router.message(F.photo | F.video | F.document | F.sticker | F.animation)
+async def handle_media(message: Message):
+    await message.answer(
+        "📎 Я понимаю только текстовые сообщения.\n"
+        "Напиши сумму и описание, например: 500 кофе"
     )
 
 
