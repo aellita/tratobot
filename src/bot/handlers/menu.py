@@ -13,6 +13,7 @@ from ...db.database import async_session_maker
 from ...db.models.models import User, Budget, Expense
 from ...services.budget_service import save_budget, update_budget_field
 from ...services.categorization import CATEGORIES, GREETINGS, detect_category
+from ...services.expense_service import parse_expense_text
 from ...services.user_service import get_or_create_user
 from ..keyboards import (
     get_cancel_keyboard,
@@ -188,6 +189,7 @@ async def menu_status(callback: CallbackQuery):
         result = await session.execute(
             select(func.sum(Expense.amount)).where(
                 Expense.user_id == user.id,
+                Expense.is_deleted == False,
                 Expense.date >= datetime.now().replace(day=1, hour=0, minute=0, second=0)
             )
         )
@@ -212,6 +214,62 @@ async def menu_status(callback: CallbackQuery):
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
+@router.callback_query(F.data == "menu_daily")
+async def menu_daily(callback: CallbackQuery):
+    await callback.answer()
+    user_name = callback.from_user.first_name or "друг"
+
+    user = await get_user_or_none(callback.from_user.id)
+    if not user:
+        await callback.message.edit_text(
+            text=f"👋 {user_name}, у тебя пока нет бюджета. Нажми /start!",
+            reply_markup=get_main_menu_keyboard()
+        )
+        return
+
+    async with async_session_maker() as session:
+        month = datetime.now().strftime("%Y-%m")
+        result = await session.execute(
+            select(Budget).where(
+                Budget.user_id == user.id,
+                Budget.month == month
+            )
+        )
+        budget = result.scalar_one_or_none()
+        if not budget:
+            await callback.message.edit_text(
+                text=f"👋 {user_name}, нет бюджета на этот месяц. Нажми /start!",
+                reply_markup=get_main_menu_keyboard()
+            )
+            return
+
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        result = await session.execute(
+            select(func.sum(Expense.amount)).where(
+                Expense.user_id == user.id,
+                Expense.is_deleted == False,
+                Expense.date >= today_start
+            )
+        )
+        spent_today = result.scalar() or 0
+
+    daily = budget.daily_limit
+    remaining = max(daily - spent_today, 0)
+
+    text = (
+        f"💰 <b>Дневной лимит:</b> {daily:,.0f}₽\n"
+        f"📉 <b>Потрачено сегодня:</b> {spent_today:,.0f}₽\n"
+        f"✅ <b>Осталось на сегодня:</b> {remaining:,.0f}₽\n\n"
+        f"📊 <b>Месяц:</b> {budget.total_income:,.0f}₽ всего\n"
+        f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
+        f"🆘 <b>Чёрный день:</b> {budget.black_day_fund:,.0f}₽\n"
+        f"🎯 <b>{budget.wishlist_name}:</b> {budget.wishlist_target:,.0f}₽"
+    )
+
+    await callback.message.edit_text(text=text, reply_markup=get_main_menu_keyboard())
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
+
+
 # ============ ONBOARDING / SKIP ============
 
 @router.callback_query(F.data == "skip_step")
@@ -220,8 +278,8 @@ async def skip_step(callback: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
 
     if current_state == BudgetSetup.waiting_for_income.state:
-        await state.update_data(income=0)
-        await _advance_onboarding(callback, state, income_skipped=True)
+        await state.update_data(income=0, mandatory=0, black_day=0, wishlist_name="", wishlist_price=0)
+        await _finish_onboarding(callback, state)
     elif current_state == BudgetSetup.waiting_for_mandatory.state:
         await state.update_data(mandatory=0)
         await _advance_onboarding(callback, state)
@@ -424,24 +482,14 @@ async def menu_add(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AddExpense.waiting_for_amount)
 async def process_expense(message: Message, state: FSMContext):
-    text = message.text.strip()
-
-    amount = 0
-    description = text
-
-    numbers = re.findall(r'\d+(?:[,\.]\d+)?', text)
-    for num_str in numbers:
-        try:
-            amount = float(num_str.replace(",", "."))
-            if amount > 0:
-                description = text.replace(num_str, "").strip()
-                break
-        except:
-            continue
-
-    if amount <= 0:
+    parsed = parse_expense_text(message.text.strip())
+    if not parsed:
         await message.answer("❌ Введи сумму. Например: 500 кофе")
         return
+
+    amount, description = parsed
+    if not description:
+        description = "трата"
 
     category = detect_category(description)
     category_emoji = CATEGORIES.get(category, "📦")
@@ -711,45 +759,42 @@ async def handle_text(message: Message, state: FSMContext):
     if text.startswith('/'):
         return
 
-    numbers = re.findall(r'\d+(?:[,\.]\d+)?', text)
-    for num_str in numbers:
-        try:
-            amount = float(num_str.replace(",", "."))
-            if amount > 0:
-                description = text.replace(num_str, "").strip()
+    parsed = parse_expense_text(text)
+    if parsed:
+        amount, description = parsed
+        if not description:
+            description = "трата"
 
-                category = detect_category(description)
-                category_emoji = CATEGORIES.get(category, "📦")
+        category = detect_category(description)
+        category_emoji = CATEGORIES.get(category, "📦")
 
-                user = await get_or_create_user(
-                    telegram_id=message.from_user.id,
-                    first_name=message.from_user.first_name,
-                    username=message.from_user.username
-                )
+        user = await get_or_create_user(
+            telegram_id=message.from_user.id,
+            first_name=message.from_user.first_name,
+            username=message.from_user.username
+        )
 
-                async with async_session_maker() as session:
-                    expense = Expense(
-                        user_id=user.id,
-                        amount=amount,
-                        description=description or category,
-                        date=datetime.utcnow()
-                    )
-                    session.add(expense)
-                    await session.commit()
+        async with async_session_maker() as session:
+            expense = Expense(
+                user_id=user.id,
+                amount=amount,
+                description=description or category,
+                date=datetime.utcnow()
+            )
+            session.add(expense)
+            await session.commit()
 
-                user_name = message.from_user.first_name or "друг"
+        user_name = message.from_user.first_name or "друг"
 
-                await _cleanup_keyboard(message.bot, message.chat.id)
-                msg = await message.answer(
-                    text=f"✅ Записано, {user_name}!\n\n"
-                         f"💰 {amount:,.0f}₽ — {description or category.capitalize()}\n"
-                         f"{category_emoji}",
-                    reply_markup=get_main_menu_keyboard()
-                )
-                _track_keyboard(message.chat.id, msg.message_id)
-                return
-        except:
-            continue
+        await _cleanup_keyboard(message.bot, message.chat.id)
+        msg = await message.answer(
+            text=f"✅ Записано, {user_name}!\n\n"
+                 f"💰 {amount:,.0f}₽ — {description or category.capitalize()}\n"
+                 f"{category_emoji}",
+            reply_markup=get_main_menu_keyboard()
+        )
+        _track_keyboard(message.chat.id, msg.message_id)
+        return
 
     user_name = message.from_user.first_name or "друг"
 

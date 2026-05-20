@@ -6,6 +6,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from .handlers.menu import router as menu_router
+from .handlers.history import router as history_router
 from ..core.config import settings
 from ..db.database import init_db, close_db
 
@@ -19,6 +20,7 @@ bot = Bot(
 dp = Dispatcher()
 
 dp.include_router(menu_router)
+dp.include_router(history_router)
 
 
 async def on_startup():

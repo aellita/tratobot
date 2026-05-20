@@ -72,6 +72,7 @@ class Expense(Base):
     date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     is_emergency: Mapped[bool] = mapped_column(Boolean, default=False)
     is_from_wishlist: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Wishlist(Base):

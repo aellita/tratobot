@@ -4,7 +4,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 def get_main_menu_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💸 Добавить трату", callback_data="menu_add")],
-        [InlineKeyboardButton(text="📈 Статус", callback_data="menu_status")],
+        [InlineKeyboardButton(text="💰 Дневной лимит", callback_data="menu_daily")],
+        [InlineKeyboardButton(text="📜 История", callback_data="menu_history")],
         [InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu_settings")],
         [InlineKeyboardButton(text="📋 Помощь", callback_data="menu_help")],
     ])
