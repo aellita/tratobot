@@ -102,7 +102,7 @@ async def cmd_history(callback: CallbackQuery, state: FSMContext):
             text="📜 <b>История трат</b>\n\n"
                  "У тебя пока нет записанных трат.\n"
                  "Нажми «💸 Добавить трату», чтобы начать!",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
 
@@ -162,7 +162,7 @@ async def expense_detail(callback: CallbackQuery):
     if not expense:
         await callback.message.edit_text(
             text="❌ Трата не найдена или уже удалена.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
 
@@ -194,7 +194,7 @@ async def delete_expense(callback: CallbackQuery):
     if not expense:
         await callback.message.edit_text(
             text="❌ Не удалось удалить трату. Она уже удалена или не найдена.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
 
@@ -218,7 +218,7 @@ async def undo_delete(callback: CallbackQuery):
     if not expense:
         await callback.message.edit_text(
             text="❌ Не удалось восстановить трату.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
 
@@ -256,7 +256,7 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
     if not expense:
         await callback.message.edit_text(
             text="❌ Трата не найдена.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
 
@@ -310,7 +310,7 @@ async def save_edit_expense(message: Message, state: FSMContext):
         text=f"✅ <b>Сумма обновлена!</b>\n\n"
              f"💰 Новая сумма: {expense.amount:,.0f}₽\n"
              f"📝 {expense.description or 'трата'}",
-        reply_markup=get_main_menu_keyboard()
+        reply_markup=await get_main_menu_keyboard(message.from_user.id)
     )
 
 
@@ -327,7 +327,7 @@ async def back_to_list(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             text="📜 <b>История трат</b>\n\n"
                  "Список пуст.",
-            reply_markup=get_main_menu_keyboard()
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
 

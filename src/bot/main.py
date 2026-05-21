@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from sqlalchemy import text
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -8,7 +9,7 @@ from aiogram.enums import ParseMode
 from .handlers.menu import router as menu_router
 from .handlers.history import router as history_router
 from ..core.config import settings
-from ..db.database import init_db, close_db
+from ..db.database import init_db, close_db, engine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +27,9 @@ dp.include_router(history_router)
 async def on_startup():
     logger.info("Initializing database...")
     await init_db()
+    logger.info("Clearing expense history...")
+    async with engine.begin() as conn:
+        await conn.execute(text("DELETE FROM expenses"))
     logger.info("Bot started!")
 
 

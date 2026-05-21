@@ -1,14 +1,63 @@
+from datetime import datetime
+
+from sqlalchemy import select, func
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+from ..db.database import async_session_maker
+from ..db.models.models import User, Budget, Expense
 
-def get_main_menu_keyboard():
+
+async def get_main_menu_keyboard(telegram_id: int = None):
+    button_text = "💰 Дневной лимит"
+    if telegram_id:
+        text = await _get_daily_limit_text(telegram_id)
+        if text:
+            button_text = text
+
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💸 Добавить трату", callback_data="menu_add")],
-        [InlineKeyboardButton(text="💰 Дневной лимит", callback_data="menu_daily")],
+        [InlineKeyboardButton(text=button_text, callback_data="menu_daily")],
         [InlineKeyboardButton(text="📜 История", callback_data="menu_history")],
         [InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu_settings")],
         [InlineKeyboardButton(text="📋 Помощь", callback_data="menu_help")],
     ])
+
+
+async def _get_daily_limit_text(telegram_id: int) -> str | None:
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(User).where(User.telegram_id == telegram_id)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            return None
+
+        month = datetime.now().strftime("%Y-%m")
+        result = await session.execute(
+            select(Budget).where(
+                Budget.user_id == user.id,
+                Budget.month == month
+            )
+        )
+        budget = result.scalar_one_or_none()
+        if not budget or budget.daily_limit <= 0:
+            return None
+
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        result = await session.execute(
+            select(func.sum(Expense.amount)).where(
+                Expense.user_id == user.id,
+                Expense.is_deleted == False,
+                Expense.date >= today_start
+            )
+        )
+        spent_today = result.scalar() or 0
+
+    remaining = max(budget.daily_limit - spent_today, 0)
+    text = f"💰 Дневной лимит: {remaining:,.0f}₽"
+    if len(text) > 64:
+        return None
+    return text
 
 
 def get_settings_keyboard():
