@@ -72,6 +72,24 @@ async def migrate_schema():
             await conn.execute(text("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_telegram_id_key"))
             logger.info("Migrated users: telegram_id is now primary key")
 
+        # Categories: make telegram_id nullable, add default shared categories support
+        result = await conn.execute(text(
+            "SELECT is_nullable FROM information_schema.columns "
+            "WHERE table_name='categories' AND column_name='telegram_id'"
+        ))
+        row = result.fetchone()
+        if row and row[0] == 'NO':
+            await conn.execute(text("ALTER TABLE categories ALTER COLUMN telegram_id DROP NOT NULL"))
+            logger.info("Migrated categories: telegram_id is now nullable")
+
+        result = await conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='categories' AND column_name='type'"
+        ))
+        if not result.fetchone():
+            await conn.execute(text("ALTER TABLE categories ADD COLUMN type VARCHAR(20)"))
+            logger.info("Migrated categories: added type column")
+
 
 async def close_db():
     await engine.dispose()

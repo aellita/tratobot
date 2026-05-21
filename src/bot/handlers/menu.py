@@ -7,13 +7,13 @@ from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select, func
 
 from ...db.database import async_session_maker
-from ...db.models.models import User, Budget, Expense
+from ...db.models.models import User, Budget, Expense, Category
 from ...services.budget_service import save_budget, update_budget_field
-from ...services.categorization import CATEGORIES, GREETINGS, detect_category
+from ...services.categorization import GREETINGS, detect_category_db, get_category_display, add_keyword_to_category, get_user_categories, seed_user_categories
 from ...services.expense_service import parse_expense_text
 from ...services.user_service import get_or_create_user
 from ..keyboards import (
@@ -652,8 +652,9 @@ async def process_expense(message: Message, state: FSMContext):
     if not description:
         description = "трата"
 
-    category = detect_category(description)
-    category_emoji = CATEGORIES.get(category, "📦")
+    cat, matched = await detect_category_db(description, message.from_user.id)
+    cat_id = cat.id if cat else None
+    emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
 
     user = await get_or_create_user(
         telegram_id=message.from_user.id,
@@ -666,11 +667,13 @@ async def process_expense(message: Message, state: FSMContext):
             expense = Expense(
                 telegram_id=message.from_user.id,
                 amount=amount,
-                description=description or category,
+                description=description or cat_name,
+                category_id=cat_id,
                 date=datetime.utcnow()
             )
             session.add(expense)
             await session.commit()
+            expense_id = expense.id
     except Exception as e:
         logging.error("Expense insert failed", exc_info=e)
         cause = getattr(e, "__cause__", None)
@@ -684,14 +687,111 @@ async def process_expense(message: Message, state: FSMContext):
     user_name = message.from_user.first_name or "друг"
 
     await _cleanup_keyboard(message.bot, message.chat.id)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{expense_id}")],
+        [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+    ])
     msg = await message.answer(
         text=f"✅ Записано, {user_name}!\n\n"
-             f"💰 Сумма: {amount:,.0f}₽\n"
-             f"{category_emoji} Категория: {category.capitalize()}\n"
-             f"📝 Описание: {description or '—'}",
-        reply_markup=await get_main_menu_keyboard(message.from_user.id)
+             f"💰 {amount:,.0f}₽ — {description}\n"
+             f"{emoji} {cat_name}",
+        reply_markup=kb
     )
     _track_keyboard(message.chat.id, msg.message_id)
+
+
+# ============ CATEGORY CHANGE ============
+
+@router.callback_query(F.data.startswith("change_cat:"))
+async def change_category(callback: CallbackQuery):
+    await callback.answer()
+    expense_id = int(callback.data.split(":")[1])
+
+    categories = await get_user_categories(callback.from_user.id)
+    if not categories:
+        categories = await seed_user_categories(callback.from_user.id)
+
+    buttons = []
+    row = []
+    for i, cat in enumerate(categories):
+        emoji, _ = get_category_display(cat.name)
+        row.append(InlineKeyboardButton(
+            text=f"{emoji} {cat.name}",
+            callback_data=f"set_cat:{expense_id}:{cat.id}",
+        ))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(
+        text="⬅️ Назад", callback_data=f"exp_back_cat:{expense_id}"
+    )])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await callback.message.edit_text(
+        text="📂 Выбери категорию:",
+        reply_markup=kb,
+    )
+
+
+@router.callback_query(F.data.startswith("set_cat:"))
+async def set_category(callback: CallbackQuery):
+    await callback.answer()
+    _, expense_id_str, category_id_str = callback.data.split(":")
+    expense_id = int(expense_id_str)
+    category_id = int(category_id_str)
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Expense).where(
+                Expense.id == expense_id,
+                Expense.telegram_id == callback.from_user.id,
+            )
+        )
+        expense = result.scalar_one_or_none()
+        if not expense:
+            await callback.message.edit_text(
+                text="❌ Трата не найдена.",
+                reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+            )
+            return
+
+        result = await session.execute(
+            select(Category).where(Category.id == category_id)
+        )
+        cat = result.scalar_one_or_none()
+        if not cat:
+            await callback.message.edit_text(
+                text="❌ Категория не найдена.",
+                reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+            )
+            return
+
+        expense.category_id = category_id
+        await session.commit()
+
+    await add_keyword_to_category(
+        callback.from_user.id, category_id, expense.description or "",
+    )
+
+    emoji, cat_name = get_category_display(cat.name)
+    await callback.message.edit_text(
+        text=f"✅ Категория изменена!\n\n"
+             f"💰 {expense.amount:,.0f}₽ — {expense.description or cat_name}\n"
+             f"{emoji} {cat_name}",
+        reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+    )
+
+
+@router.callback_query(F.data.startswith("exp_back_cat:"))
+async def back_from_category_change(callback: CallbackQuery):
+    await callback.answer()
+    user_name = callback.from_user.first_name or "друг"
+    await callback.message.edit_text(
+        text=f"⬅️ Вернулись, {user_name}!",
+        reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+    )
 
 
 # ============ SETTINGS ============
@@ -978,8 +1078,9 @@ async def handle_text(message: Message, state: FSMContext):
         if not description:
             description = "трата"
 
-        category = detect_category(description)
-        category_emoji = CATEGORIES.get(category, "📦")
+        cat, matched = await detect_category_db(description, message.from_user.id)
+        cat_id = cat.id if cat else None
+        emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
 
         await get_or_create_user(
             telegram_id=message.from_user.id,
@@ -992,11 +1093,13 @@ async def handle_text(message: Message, state: FSMContext):
                 expense = Expense(
                     telegram_id=message.from_user.id,
                     amount=amount,
-                    description=description or category,
+                    description=description or cat_name,
+                    category_id=cat_id,
                     date=datetime.utcnow()
                 )
                 session.add(expense)
                 await session.commit()
+                expense_id = expense.id
         except Exception as e:
             logging.error("Expense insert failed (free-form)", exc_info=e)
             cause = getattr(e, "__cause__", None)
@@ -1008,11 +1111,15 @@ async def handle_text(message: Message, state: FSMContext):
         user_name = message.from_user.first_name or "друг"
 
         await _cleanup_keyboard(message.bot, message.chat.id)
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{expense_id}")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+        ])
         msg = await message.answer(
             text=f"✅ Записано, {user_name}!\n\n"
-                 f"💰 {amount:,.0f}₽ — {description or category.capitalize()}\n"
-                 f"{category_emoji}",
-            reply_markup=await get_main_menu_keyboard(message.from_user.id)
+                 f"💰 {amount:,.0f}₽ — {description}\n"
+                 f"{emoji} {cat_name}",
+            reply_markup=kb
         )
         _track_keyboard(message.chat.id, msg.message_id)
         return

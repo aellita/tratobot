@@ -8,14 +8,14 @@ from aiogram.exceptions import TelegramBadRequest
 from sqlalchemy import select
 
 from ...db.database import async_session_maker
-from ...db.models.models import Expense
+from ...db.models.models import Expense, Category
 from ...services.expense_service import (
     get_expense_page,
     soft_delete_expense,
     restore_expense,
     update_expense_amount,
 )
-from ...services.categorization import CATEGORIES, detect_category
+from ...services.categorization import get_category_display
 from ..keyboards import get_cancel_keyboard, get_main_menu_keyboard
 
 router = Router()
@@ -26,12 +26,23 @@ class EditExpense(StatesGroup):
 
 
 PAGE_SIZE = 5
-CAT_EMOJI = {v.split()[0] for v in CATEGORIES.values()}
 
 
-def _expense_line(idx: int, exp: Expense) -> str:
-    cat_name = detect_category(exp.description or "")
-    emoji = CATEGORIES.get(cat_name, "📦").split()[0]
+async def _get_category_info(expense: Expense) -> tuple[str, str]:
+    """Return (emoji, name) for an expense's category."""
+    if expense.category_id:
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Category).where(Category.id == expense.category_id)
+            )
+            cat = result.scalar_one_or_none()
+            if cat:
+                return get_category_display(cat.name)
+    return "📦", "прочее"
+
+
+async def _expense_line(idx: int, exp: Expense) -> str:
+    emoji, cat_name = await _get_category_info(exp)
     date_str = exp.date.strftime("%d %b").lower()
     desc = exp.description or cat_name
     return f"{idx}. {emoji} {exp.amount:,.0f}₽ — {desc} ({date_str})"
@@ -55,7 +66,6 @@ def _build_list_keyboard(expenses: list[Expense], page: int, total_pages: int):
     if page < total_pages - 1:
         nav.append(InlineKeyboardButton(text="Вперед ▶️", callback_data=f"exp_page:{page + 1}"))
 
-    # Only show nav row if there's something to navigate
     if page > 0 or page < total_pages - 1:
         buttons.append(nav)
 
@@ -98,7 +108,10 @@ async def cmd_history(callback: CallbackQuery, state: FSMContext):
         )
         return
 
-    lines = [_expense_line(i + 1, exp) for i, exp in enumerate(expenses)]
+    lines = []
+    for i, exp in enumerate(expenses):
+        line = await _expense_line(i + 1, exp)
+        lines.append(line)
     text = (f"📜 <b>История трат (стр. {1}/{total_pages}):</b>\n\n"
             + "\n".join(lines))
 
@@ -117,7 +130,10 @@ async def history_page(callback: CallbackQuery):
 
     expenses, total, total_pages = await get_expense_page(callback.from_user.id, page)
 
-    lines = [_expense_line(i + 1 + page * PAGE_SIZE, exp) for i, exp in enumerate(expenses)]
+    lines = []
+    for i, exp in enumerate(expenses):
+        line = await _expense_line(i + 1 + page * PAGE_SIZE, exp)
+        lines.append(line)
     text = (f"📜 <b>История трат (стр. {page + 1}/{total_pages}):</b>\n\n"
             + "\n".join(lines))
 
@@ -151,12 +167,11 @@ async def expense_detail(callback: CallbackQuery):
         )
         return
 
-    category = detect_category(expense.description or "")
-    emoji = CATEGORIES.get(category, "📦").split()[0]
+    emoji, cat_name = await _get_category_info(expense)
     date_str = expense.date.strftime("%d %B %Y").lower()
 
     text = (f"⚙️ <b>Управление транзакцией:</b>\n\n"
-            f"{emoji} <b>{category.capitalize()}</b>\n"
+            f"{emoji} <b>{cat_name.capitalize()}</b>\n"
             f"💰 <b>Сумма:</b> {expense.amount:,.0f}₽\n"
             f"📝 <b>Описание:</b> {expense.description or '—'}\n"
             f"📅 <b>Дата:</b> {date_str}")
@@ -309,7 +324,10 @@ async def back_to_list(callback: CallbackQuery, state: FSMContext):
         )
         return
 
-    lines = [_expense_line(i + 1, exp) for i, exp in enumerate(expenses)]
+    lines = []
+    for i, exp in enumerate(expenses):
+        line = await _expense_line(i + 1, exp)
+        lines.append(line)
     text = (f"📜 <b>История трат (стр. {1}/{total_pages}):</b>\n\n"
             + "\n".join(lines))
 

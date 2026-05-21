@@ -3,7 +3,6 @@ from sqlalchemy import select, func
 
 from ..db.database import async_session_maker
 from ..db.models.models import Expense
-from .categorization import detect_category
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽", "р"}

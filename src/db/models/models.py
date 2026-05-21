@@ -86,10 +86,10 @@ class Category(Base):
     __tablename__ = "categories"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    telegram_id: Mapped[int | None] = mapped_column(ForeignKey("users.telegram_id"), nullable=True)
     name: Mapped[str] = mapped_column(String(100))
-    type: Mapped[CategoryType] = mapped_column(SQLEnum(CategoryType))
-    keywords: Mapped[str] = mapped_column(Text, default="")
+    type: Mapped[CategoryType | None] = mapped_column(SQLEnum(CategoryType), nullable=True, default=None)
+    keywords: Mapped[str] = mapped_column(Text, default="[]")
 
 
 class Expense(Base):
