@@ -60,7 +60,17 @@ def get_settings_keyboard():
         [InlineKeyboardButton(text="📌 Обязательные", callback_data="edit_mandatory")],
         [InlineKeyboardButton(text="🏦 Кубышка", callback_data="edit_black_day")],
         [InlineKeyboardButton(text="🎯 Хотелка", callback_data="edit_wishlist")],
+        [InlineKeyboardButton(text="📅 День старта", callback_data="edit_period_start")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_back")],
+    ])
+
+
+def get_period_start_keyboard():
+    today = datetime.now()
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"📅 Сегодня ({today.day}-е)", callback_data="period_today")],
+        [InlineKeyboardButton(text="1-е число", callback_data="period_first")],
+        [InlineKeyboardButton(text="✏️ Другое число", callback_data="period_other")],
     ])
 
 

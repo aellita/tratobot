@@ -20,6 +20,7 @@ from ..keyboards import (
     get_cancel_keyboard,
     get_main_menu_keyboard,
     get_onboarding_keyboard,
+    get_period_start_keyboard,
     get_settings_keyboard,
     get_start_choice_keyboard,
 )
@@ -473,15 +474,56 @@ async def process_income(message: Message, state: FSMContext):
     await state.update_data(income=amount)
     await state.set_state(BudgetSetup.waiting_for_period_start)
     sent = await message.answer(
-        text="✅ Запомнил!\n\n"
-             "📅 С какого числа начинается твой бюджетный период?\n\n"
-             "Например, если зарплата приходит 25-го — пиши 25.\n"
-             "Период будет считаться с этого числа до того же числа следующего месяца.\n"
-             "По умолчанию — 1 (весь месяц).\n\n"
-             "Введи число (1-31, например: 25):",
-        reply_markup=get_onboarding_keyboard()
+        text="✅ Принял!\n\n"
+             "📅 А какого числа у тебя обычно начинается финансовый месяц?\n"
+             "(Когда приходит основная зарплата)",
+        reply_markup=get_period_start_keyboard()
     )
     await _save_msg_id(state, sent)
+
+
+@router.callback_query(F.data.in_(["period_today", "period_first", "period_other"]))
+async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext):
+    import calendar
+    today = datetime.now()
+    current_state = await state.get_state()
+
+    if callback.data == "period_other":
+        await callback.message.edit_text(
+            text="✏️ Напиши число (1-31):",
+            reply_markup=None
+        )
+        await callback.answer()
+        return
+
+    if callback.data == "period_today":
+        day = today.day
+    else:  # period_first
+        day = 1
+
+    days_in_month = calendar.monthrange(today.year, today.month)[1]
+    if day > days_in_month:
+        day = days_in_month
+
+    if current_state == BudgetSetup.waiting_for_period_start.state:
+        await state.update_data(period_start_day=day)
+        await state.set_state(BudgetSetup.waiting_for_mandatory)
+        await callback.message.edit_text(
+            text="✅ Запомнил!\n\n"
+                 "Теперь отсечем всё лишнее: аренду, счета и прочую бытовую рутину.\n"
+                 "Сколько у нас уходит на обязательные платежи?",
+            reply_markup=get_onboarding_keyboard()
+        )
+    elif current_state == EditBudget.waiting_for_period_start.state:
+        await update_budget_field(callback.from_user.id, "period_start_day", day)
+        user_name = callback.from_user.first_name or "друг"
+        await callback.message.edit_text(
+            text=f"✅ Готово, {user_name}! Период обновлён — с {day}-го числа.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+        )
+        await state.clear()
+
+    await callback.answer()
 
 
 @router.message(BudgetSetup.waiting_for_period_start)
@@ -737,6 +779,18 @@ async def edit_wishlist(callback: CallbackQuery, state: FSMContext):
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
+@router.callback_query(F.data == "edit_period_start")
+async def edit_period_start(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(EditBudget.waiting_for_period_start)
+    await callback.message.edit_text(
+        text="📅 А какого числа у тебя начинается финансовый месяц?\n"
+             "(Когда приходит основная зарплата)",
+        reply_markup=get_period_start_keyboard()
+    )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
+
+
 @router.message(EditBudget.waiting_for_income)
 async def save_income(message: Message, state: FSMContext):
     try:
@@ -745,10 +799,10 @@ async def save_income(message: Message, state: FSMContext):
 
         await _cleanup_keyboard(message.bot, message.chat.id)
         sent = await message.answer(
-            text="✅ Доход обновлён! Теперь укажи период.\n\n"
-                 "📅 С какого числа начинается твой бюджетный период?\n"
-                 "Введи число от 1 до 31:",
-            reply_markup=get_cancel_keyboard()
+            text="✅ Доход обновлён!\n\n"
+                 "📅 А какого числа у тебя начинается финансовый месяц?\n"
+                 "(Когда приходит основная зарплата)",
+            reply_markup=get_period_start_keyboard()
         )
         _track_keyboard(message.chat.id, sent.message_id)
         await state.set_state(EditBudget.waiting_for_period_start)
