@@ -47,7 +47,7 @@ class Budget(Base):
     @property
     def daily_limit(self) -> float:
         days_in_month = 30
-        available = self.total_income - self.mandatory_payments - self.black_day_fund - self.wishlist_target
+        available = self.total_income - self.mandatory_payments - self.black_day_fund
         return max(available / days_in_month, 0)
 
 

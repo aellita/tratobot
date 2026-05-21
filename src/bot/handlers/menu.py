@@ -196,7 +196,7 @@ async def menu_status(callback: CallbackQuery):
         )
         spent = result.scalar() or 0
 
-    remaining = budget.total_income - budget.mandatory_payments - budget.black_day_fund - budget.wishlist_target - spent
+    remaining = budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent
     daily = budget.daily_limit
 
     remaining_today = max(daily - spent, 0)
@@ -208,7 +208,7 @@ async def menu_status(callback: CallbackQuery):
              f"📉 <b>Потрачено:</b> {spent:,.0f}₽\n"
              f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
              f"🆘 <b>Чёрный день:</b> {budget.black_day_fund:,.0f}₽\n"
-             f"🎯 <b>{budget.wishlist_name}:</b> {budget.wishlist_target:,.0f}₽\n\n"
+             f"🎯 <b>Мечта:</b> {budget.wishlist_target:,.0f}₽\n\n"
              f"💵 <b>Осталось:</b> {remaining:,.0f}₽",
         reply_markup=await get_main_menu_keyboard(callback.from_user.id)
     )
@@ -264,7 +264,7 @@ async def menu_daily(callback: CallbackQuery):
         f"📊 <b>Месяц:</b> {budget.total_income:,.0f}₽ всего\n"
         f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
         f"🆘 <b>Чёрный день:</b> {budget.black_day_fund:,.0f}₽\n"
-        f"🎯 <b>{budget.wishlist_name}:</b> {budget.wishlist_target:,.0f}₽"
+        f"🎯 <b>Мечта:</b> {budget.wishlist_target:,.0f}₽"
     )
 
     await callback.message.edit_text(text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id))
@@ -367,7 +367,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         wishlist_price=wishlist_price
     )
 
-    daily_limit = max((data.get("income", 0) - data.get("mandatory", 0) - data.get("black_day", 0) - wishlist_price) / 30, 0)
+    daily_limit = max((data.get("income", 0) - data.get("mandatory", 0) - data.get("black_day", 0)) / 30, 0)
 
     user_name = source.from_user.first_name or "друг"
 
@@ -376,7 +376,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
             f"• Общий доход: {data.get('income', 0):,.0f}₽\n"
             f"• Обязательные: {data.get('mandatory', 0):,.0f}₽\n"
             f"• Чёрный день: {data.get('black_day', 0):,.0f}₽\n"
-            f"• {wishlist_name}: {wishlist_price:,.0f}₽\n\n"
+            f"• Мечта: {wishlist_price:,.0f}₽\n\n"
             f"💰 <b>Дневной лимит: {daily_limit:,.0f}₽</b>")
 
     kb = await get_main_menu_keyboard(telegram_id)
@@ -452,25 +452,28 @@ async def process_black_day(message: Message, state: FSMContext):
     await _save_msg_id(state, sent)
 
 
-@router.message(BudgetSetup.waiting_for_wishlist_name)
-async def process_wishlist_name(message: Message, state: FSMContext):
-    await _cleanup_old_buttons(state, message.bot)
-
-    text = message.text.strip()
+def _parse_wishlist(text: str) -> tuple[str, float]:
     numbers = re.findall(r'[\d ]+', text.replace(',', '.'))
     name = text
     price = 0
     for num_str in numbers:
         try:
             price = float(num_str.replace(" ", ""))
-            if price > 0:
-                name = text.replace(num_str, "").strip()
-                if not name:
-                    name = "Мечта"
-                break
+            name = text.replace(num_str, "").strip()
+            break
         except:
             continue
+    if not name:
+        name = "Мечта"
+    elif name[0].islower():
+        name = name[0].upper() + name[1:]
+    return name, price
 
+
+@router.message(BudgetSetup.waiting_for_wishlist_name)
+async def process_wishlist_name(message: Message, state: FSMContext):
+    await _cleanup_old_buttons(state, message.bot)
+    name, price = _parse_wishlist(message.text.strip())
     await state.update_data(wishlist_name=name, wishlist_price=price)
     await _finish_onboarding(message, state)
 
@@ -708,21 +711,7 @@ async def save_black_day(message: Message, state: FSMContext):
 
 @router.message(EditBudget.waiting_for_wishlist)
 async def save_wishlist(message: Message, state: FSMContext):
-    text = message.text.strip()
-
-    numbers = re.findall(r'[\d ]+', text.replace(',', '.'))
-    name = text
-    price = 0
-    for num_str in numbers:
-        try:
-            price = float(num_str.replace(" ", ""))
-            if price > 0:
-                name = text.replace(num_str, "").strip()
-                if not name:
-                    name = "Мечта"
-                break
-        except:
-            continue
+    name, price = _parse_wishlist(message.text.strip())
 
     await update_budget_field(message.from_user.id, "wishlist_name", name)
     await update_budget_field(message.from_user.id, "wishlist_target", price)
