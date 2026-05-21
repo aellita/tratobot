@@ -478,7 +478,7 @@ async def process_income(message: Message, state: FSMContext):
              "Например, если зарплата приходит 25-го — пиши 25.\n"
              "Период будет считаться с этого числа до того же числа следующего месяца.\n"
              "По умолчанию — 1 (весь месяц).\n\n"
-             "Введи число от 1 до 28:",
+             "Введи число (1-31, например: 25):",
         reply_markup=get_onboarding_keyboard()
     )
     await _save_msg_id(state, sent)
@@ -490,11 +490,14 @@ async def process_period_start(message: Message, state: FSMContext):
     today = datetime.now()
     try:
         day = int(message.text.strip())
-        if day < 1 or day > 31:
-            raise ValueError
-    except ValueError:
-        await message.answer("❌ Введи число от 1 до 31. Например: 1")
+    except (ValueError, TypeError):
+        await message.answer("❌ Введи число. Например: 25")
         return
+
+    if day < 1:
+        day = 1
+    elif day > 31:
+        day = 31
 
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     if day > days_in_month:
@@ -759,11 +762,14 @@ async def save_edit_period_start(message: Message, state: FSMContext):
     today = datetime.now()
     try:
         day = int(message.text.strip())
-        if day < 1 or day > 31:
-            raise ValueError
-    except ValueError:
-        await message.answer("❌ Введи число от 1 до 31. Например: 1")
+    except (ValueError, TypeError):
+        await message.answer("❌ Введи число. Например: 25")
         return
+
+    if day < 1:
+        day = 1
+    elif day > 31:
+        day = 31
 
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     if day > days_in_month:
