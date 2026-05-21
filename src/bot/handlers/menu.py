@@ -1,3 +1,4 @@
+import logging
 import random
 import re
 from datetime import datetime
@@ -509,15 +510,24 @@ async def process_expense(message: Message, state: FSMContext):
         username=message.from_user.username
     )
 
-    async with async_session_maker() as session:
-        expense = Expense(
-            user_id=user.id,
-            amount=amount,
-            description=description or category,
-            date=datetime.utcnow()
-        )
-        session.add(expense)
-        await session.commit()
+    try:
+        async with async_session_maker() as session:
+            expense = Expense(
+                user_id=user.id,
+                amount=amount,
+                description=description or category,
+                date=datetime.utcnow()
+            )
+            session.add(expense)
+            await session.commit()
+    except Exception as e:
+        logging.error("Expense insert failed", exc_info=e)
+        cause = getattr(e, "__cause__", None)
+        if cause:
+            logging.error("Caused by: %s: %s", type(cause).__name__, cause)
+        await message.answer("❌ Ошибка при сохранении траты. Попробуй ещё раз.")
+        await state.clear()
+        return
 
     await state.clear()
     user_name = message.from_user.first_name or "друг"
@@ -783,15 +793,23 @@ async def handle_text(message: Message, state: FSMContext):
             username=message.from_user.username
         )
 
-        async with async_session_maker() as session:
-            expense = Expense(
-                user_id=user.id,
-                amount=amount,
-                description=description or category,
-                date=datetime.utcnow()
-            )
-            session.add(expense)
-            await session.commit()
+        try:
+            async with async_session_maker() as session:
+                expense = Expense(
+                    user_id=user.id,
+                    amount=amount,
+                    description=description or category,
+                    date=datetime.utcnow()
+                )
+                session.add(expense)
+                await session.commit()
+        except Exception as e:
+            logging.error("Expense insert failed (free-form)", exc_info=e)
+            cause = getattr(e, "__cause__", None)
+            if cause:
+                logging.error("Caused by: %s: %s", type(cause).__name__, cause)
+            await message.answer("❌ Ошибка при сохранении траты. Попробуй ещё раз.")
+            return
 
         user_name = message.from_user.first_name or "друг"
 
