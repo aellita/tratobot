@@ -39,6 +39,7 @@ class BudgetSetup(StatesGroup):
 class EditBudget(StatesGroup):
     waiting_for_income = State()
     waiting_for_add_income = State()
+    waiting_for_period_start = State()
     waiting_for_mandatory = State()
     waiting_for_black_day = State()
     waiting_for_wishlist = State()
@@ -138,6 +139,7 @@ async def menu_help(callback: CallbackQuery):
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
+    await _cleanup_keyboard(message.bot, message.chat.id)
     telegram_id = message.from_user.id
     user_name = message.from_user.first_name or "друг"
 
@@ -261,7 +263,7 @@ async def menu_status(callback: CallbackQuery):
              f"📈 <b>Общий:</b> {budget.total_income:,.0f}₽\n"
              f"📉 <b>Потрачено:</b> {spent:,.0f}₽\n"
              f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
-             f"🆘 <b>Чёрный день:</b> {budget.black_day_fund:,.0f}₽\n"
+             f"🏦 <b>Кубышка:</b> {budget.black_day_fund:,.0f}₽\n"
              f"🎯 <b>Мечта:</b> {budget.wishlist_target:,.0f}₽\n"
              f"📅 <b>Осталось дней:</b> {days_left}{period_text}\n\n"
              f"💵 <b>Осталось:</b> {remaining:,.0f}₽",
@@ -320,7 +322,7 @@ async def menu_daily(callback: CallbackQuery):
         f"📅 <b>Осталось дней:</b> {days_left}\n"
         f"📊 <b>Всего:</b> {budget.total_income:,.0f}₽\n"
         f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
-        f"🆘 <b>Чёрный день:</b> {budget.black_day_fund:,.0f}₽\n"
+        f"🏦 <b>Кубышка:</b> {budget.black_day_fund:,.0f}₽\n"
         f"🎯 <b>Мечта:</b> {budget.wishlist_target:,.0f}₽"
     )
 
@@ -369,7 +371,7 @@ async def _advance_onboarding(source: CallbackQuery | Message, state: FSMContext
     elif current_state == BudgetSetup.waiting_for_mandatory.state:
         await state.set_state(BudgetSetup.waiting_for_black_day)
         kw = get_onboarding_keyboard() if isinstance(source, CallbackQuery) else None
-        text = "✅ Хорошо.\n\nОк. А теперь давай создадим твою подушку безопасности на случай внезапных приключений.\nСколько будем откладывать в месяц в \"Чёрный день\"?"
+        text = "✅ Хорошо.\n\nОк. А теперь давай создадим твою подушку безопасности на случай внезапных приключений.\nСколько будем откладывать в месяц в \"Кубышка\"?"
         if isinstance(source, CallbackQuery):
             await source.message.edit_text(text=text, reply_markup=kw)
         else:
@@ -425,13 +427,15 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
     import calendar
     today = datetime.now()
     available = data.get("income", 0) - data.get("mandatory", 0) - data.get("black_day", 0)
-    if period_start_day == 1:
-        days_remaining = calendar.monthrange(today.year, today.month)[1] - today.day + 1
-    elif today.day >= period_start_day:
-        remaining_this = calendar.monthrange(today.year, today.month)[1] - today.day + 1
-        days_remaining = remaining_this + period_start_day - 1
+    days_in_month = calendar.monthrange(today.year, today.month)[1]
+    clamped_start = min(period_start_day, days_in_month)
+    if clamped_start == 1:
+        days_remaining = max(days_in_month - today.day, 0)
+    elif today.day >= clamped_start:
+        remaining_this = days_in_month - today.day
+        days_remaining = remaining_this + clamped_start - 1
     else:
-        days_remaining = period_start_day - today.day
+        days_remaining = clamped_start - today.day
     daily_limit = max(available / max(days_remaining, 1), 0)
 
     user_name = source.from_user.first_name or "друг"
@@ -441,7 +445,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
             f"📊 Бюджет на {month}:\n"
             f"• Общий доход: {data.get('income', 0):,.0f}₽\n"
             f"• Обязательные: {data.get('mandatory', 0):,.0f}₽\n"
-            f"• Чёрный день: {data.get('black_day', 0):,.0f}₽\n"
+            f"• Кубышка: {data.get('black_day', 0):,.0f}₽\n"
             f"• Мечта: {wishlist_price:,.0f}₽\n"
             f"{period_note}\n"
             f"💰 <b>Дневной лимит: {daily_limit:,.0f}₽</b>")
@@ -482,13 +486,19 @@ async def process_income(message: Message, state: FSMContext):
 
 @router.message(BudgetSetup.waiting_for_period_start)
 async def process_period_start(message: Message, state: FSMContext):
+    import calendar
+    today = datetime.now()
     try:
         day = int(message.text.strip())
-        if day < 1 or day > 28:
+        if day < 1 or day > 31:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Введи число от 1 до 28. Например: 1")
+        await message.answer("❌ Введи число от 1 до 31. Например: 1")
         return
+
+    days_in_month = calendar.monthrange(today.year, today.month)[1]
+    if day > days_in_month:
+        day = days_in_month
 
     await _cleanup_old_buttons(state, message.bot)
     await state.update_data(period_start_day=day)
@@ -516,7 +526,7 @@ async def process_mandatory(message: Message, state: FSMContext):
     sent = await message.answer(
         text="✅ Хорошо.\n\n"
              "Ок. А теперь давай создадим твою подушку безопасности на случай внезапных приключений.\n"
-             "Сколько будем откладывать в месяц в \"Чёрный день\", чтобы ты спал(а) спокойно?",
+             "Сколько будем откладывать в месяц в \"Кубышка\", чтобы ты спал(а) спокойно?",
         reply_markup=get_onboarding_keyboard()
     )
     await _save_msg_id(state, sent)
@@ -660,7 +670,7 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
              f"📊 Текущий бюджет:\n"
              f"• Доход: {budget.total_income:,.0f}₽\n"
              f"• Обязательные: {budget.mandatory_payments:,.0f}₽\n"
-             f"• Чёрный день: {budget.black_day_fund:,.0f}₽\n"
+             f"• Кубышка: {budget.black_day_fund:,.0f}₽\n"
              f"• {budget.wishlist_name}: {budget.wishlist_target:,.0f}₽\n"
              f"{period_info}",
         reply_markup=get_settings_keyboard()
@@ -706,7 +716,7 @@ async def edit_black_day(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(EditBudget.waiting_for_black_day)
     await callback.message.edit_text(
-        text="🆘 Введи новую сумму чёрного дня:",
+        text="🏦 Введи новую сумму кубышки:",
         reply_markup=get_cancel_keyboard()
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
@@ -729,17 +739,46 @@ async def save_income(message: Message, state: FSMContext):
     try:
         amount = float(message.text.replace(" ", "").replace(",", "."))
         await update_budget_field(message.from_user.id, "total_income", amount)
-        user_name = message.from_user.first_name or "друг"
 
         await _cleanup_keyboard(message.bot, message.chat.id)
-        msg = await message.answer(
-            text=f"✅ Готово, {user_name}! Доход: {amount:,.0f}₽",
-            reply_markup=await get_main_menu_keyboard(message.from_user.id)
+        sent = await message.answer(
+            text="✅ Доход обновлён! Теперь укажи период.\n\n"
+                 "📅 С какого числа начинается твой бюджетный период?\n"
+                 "Введи число от 1 до 31:",
+            reply_markup=get_cancel_keyboard()
         )
-        _track_keyboard(message.chat.id, msg.message_id)
-        await state.clear()
+        _track_keyboard(message.chat.id, sent.message_id)
+        await state.set_state(EditBudget.waiting_for_period_start)
     except ValueError:
         await message.answer("❌ Введи число. Например: 50000")
+
+
+@router.message(EditBudget.waiting_for_period_start)
+async def save_edit_period_start(message: Message, state: FSMContext):
+    import calendar
+    today = datetime.now()
+    try:
+        day = int(message.text.strip())
+        if day < 1 or day > 31:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введи число от 1 до 31. Например: 1")
+        return
+
+    days_in_month = calendar.monthrange(today.year, today.month)[1]
+    if day > days_in_month:
+        day = days_in_month
+
+    await update_budget_field(message.from_user.id, "period_start_day", day)
+    user_name = message.from_user.first_name or "друг"
+
+    await _cleanup_keyboard(message.bot, message.chat.id)
+    msg = await message.answer(
+        text=f"✅ Готово, {user_name}! Период обновлён — с {day}-го числа.",
+        reply_markup=await get_main_menu_keyboard(message.from_user.id)
+    )
+    _track_keyboard(message.chat.id, msg.message_id)
+    await state.clear()
 
 
 @router.message(EditBudget.waiting_for_add_income)
@@ -794,7 +833,7 @@ async def save_black_day(message: Message, state: FSMContext):
 
         await _cleanup_keyboard(message.bot, message.chat.id)
         msg = await message.answer(
-            text=f"✅ Готово, {user_name}! Чёрный день: {amount:,.0f}₽",
+            text=f"✅ Готово, {user_name}! Кубышка: {amount:,.0f}₽",
             reply_markup=await get_main_menu_keyboard(message.from_user.id)
         )
         _track_keyboard(message.chat.id, msg.message_id)

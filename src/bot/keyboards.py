@@ -58,7 +58,7 @@ def get_settings_keyboard():
         [InlineKeyboardButton(text="💰 Обновить доход", callback_data="edit_income")],
         [InlineKeyboardButton(text="➕ Добавить доход", callback_data="add_income")],
         [InlineKeyboardButton(text="📌 Обязательные", callback_data="edit_mandatory")],
-        [InlineKeyboardButton(text="🆘 Чёрный день", callback_data="edit_black_day")],
+        [InlineKeyboardButton(text="🏦 Кубышка", callback_data="edit_black_day")],
         [InlineKeyboardButton(text="🎯 Хотелка", callback_data="edit_wishlist")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_back")],
     ])

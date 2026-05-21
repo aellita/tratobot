@@ -45,15 +45,22 @@ class Budget(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     @property
+    def _clamped_start(self) -> int:
+        import calendar
+        today = datetime.now()
+        raw = self.period_start_day or 1
+        return min(raw, calendar.monthrange(today.year, today.month)[1])
+
+    @property
     def days_remaining(self) -> int:
         import calendar
         today = datetime.now()
-        start = self.period_start_day or 1
+        start = self._clamped_start
         days_in_month = calendar.monthrange(today.year, today.month)[1]
         if start == 1:
-            return days_in_month - today.day + 1
+            return max(days_in_month - today.day, 0)
         if today.day >= start:
-            remaining = days_in_month - today.day + 1
+            remaining = days_in_month - today.day
             next_days = start - 1
             return remaining + next_days
         else:
@@ -63,7 +70,7 @@ class Budget(Base):
     def _period_total_days(self) -> int:
         import calendar
         today = datetime.now()
-        start = self.period_start_day or 1
+        start = self._clamped_start
         if start == 1:
             return calendar.monthrange(today.year, today.month)[1]
         return 30
