@@ -753,6 +753,7 @@ async def set_category(callback: CallbackQuery):
             select(Expense).where(
                 Expense.id == expense_id,
                 Expense.telegram_id == callback.from_user.id,
+                Expense.is_deleted == False,
             )
         )
         expense = result.scalar_one_or_none()

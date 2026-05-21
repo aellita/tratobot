@@ -5,13 +5,15 @@ from ..db.database import async_session_maker
 from ..db.models.models import Expense
 
 PAGE_SIZE = 5
-IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽", "р"}
+IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
 
 
 def clean_description(text: str) -> str:
-    for w in IGNORE_WORDS:
-        text = text.replace(w, "")
     import re
+    pattern = r'\b(' + '|'.join(re.escape(w) for w in IGNORE_WORDS) + r')\b'
+    text = re.sub(pattern, '', text, flags=re.IGNORECASE)
+    # Also handle standalone "р" (ruble abbreviation) with word boundaries
+    text = re.sub(r'\bр\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'[\s\+]+', ' ', text).strip()
     return text
 

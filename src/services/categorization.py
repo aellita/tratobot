@@ -56,9 +56,15 @@ async def seed_user_categories(telegram_id: int):
         result = await session.execute(
             select(Category).where(Category.telegram_id == telegram_id)
         )
-        existing = result.scalars().all()
+        existing = list(result.scalars().all())
+
+        # If old categories exist but have empty keywords, delete & recreate
         if existing:
-            return existing
+            has_keywords = any(_parse_keywords(c.keywords) for c in existing)
+            if has_keywords:
+                return existing
+            for cat in existing:
+                await session.delete(cat)
 
         categories = []
         for display_name, keywords in DEFAULT_CATEGORIES.items():
