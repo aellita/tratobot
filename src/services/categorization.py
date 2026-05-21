@@ -181,9 +181,7 @@ async def detect_category_db(text: str, telegram_id: int) -> tuple[Category | No
     """
     Detect category from text using DB-backed categories.
     Returns (category, matched_keyword).
-    Seeds categories for the user if needed.
+    Seeds / migrates categories for the user if needed.
     """
-    user_cats = await get_user_categories(telegram_id)
-    if not user_cats:
-        user_cats = await seed_user_categories(telegram_id)
+    user_cats = await seed_user_categories(telegram_id)
     return await find_closest_category(text, telegram_id)

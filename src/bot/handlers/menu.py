@@ -713,9 +713,7 @@ async def change_category(callback: CallbackQuery):
     await callback.answer()
     expense_id = int(callback.data.split(":")[1])
 
-    categories = await get_user_categories(callback.from_user.id)
-    if not categories:
-        categories = await seed_user_categories(callback.from_user.id)
+    categories = await seed_user_categories(callback.from_user.id)
 
     buttons = []
     row = []
