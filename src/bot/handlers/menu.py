@@ -652,15 +652,21 @@ async def process_expense(message: Message, state: FSMContext):
     if not description:
         description = "трата"
 
-    cat, matched = await detect_category_db(description, message.from_user.id)
-    cat_id = cat.id if cat else None
-    emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
-
     user = await get_or_create_user(
         telegram_id=message.from_user.id,
         first_name=message.from_user.first_name,
         username=message.from_user.username
     )
+
+    try:
+        cat, matched = await detect_category_db(description, message.from_user.id)
+    except Exception as e:
+        logging.error("Category detection failed", exc_info=e)
+        cat = None
+        matched = ""
+
+    cat_id = cat.id if cat else None
+    emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
 
     try:
         async with async_session_maker() as session:
@@ -1078,15 +1084,21 @@ async def handle_text(message: Message, state: FSMContext):
         if not description:
             description = "трата"
 
-        cat, matched = await detect_category_db(description, message.from_user.id)
-        cat_id = cat.id if cat else None
-        emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
-
         await get_or_create_user(
             telegram_id=message.from_user.id,
             first_name=message.from_user.first_name,
             username=message.from_user.username
         )
+
+        try:
+            cat, matched = await detect_category_db(description, message.from_user.id)
+        except Exception as e:
+            logging.error("Category detection failed", exc_info=e)
+            cat = None
+            matched = ""
+
+        cat_id = cat.id if cat else None
+        emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
 
         try:
             async with async_session_maker() as session:
