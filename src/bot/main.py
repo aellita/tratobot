@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from .handlers.menu import router as menu_router
 from .handlers.history import router as history_router
 from ..core.config import settings
-from ..db.database import init_db, close_db, engine
+from ..db.database import init_db, close_db, engine, migrate_schema
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,6 +24,8 @@ dp.include_router(menu_router)
 
 
 async def on_startup():
+    logger.info("Migrating schema...")
+    await migrate_schema()
     logger.info("Initializing database...")
     await init_db()
     logger.info("Bot started!")
