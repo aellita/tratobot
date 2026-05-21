@@ -337,11 +337,20 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
     data = await state.get_data()
     telegram_id = source.from_user.id if isinstance(source, CallbackQuery) else source.from_user.id
 
-    user = await get_or_create_user(
-        telegram_id=telegram_id,
-        first_name=source.from_user.first_name,
-        username=source.from_user.username
-    )
+    try:
+        user = await get_or_create_user(
+            telegram_id=telegram_id,
+            first_name=source.from_user.first_name,
+            username=source.from_user.username
+        )
+    except Exception as e:
+        text = "❌ Ошибка базы данных. Попробуй /start ещё раз."
+        if isinstance(source, CallbackQuery):
+            await source.message.edit_text(text=text)
+        else:
+            await source.answer(text=text)
+        await state.clear()
+        return
 
     month = datetime.now().strftime("%Y-%m")
     wishlist_name = data.get("wishlist_name", "Мечта") or "Мечта"

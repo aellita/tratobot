@@ -3,9 +3,13 @@ from ..core.config import settings
 from ..db.models.models import Base
 
 
+is_postgres = settings.DATABASE_URL.startswith("postgresql://")
+
 engine = create_async_engine(
     settings.db_url,
     echo=False,
+    pool_pre_ping=is_postgres,
+    **({"connect_args": {"statement_cache_size": 0}} if is_postgres else {}),
 )
 
 async_session_maker = async_sessionmaker(
