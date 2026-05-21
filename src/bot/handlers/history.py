@@ -8,7 +8,7 @@ from aiogram.exceptions import TelegramBadRequest
 from sqlalchemy import select
 
 from ...db.database import async_session_maker
-from ...db.models.models import User, Expense
+from ...db.models.models import Expense
 from ...services.expense_service import (
     get_expense_page,
     soft_delete_expense,
@@ -40,9 +40,10 @@ def _expense_line(idx: int, exp: Expense) -> str:
 def _build_list_keyboard(expenses: list[Expense], page: int, total_pages: int):
     buttons = []
     row = []
+    offset = page * PAGE_SIZE
     for i, exp in enumerate(expenses):
         row.append(InlineKeyboardButton(
-            text=str(i + 1),
+            text=str(i + 1 + offset),
             callback_data=f"exp_sel:{exp.id}"
         ))
     if row:
@@ -77,15 +78,6 @@ def _build_deleted_keyboard(expense_id: int):
         [InlineKeyboardButton(text="↩️ Восстановить", callback_data=f"exp_undo:{expense_id}")],
         [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="exp_back")],
     ])
-
-
-async def _get_user_id(telegram_id: int) -> int | None:
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
-        user = result.scalar_one_or_none()
-        return user.id if user else None
 
 
 # ============ HISTORY LIST ============
@@ -143,17 +135,10 @@ async def expense_detail(callback: CallbackQuery):
     expense_id = int(callback.data.split(":")[1])
 
     async with async_session_maker() as session:
-        user = await session.execute(
-            select(User).where(User.telegram_id == callback.from_user.id)
-        )
-        user = user.scalar_one_or_none()
-        if not user:
-            return
-
         result = await session.execute(
             select(Expense).where(
                 Expense.id == expense_id,
-                Expense.user_id == user.id,
+                Expense.telegram_id == callback.from_user.id,
                 Expense.is_deleted == False
             )
         )
@@ -237,17 +222,10 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
     expense_id = int(callback.data.split(":")[1])
 
     async with async_session_maker() as session:
-        user = await session.execute(
-            select(User).where(User.telegram_id == callback.from_user.id)
-        )
-        user = user.scalar_one_or_none()
-        if not user:
-            return
-
         result = await session.execute(
             select(Expense).where(
                 Expense.id == expense_id,
-                Expense.user_id == user.id,
+                Expense.telegram_id == callback.from_user.id,
                 Expense.is_deleted == False
             )
         )

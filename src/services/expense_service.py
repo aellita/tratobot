@@ -1,8 +1,8 @@
 from datetime import datetime
-from sqlalchemy import select, func, update as sql_update
+from sqlalchemy import select, func
 
 from ..db.database import async_session_maker
-from ..db.models.models import User, Expense
+from ..db.models.models import Expense
 from .categorization import detect_category
 
 PAGE_SIZE = 5
@@ -40,40 +40,11 @@ def parse_expense_text(text: str) -> tuple[float, str] | None:
     return total, description
 
 
-async def create_expense(telegram_id: int, amount: float, description: str) -> Expense | None:
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
-        user = result.scalar_one_or_none()
-        if not user:
-            return None
-
-        category = detect_category(description)
-
-        expense = Expense(
-            user_id=user.id,
-            amount=amount,
-            description=description or category,
-            date=datetime.utcnow()
-        )
-        session.add(expense)
-        await session.commit()
-        return expense
-
-
 async def get_expense_page(telegram_id: int, page: int = 0) -> tuple[list[Expense], int, int]:
     async with async_session_maker() as session:
-        user = await session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
-        user = user.scalar_one_or_none()
-        if not user:
-            return [], 0, 0
-
         total_q = await session.execute(
             select(func.count(Expense.id)).where(
-                Expense.user_id == user.id,
+                Expense.telegram_id == telegram_id,
                 Expense.is_deleted == False
             )
         )
@@ -82,7 +53,7 @@ async def get_expense_page(telegram_id: int, page: int = 0) -> tuple[list[Expens
         result = await session.execute(
             select(Expense)
             .where(
-                Expense.user_id == user.id,
+                Expense.telegram_id == telegram_id,
                 Expense.is_deleted == False
             )
             .order_by(Expense.date.desc())
@@ -95,17 +66,10 @@ async def get_expense_page(telegram_id: int, page: int = 0) -> tuple[list[Expens
 
 async def soft_delete_expense(telegram_id: int, expense_id: int) -> Expense | None:
     async with async_session_maker() as session:
-        user = await session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
-        user = user.scalar_one_or_none()
-        if not user:
-            return None
-
         result = await session.execute(
             select(Expense).where(
                 Expense.id == expense_id,
-                Expense.user_id == user.id,
+                Expense.telegram_id == telegram_id,
                 Expense.is_deleted == False
             )
         )
@@ -120,17 +84,10 @@ async def soft_delete_expense(telegram_id: int, expense_id: int) -> Expense | No
 
 async def restore_expense(telegram_id: int, expense_id: int) -> Expense | None:
     async with async_session_maker() as session:
-        user = await session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
-        user = user.scalar_one_or_none()
-        if not user:
-            return None
-
         result = await session.execute(
             select(Expense).where(
                 Expense.id == expense_id,
-                Expense.user_id == user.id,
+                Expense.telegram_id == telegram_id,
                 Expense.is_deleted == True
             )
         )
@@ -145,17 +102,10 @@ async def restore_expense(telegram_id: int, expense_id: int) -> Expense | None:
 
 async def update_expense_amount(telegram_id: int, expense_id: int, new_amount: float) -> Expense | None:
     async with async_session_maker() as session:
-        user = await session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
-        user = user.scalar_one_or_none()
-        if not user:
-            return None
-
         result = await session.execute(
             select(Expense).where(
                 Expense.id == expense_id,
-                Expense.user_id == user.id,
+                Expense.telegram_id == telegram_id,
                 Expense.is_deleted == False
             )
         )

@@ -4,7 +4,7 @@ from sqlalchemy import select, func
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from ..db.database import async_session_maker
-from ..db.models.models import User, Budget, Expense
+from ..db.models.models import Budget, Expense
 
 
 async def get_main_menu_keyboard(telegram_id: int = None):
@@ -25,17 +25,10 @@ async def get_main_menu_keyboard(telegram_id: int = None):
 
 async def _get_daily_limit_text(telegram_id: int) -> str | None:
     async with async_session_maker() as session:
-        result = await session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
-        user = result.scalar_one_or_none()
-        if not user:
-            return None
-
         month = datetime.now().strftime("%Y-%m")
         result = await session.execute(
             select(Budget).where(
-                Budget.user_id == user.id,
+                Budget.telegram_id == telegram_id,
                 Budget.month == month
             )
         )
@@ -46,7 +39,7 @@ async def _get_daily_limit_text(telegram_id: int) -> str | None:
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         result = await session.execute(
             select(func.sum(Expense.amount)).where(
-                Expense.user_id == user.id,
+                Expense.telegram_id == telegram_id,
                 Expense.is_deleted == False,
                 Expense.date >= today_start
             )
@@ -81,4 +74,11 @@ def get_onboarding_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_step")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="cancel")],
+    ])
+
+
+def get_start_choice_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➡️ В главное меню", callback_data="open_menu")],
+        [InlineKeyboardButton(text="🔄 Перезапустить бюджет", callback_data="reset_budget")],
     ])

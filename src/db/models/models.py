@@ -20,8 +20,7 @@ class CategoryType(str, Enum):
 class User(Base):
     __tablename__ = "users"
     
-    id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(unique=True, index=True)
+    telegram_id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -32,7 +31,7 @@ class Budget(Base):
     __tablename__ = "budgets"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     month: Mapped[str] = mapped_column(String(7))
     
     total_income: Mapped[float] = mapped_column(Float, default=0)
@@ -40,22 +39,47 @@ class Budget(Base):
     black_day_fund: Mapped[float] = mapped_column(Float, default=0)
     wishlist_name: Mapped[str] = mapped_column(String(255), default="Мечта")
     wishlist_target: Mapped[float] = mapped_column(Float, default=0)
+    period_start_day: Mapped[int] = mapped_column(Integer, default=1)
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     @property
+    def days_remaining(self) -> int:
+        import calendar
+        today = datetime.now()
+        start = self.period_start_day or 1
+        days_in_month = calendar.monthrange(today.year, today.month)[1]
+        if start == 1:
+            return days_in_month - today.day + 1
+        if today.day >= start:
+            remaining = days_in_month - today.day + 1
+            next_days = start - 1
+            return remaining + next_days
+        else:
+            return start - today.day
+
+    @property
+    def _period_total_days(self) -> int:
+        import calendar
+        today = datetime.now()
+        start = self.period_start_day or 1
+        if start == 1:
+            return calendar.monthrange(today.year, today.month)[1]
+        return 30
+
+    @property
     def daily_limit(self) -> float:
-        days_in_month = 30
         available = self.total_income - self.mandatory_payments - self.black_day_fund
-        return max(available / days_in_month, 0)
+        total = max(self._period_total_days, 1)
+        return max(available / total, 0)
 
 
 class Category(Base):
     __tablename__ = "categories"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     name: Mapped[str] = mapped_column(String(100))
     type: Mapped[CategoryType] = mapped_column(SQLEnum(CategoryType))
     keywords: Mapped[str] = mapped_column(Text, default="")
@@ -65,7 +89,7 @@ class Expense(Base):
     __tablename__ = "expenses"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     amount: Mapped[float] = mapped_column(Float)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -79,7 +103,7 @@ class Wishlist(Base):
     __tablename__ = "wishlists"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     name: Mapped[str] = mapped_column(String(255))
     target_amount: Mapped[float] = mapped_column(Float)
     current_amount: Mapped[float] = mapped_column(Float, default=0)
@@ -91,7 +115,7 @@ class BlackDayFund(Base):
     __tablename__ = "black_day_funds"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     month: Mapped[str] = mapped_column(String(7))
     amount: Mapped[float] = mapped_column(Float, default=0)
     used_amount: Mapped[float] = mapped_column(Float, default=0)
@@ -101,7 +125,7 @@ class UserSettings(Base):
     __tablename__ = "user_settings"
     
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), unique=True)
+    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"), unique=True)
     morning_report_time: Mapped[str] = mapped_column(String(5), default="08:00")
     evening_report_time: Mapped[str] = mapped_column(String(5), default="22:00")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
