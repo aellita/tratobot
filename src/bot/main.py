@@ -21,9 +21,9 @@ bot = Bot(
 )
 dp = Dispatcher()
 
+dp.include_router(test_router)
 dp.include_router(history_router)
 dp.include_router(menu_router)
-dp.include_router(test_router)
 
 
 async def on_startup():
