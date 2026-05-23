@@ -148,3 +148,21 @@ async def get_today_daily_limit(telegram_id: int) -> float:
         if not budget:
             return 0.0
         return budget.daily_limit
+
+
+async def get_yesterday_expenses_sum(telegram_id: int) -> float:
+    from datetime import timedelta
+    yesterday = date.today() - timedelta(days=1)
+    day_start = datetime.combine(yesterday, time.min)
+    day_end = datetime.combine(yesterday, time.max)
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(func.sum(Expense.amount))
+            .where(Expense.telegram_id == telegram_id)
+            .where(Expense.date >= day_start)
+            .where(Expense.date <= day_end)
+            .where(Expense.is_deleted == False)
+        )
+        total = result.scalar()
+        return float(total) if total else 0.0

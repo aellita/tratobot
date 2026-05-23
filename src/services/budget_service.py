@@ -66,3 +66,41 @@ async def delete_current_budget(telegram_id: int):
         if budget:
             await session.delete(budget)
             await session.commit()
+
+
+async def get_days_remaining(telegram_id: int) -> int:
+    month = datetime.now().strftime("%Y-%m")
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Budget).where(
+                Budget.telegram_id == telegram_id,
+                Budget.month == month,
+            )
+        )
+        budget = result.scalar_one_or_none()
+        if not budget:
+            return 1
+        return budget.days_remaining
+
+
+async def reconcile_budget_with_reality(telegram_id: int, real_cash: float) -> float:
+    month = datetime.now().strftime("%Y-%m")
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Budget).where(
+                Budget.telegram_id == telegram_id,
+                Budget.month == month,
+            )
+        )
+        budget = result.scalar_one_or_none()
+        if not budget:
+            return 0.0
+
+        budget.total_income = real_cash
+        days_left = budget.days_remaining
+        if days_left <= 0:
+            days_left = 1
+
+        new_daily_limit = max(real_cash / days_left, 0)
+        await session.commit()
+        return new_daily_limit

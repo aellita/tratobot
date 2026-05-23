@@ -12,7 +12,7 @@ from sqlalchemy import select, func
 
 from ...db.database import async_session_maker
 from ...db.models.models import User, Budget, Expense, Category
-from ...services.budget_service import save_budget, update_budget_field
+from ...services.budget_service import save_budget, update_budget_field, reconcile_budget_with_reality
 from ...services.categorization import GREETINGS, detect_category_db, get_category_display, add_keyword_to_category, get_user_categories, seed_user_categories, clean_and_normalize, _dump_keywords
 from ...services.expense_service import parse_expense_text
 from ...services.user_service import get_or_create_user
@@ -52,6 +52,10 @@ class AddExpense(StatesGroup):
 
 class CustomCategory(StatesGroup):
     waiting_for_name = State()
+
+
+class CriticalReset(StatesGroup):
+    waiting_for_real_balance = State()
 
 
 async def get_user_or_none(telegram_id: int) -> User | None:
@@ -864,6 +868,85 @@ async def save_new_category(message: Message, state: FSMContext):
     msg = await message.answer(
         text=f"✅ Новая категория «{name}» создана, {user_name}!\n"
              f"Я запомнил слово «{expense.description}» для этой категории.",
+        reply_markup=await get_main_menu_keyboard(message.from_user.id),
+    )
+    _track_keyboard(message.chat.id, msg.message_id)
+
+
+# ============ OVERDRAFT / MORNING HANDLERS ============
+
+@router.callback_query(F.data.startswith("fix_overdraft:"))
+async def handle_fix_overdraft(callback: CallbackQuery):
+    await callback.answer()
+    parts = callback.data.split(":")
+    action = parts[1]
+
+    if action == "reduce_limit":
+        user_name = callback.from_user.first_name or "друг"
+        await callback.message.edit_text(
+            text=f"✅ Принято, {user_name}! Остаток месяца проживём с урезанным лимитом. "
+                 "Я пересчитал бюджет.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
+
+    overdraft = float(parts[2])
+    if action == "wishlist":
+        budget = await get_budget_or_none(callback.from_user.id)
+        if budget and budget.wishlist_target > 0:
+            new_target = max(budget.wishlist_target - overdraft, 0)
+            await update_budget_field(callback.from_user.id, "wishlist_target", new_target)
+            text = f"🎯 Покрыли перерасход из Мечты! Остаток цели: {int(new_target)}₽"
+        else:
+            text = "❌ Мечта не настроена. Попробуй другой вариант."
+        await callback.message.edit_text(text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id))
+
+    elif action == "cubyshka":
+        budget = await get_budget_or_none(callback.from_user.id)
+        if budget and budget.black_day_fund > 0:
+            new_fund = max(budget.black_day_fund - overdraft, 0)
+            await update_budget_field(callback.from_user.id, "black_day_fund", new_fund)
+            text = f"🆘 Взяли из Кубышки! Остаток в заначке: {int(new_fund)}₽"
+        else:
+            text = "❌ Кубышка пуста. Попробуй другой вариант."
+        await callback.message.edit_text(text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id))
+
+
+@router.callback_query(F.data == "trigger_critical_reset")
+async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(CriticalReset.waiting_for_real_balance)
+    await callback.message.edit_text(
+        text="🚀 Давай начнём с чистого листа!\n\n"
+             "Сколько у тебя сейчас свободных денег на карте?\n"
+             "(Введи сумму, например: 25000)",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
+        ]),
+    )
+
+
+@router.message(CriticalReset.waiting_for_real_balance)
+async def save_real_balance(message: Message, state: FSMContext):
+    try:
+        real_cash = float(message.text.replace(" ", "").replace(",", "."))
+        if real_cash < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введи число. Например: 25000")
+        return
+
+    new_limit = await reconcile_budget_with_reality(message.from_user.id, real_cash)
+    user_name = message.from_user.first_name or "друг"
+
+    await state.clear()
+    await _cleanup_keyboard(message.bot, message.chat.id)
+    msg = await message.answer(
+        text=f"✅ Ревизия завершена, {user_name}!\n\n"
+             f"💰 Новый остаток: {int(real_cash)}₽\n"
+             f"📅 Осталось дней в периоде\n"
+             f"📊 Новый дневной лимит: {int(new_limit)}₽\n\n"
+             f"С чистого листа — вперёд! 🚀",
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     _track_keyboard(message.chat.id, msg.message_id)
