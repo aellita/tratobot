@@ -51,30 +51,35 @@ def clean_and_normalize(word: str) -> str:
 
 
 async def seed_user_categories(telegram_id: int):
-    """Create default categories for a user if they don't have any."""
+    """Create or migrate default categories for a user."""
     async with async_session_maker() as session:
         result = await session.execute(
             select(Category).where(Category.telegram_id == telegram_id)
         )
         existing = list(result.scalars().all())
 
-        # If old categories exist but have empty keywords, delete & recreate
         if existing:
             has_keywords = any(_parse_keywords(c.keywords) for c in existing)
             if has_keywords:
                 return existing
+            # Old categories with empty keywords: update in-place
+            name_to_new_keywords = {}
+            for display_name, kw in DEFAULT_CATEGORIES.items():
+                raw_name = " ".join(display_name.split()[1:])
+                name_to_new_keywords[raw_name.lower()] = kw
             for cat in existing:
-                await session.delete(cat)
+                kw = name_to_new_keywords.get(cat.name.lower(), [])
+                cat.keywords = _dump_keywords(kw)
+            await session.commit()
+            return existing
 
         categories = []
         for display_name, keywords in DEFAULT_CATEGORIES.items():
-            emoji = display_name.split()[0]
             raw_name = " ".join(display_name.split()[1:])
             cat = Category(
                 telegram_id=telegram_id,
                 name=raw_name,
                 keywords=_dump_keywords(keywords),
-                type=None,
             )
             session.add(cat)
             categories.append(cat)
