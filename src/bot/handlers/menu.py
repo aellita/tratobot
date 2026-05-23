@@ -13,7 +13,7 @@ from sqlalchemy import select, func
 from ...db.database import async_session_maker
 from ...db.models.models import User, Budget, Expense, Category
 from ...services.budget_service import save_budget, update_budget_field
-from ...services.categorization import GREETINGS, detect_category_db, get_category_display, add_keyword_to_category, get_user_categories, seed_user_categories
+from ...services.categorization import GREETINGS, detect_category_db, get_category_display, add_keyword_to_category, get_user_categories, seed_user_categories, clean_and_normalize, _dump_keywords
 from ...services.expense_service import parse_expense_text
 from ...services.user_service import get_or_create_user
 from ..keyboards import (
@@ -48,6 +48,10 @@ class EditBudget(StatesGroup):
 
 class AddExpense(StatesGroup):
     waiting_for_amount = State()
+
+
+class CustomCategory(StatesGroup):
+    waiting_for_name = State()
 
 
 async def get_user_or_none(telegram_id: int) -> User | None:
@@ -729,6 +733,9 @@ async def change_category(callback: CallbackQuery):
     if row:
         buttons.append(row)
     buttons.append([InlineKeyboardButton(
+        text="✏️ Новая категория", callback_data=f"new_cat:{expense_id}"
+    )])
+    buttons.append([InlineKeyboardButton(
         text="⬅️ Назад", callback_data=f"exp_back_cat:{expense_id}"
     )])
 
@@ -797,6 +804,69 @@ async def back_from_category_change(callback: CallbackQuery):
         text=f"⬅️ Вернулись, {user_name}!",
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
+
+
+@router.callback_query(F.data.startswith("new_cat:"))
+async def new_category_prompt(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    expense_id = int(callback.data.split(":")[1])
+    await state.update_data(new_cat_expense_id=expense_id)
+    await state.set_state(CustomCategory.waiting_for_name)
+    await callback.message.edit_text(
+        text="✏️ Напиши название новой категории:\n\n"
+             "Например: Книги, Алкоголь, Животные",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
+        ]),
+    )
+
+
+@router.message(CustomCategory.waiting_for_name)
+async def save_new_category(message: Message, state: FSMContext):
+    name = message.text.strip().capitalize()
+    if not name or len(name) > 30:
+        await message.answer("❌ Название должно быть от 1 до 30 символов. Попробуй ещё раз:")
+        return
+
+    data = await state.get_data()
+    expense_id = data.get("new_cat_expense_id")
+    if not expense_id:
+        await state.clear()
+        return
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Expense).where(
+                Expense.id == expense_id,
+                Expense.telegram_id == message.from_user.id,
+                Expense.is_deleted == False,
+            )
+        )
+        expense = result.scalar_one_or_none()
+        if not expense:
+            await message.answer("❌ Трата не найдена.")
+            await state.clear()
+            return
+
+        cat = Category(
+            telegram_id=message.from_user.id,
+            name=name,
+            keywords=_dump_keywords([clean_and_normalize(expense.description or "")]),
+        )
+        session.add(cat)
+        await session.flush()
+        expense.category_id = cat.id
+        await session.commit()
+
+    user_name = message.from_user.first_name or "друг"
+    await state.clear()
+    await _cleanup_keyboard(message.bot, message.chat.id)
+    msg = await message.answer(
+        text=f"✅ Новая категория «{name}» создана, {user_name}!\n"
+             f"Я запомнил слово «{expense.description}» для этой категории.",
+        reply_markup=await get_main_menu_keyboard(message.from_user.id),
+    )
+    _track_keyboard(message.chat.id, msg.message_id)
 
 
 # ============ SETTINGS ============
