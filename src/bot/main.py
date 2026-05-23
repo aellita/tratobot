@@ -9,6 +9,7 @@ from .handlers.menu import router as menu_router
 from .handlers.history import router as history_router
 from ..core.config import settings
 from ..db.database import init_db, close_db, engine, migrate_schema
+from .scheduler import setup_scheduler, stop_scheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,11 +29,13 @@ async def on_startup():
     await migrate_schema()
     logger.info("Initializing database...")
     await init_db()
+    setup_scheduler(bot)
     logger.info("Bot started!")
 
 
 async def on_shutdown():
     logger.info("Shutting down...")
+    stop_scheduler()
     await close_db()
     await bot.session.close()
 

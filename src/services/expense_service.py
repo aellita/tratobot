@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, date, time
 from sqlalchemy import select, func
 
 from ..db.database import async_session_maker
-from ..db.models.models import Expense
+from ..db.models.models import Expense, Budget
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
@@ -117,3 +117,34 @@ async def update_expense_amount(telegram_id: int, expense_id: int, new_amount: f
         expense.amount = new_amount
         await session.commit()
         return expense
+
+
+async def get_today_expenses_sum(telegram_id: int) -> float:
+    today_start = datetime.combine(date.today(), time.min)
+    today_end = datetime.combine(date.today(), time.max)
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(func.sum(Expense.amount))
+            .where(Expense.telegram_id == telegram_id)
+            .where(Expense.date >= today_start)
+            .where(Expense.date <= today_end)
+            .where(Expense.is_deleted == False)
+        )
+        total = result.scalar()
+        return float(total) if total else 0.0
+
+
+async def get_today_daily_limit(telegram_id: int) -> float:
+    month = datetime.now().strftime("%Y-%m")
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Budget).where(
+                Budget.telegram_id == telegram_id,
+                Budget.month == month,
+            )
+        )
+        budget = result.scalar_one_or_none()
+        if not budget:
+            return 0.0
+        return budget.daily_limit

@@ -6,3 +6,4 @@ python-dotenv>=1.0.1
 pydantic>=2.7.1
 pydantic-settings>=2.2.1
 greenlet>=3.0.0
+apscheduler>=3.10.4
