@@ -79,6 +79,7 @@ def _build_detail_keyboard(expense_id: int):
             InlineKeyboardButton(text="✏️ Изменить сумму", callback_data=f"exp_edit:{expense_id}"),
             InlineKeyboardButton(text="🗑️ Удалить", callback_data=f"exp_del:{expense_id}"),
         ],
+        [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{expense_id}")],
         [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="exp_back")],
     ])
 
