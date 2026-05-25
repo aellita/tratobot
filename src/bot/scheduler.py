@@ -14,9 +14,10 @@ scheduler = AsyncIOScheduler()
 
 
 def setup_scheduler(bot: Bot):
+    moscow_tz = "Europe/Moscow"
     scheduler.add_job(
         send_morning_reports,
-        CronTrigger(hour=8, minute=0),
+        CronTrigger(hour=8, minute=0, timezone=moscow_tz),
         kwargs={"bot": bot},
         id="morning_report",
         name="Утренняя рассылка",
@@ -27,7 +28,7 @@ def setup_scheduler(bot: Bot):
     )
     scheduler.add_job(
         send_evening_reports,
-        CronTrigger(hour=22, minute=0),
+        CronTrigger(hour=22, minute=0, timezone=moscow_tz),
         kwargs={"bot": bot},
         id="evening_report",
         name="Вечерняя рассылка итогов",
@@ -38,7 +39,7 @@ def setup_scheduler(bot: Bot):
     )
 
     scheduler.start()
-    logger.info("Планировщик запущен: утренний отчёт в 08:00, вечерний в 22:00")
+    logger.info("Планировщик запущен: утренний отчёт в 08:00 МСК, вечерний в 22:00 МСК")
 
 
 def stop_scheduler():
