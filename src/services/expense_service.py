@@ -67,6 +67,19 @@ def parse_expense_text(text: str) -> tuple[float, str] | None:
     return total, description
 
 
+def parse_multi_expense_text(text: str) -> list[tuple[float, str]]:
+    lines = text.strip().split("\n")
+    results = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        parsed = parse_expense_text(line)
+        if parsed:
+            results.append(parsed)
+    return results
+
+
 async def get_expense_page(telegram_id: int, page: int = 0) -> tuple[list[Expense], int, int]:
     async with async_session_maker() as session:
         total_q = await session.execute(

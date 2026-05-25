@@ -14,7 +14,7 @@ from ...db.database import async_session_maker
 from ...db.models.models import User, Budget, Expense, Category, Wishlist, UserSettings
 from ...services.budget_service import save_budget, update_budget_field, reconcile_budget_with_reality
 from ...services.categorization import GREETINGS, detect_category_db, get_category_display, add_keyword_to_category, get_user_categories, seed_user_categories, clean_and_normalize, _dump_keywords
-from ...services.expense_service import parse_expense_text, try_apply_round_up
+from ...services.expense_service import parse_expense_text, parse_multi_expense_text, try_apply_round_up
 from ...services.user_service import get_or_create_user
 from ..keyboards import (
     get_cancel_keyboard,
@@ -712,68 +712,84 @@ async def menu_add(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AddExpense.waiting_for_amount)
 async def process_expense(message: Message, state: FSMContext):
-    parsed = parse_expense_text(message.text.strip())
-    if not parsed:
-        await message.answer("❌ Введи сумму. Например: 500 кофе")
-        return
-
-    amount, description = parsed
-    if not description:
-        description = "трата"
-
-    user = await get_or_create_user(
+    await get_or_create_user(
         telegram_id=message.from_user.id,
         first_name=message.from_user.first_name,
         username=message.from_user.username
     )
 
-    try:
-        cat, matched = await detect_category_db(description, message.from_user.id)
-    except Exception as e:
-        logging.error("Category detection failed", exc_info=e)
-        cat = None
-        matched = ""
-
-    cat_id = cat.id if cat else None
-    emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
-
-    try:
-        async with async_session_maker() as session:
-            expense = Expense(
-                telegram_id=message.from_user.id,
-                amount=amount,
-                description=description or cat_name,
-                category_id=cat_id,
-                date=datetime.utcnow()
-            )
-            session.add(expense)
-            await session.commit()
-            expense_id = expense.id
-    except Exception as e:
-        logging.error("Expense insert failed", exc_info=e)
-        cause = getattr(e, "__cause__", None)
-        if cause:
-            logging.error("Caused by: %s: %s", type(cause).__name__, cause)
-        await message.answer("❌ Ошибка при сохранении траты. Попробуй ещё раз.")
-        await state.clear()
+    parsed_list = parse_multi_expense_text(message.text.strip())
+    if not parsed_list:
+        await message.answer("❌ Введи сумму. Например: 500 кофе")
         return
 
+    lines = []
+    total_amount = 0
+    first_id = None
+    errors = 0
+
+    for amount, description in parsed_list:
+        if not description:
+            description = "трата"
+        total_amount += amount
+
+        try:
+            cat, matched = await detect_category_db(description, message.from_user.id)
+        except Exception as e:
+            logging.error("Category detection failed", exc_info=e)
+            cat = None
+
+        cat_id = cat.id if cat else None
+        emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
+
+        try:
+            async with async_session_maker() as session:
+                expense = Expense(
+                    telegram_id=message.from_user.id,
+                    amount=amount,
+                    description=description or cat_name,
+                    category_id=cat_id,
+                    date=datetime.utcnow()
+                )
+                session.add(expense)
+                await session.commit()
+                if first_id is None:
+                    first_id = expense.id
+        except Exception as e:
+            logging.error("Expense insert failed", exc_info=e)
+            errors += 1
+            continue
+
+        lines.append(f"💰 {amount:,.0f}₽ — {description} {emoji}{cat_name}")
+
     await state.clear()
+
+    if not lines:
+        await message.answer("❌ Ошибка при сохранении трат. Попробуй ещё раз.")
+        return
+
     user_name = message.from_user.first_name or "друг"
 
-    round_up_text = await try_apply_round_up(message.from_user.id, amount)
-    extra = round_up_text or ""
+    total_round_up = ""
+    if total_amount > 0:
+        r = await try_apply_round_up(message.from_user.id, total_amount)
+        if r:
+            total_round_up = r
 
     await _cleanup_keyboard(message.bot, message.chat.id)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{expense_id}")],
-        [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
-    ])
+
+    if len(lines) == 1:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{first_id}")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+        ])
+    else:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+        ])
+
     msg = await message.answer(
-        text=f"✅ Записано, {user_name}!\n\n"
-             f"💰 {amount:,.0f}₽ — {description}\n"
-             f"{emoji} {cat_name}"
-             f"{extra}",
+        text=f"✅ Записано, {user_name}!\n\n" + "\n".join(lines) + total_round_up,
         reply_markup=kb
     )
     _track_keyboard(message.chat.id, msg.message_id)
@@ -1331,63 +1347,80 @@ async def handle_text(message: Message, state: FSMContext):
         _track_keyboard(message.chat.id, msg.message_id)
         return
 
-    parsed = parse_expense_text(text)
-    if parsed:
-        amount, description = parsed
-        if not description:
-            description = "трата"
-
+    parsed_list = parse_multi_expense_text(text)
+    if parsed_list:
         await get_or_create_user(
             telegram_id=message.from_user.id,
             first_name=message.from_user.first_name,
             username=message.from_user.username
         )
 
-        try:
-            cat, matched = await detect_category_db(description, message.from_user.id)
-        except Exception as e:
-            logging.error("Category detection failed", exc_info=e)
-            cat = None
-            matched = ""
+        lines = []
+        total_amount = 0
+        first_id = None
 
-        cat_id = cat.id if cat else None
-        emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
+        for amount, description in parsed_list:
+            if not description:
+                description = "трата"
+            total_amount += amount
 
-        try:
-            async with async_session_maker() as session:
-                expense = Expense(
-                    telegram_id=message.from_user.id,
-                    amount=amount,
-                    description=description or cat_name,
-                    category_id=cat_id,
-                    date=datetime.utcnow()
-                )
-                session.add(expense)
-                await session.commit()
-                expense_id = expense.id
-        except Exception as e:
-            logging.error("Expense insert failed (free-form)", exc_info=e)
-            cause = getattr(e, "__cause__", None)
-            if cause:
-                logging.error("Caused by: %s: %s", type(cause).__name__, cause)
-            await message.answer("❌ Ошибка при сохранении траты. Попробуй ещё раз.")
+            try:
+                cat, matched = await detect_category_db(description, message.from_user.id)
+            except Exception as e:
+                logging.error("Category detection failed", exc_info=e)
+                cat = None
+
+            cat_id = cat.id if cat else None
+            emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
+
+            try:
+                async with async_session_maker() as session:
+                    expense = Expense(
+                        telegram_id=message.from_user.id,
+                        amount=amount,
+                        description=description or cat_name,
+                        category_id=cat_id,
+                        date=datetime.utcnow()
+                    )
+                    session.add(expense)
+                    await session.commit()
+                    if first_id is None:
+                        first_id = expense.id
+            except Exception as e:
+                logging.error("Expense insert failed (free-form)", exc_info=e)
+                cause = getattr(e, "__cause__", None)
+                if cause:
+                    logging.error("Caused by: %s: %s", type(cause).__name__, cause)
+                continue
+
+            lines.append(f"💰 {amount:,.0f}₽ — {description} {emoji}{cat_name}")
+
+        if not lines:
+            await message.answer("❌ Ошибка при сохранении трат. Попробуй ещё раз.")
             return
 
         user_name = message.from_user.first_name or "друг"
 
-        round_up_text = await try_apply_round_up(message.from_user.id, amount)
-        extra = round_up_text or ""
+        total_round_up = ""
+        if total_amount > 0:
+            r = await try_apply_round_up(message.from_user.id, total_amount)
+            if r:
+                total_round_up = r
 
         await _cleanup_keyboard(message.bot, message.chat.id)
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{expense_id}")],
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
-        ])
+
+        if len(lines) == 1:
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{first_id}")],
+                [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+            ])
+        else:
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+            ])
+
         msg = await message.answer(
-            text=f"✅ Записано, {user_name}!\n\n"
-                 f"💰 {amount:,.0f}₽ — {description}\n"
-                 f"{emoji} {cat_name}"
-                 f"{extra}",
+            text=f"✅ Записано, {user_name}!\n\n" + "\n".join(lines) + total_round_up,
             reply_markup=kb
         )
         _track_keyboard(message.chat.id, msg.message_id)
