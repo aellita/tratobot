@@ -8,6 +8,7 @@ from aiogram.enums import ParseMode
 from .handlers.menu import router as menu_router
 from .handlers.history import router as history_router
 from .handlers.test_commands import router as test_router
+from .handlers.evening_flow import router as evening_router
 from ..core.config import settings
 from ..db.database import init_db, close_db, engine, migrate_schema
 from .scheduler import setup_scheduler, stop_scheduler
@@ -22,6 +23,7 @@ bot = Bot(
 dp = Dispatcher()
 
 dp.include_router(test_router)
+dp.include_router(evening_router)
 dp.include_router(history_router)
 dp.include_router(menu_router)
 

@@ -2,10 +2,36 @@ from datetime import datetime, date, time
 from sqlalchemy import select, func
 
 from ..db.database import async_session_maker
-from ..db.models.models import Expense, Budget
+from ..db.models.models import Expense, Budget, UserSettings
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
+
+
+async def try_apply_round_up(telegram_id: int, amount: float) -> str | None:
+    import math
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(UserSettings).where(UserSettings.telegram_id == telegram_id)
+        )
+        settings = result.scalar_one_or_none()
+        if not settings or settings.rounding_mode <= 0:
+            return None
+
+        mode = settings.rounding_mode
+        rounded = math.ceil(amount / mode) * mode
+        spare = rounded - amount
+        if spare <= 0:
+            return None
+
+    from .goal_service import add_spare_change_to_goal
+    new_total, goal_name = await add_spare_change_to_goal(telegram_id, spare)
+
+    return (
+        f"\n\n🐖 Я округлил(а) чек и закинул(а) <b>{int(spare)}₽</b>"
+        f" в «{goal_name}». Там уже <b>{int(new_total)}₽</b>! 🚀"
+    )
 
 
 def clean_description(text: str) -> str:
@@ -148,6 +174,50 @@ async def get_today_daily_limit(telegram_id: int) -> float:
         if not budget:
             return 0.0
         return budget.daily_limit
+
+
+async def get_current_period_expenses_sum(telegram_id: int) -> float:
+    import calendar
+    from datetime import timedelta
+
+    month = datetime.now().strftime("%Y-%m")
+    async with async_session_maker() as session:
+        budget_result = await session.execute(
+            select(Budget).where(
+                Budget.telegram_id == telegram_id,
+                Budget.month == month,
+            )
+        )
+        budget = budget_result.scalar_one_or_none()
+        if not budget:
+            return 0.0
+
+        today = datetime.now()
+        start_day = budget.period_start_day or 1
+        clamped = min(start_day, calendar.monthrange(today.year, today.month)[1])
+
+        if clamped == 1:
+            period_start = datetime(today.year, today.month, 1)
+            next_month = today.replace(day=1) + timedelta(days=32)
+            period_end = datetime(next_month.year, next_month.month, 1) - timedelta(seconds=1)
+        elif today.day >= clamped:
+            period_start = datetime(today.year, today.month, clamped)
+            next_month = today.replace(day=1) + timedelta(days=32)
+            period_end = datetime(next_month.year, next_month.month, clamped - 1, 23, 59, 59)
+        else:
+            last_month = datetime(today.year, today.month, 1) - timedelta(days=1)
+            period_start = datetime(last_month.year, last_month.month, clamped)
+            period_end = datetime(today.year, today.month, clamped - 1, 23, 59, 59)
+
+        result = await session.execute(
+            select(func.sum(Expense.amount))
+            .where(Expense.telegram_id == telegram_id)
+            .where(Expense.date >= period_start)
+            .where(Expense.date <= period_end)
+            .where(Expense.is_deleted == False)
+        )
+        total = result.scalar()
+        return float(total) if total else 0.0
 
 
 async def get_yesterday_expenses_sum(telegram_id: int) -> float:

@@ -11,10 +11,10 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from sqlalchemy import select, func
 
 from ...db.database import async_session_maker
-from ...db.models.models import User, Budget, Expense, Category
+from ...db.models.models import User, Budget, Expense, Category, Wishlist, UserSettings
 from ...services.budget_service import save_budget, update_budget_field, reconcile_budget_with_reality
 from ...services.categorization import GREETINGS, detect_category_db, get_category_display, add_keyword_to_category, get_user_categories, seed_user_categories, clean_and_normalize, _dump_keywords
-from ...services.expense_service import parse_expense_text
+from ...services.expense_service import parse_expense_text, try_apply_round_up
 from ...services.user_service import get_or_create_user
 from ..keyboards import (
     get_cancel_keyboard,
@@ -23,6 +23,7 @@ from ..keyboards import (
     get_period_start_keyboard,
     get_settings_keyboard,
     get_start_choice_keyboard,
+    get_rounding_mode_keyboard,
 )
 from ...services.budget_service import delete_current_budget
 
@@ -35,6 +36,7 @@ class BudgetSetup(StatesGroup):
     waiting_for_mandatory = State()
     waiting_for_black_day = State()
     waiting_for_wishlist_name = State()
+    waiting_for_rounding_mode = State()
 
 
 class EditBudget(StatesGroup):
@@ -175,7 +177,7 @@ async def cmd_start(message: Message, state: FSMContext):
     else:
         await message.answer(
             text=f"👋 Рад видеть тебя снова, {user_name}!\n\n"
-                 "Ты уже настроил свой бюджет. Кубышка и Мечта в безопасности.\n"
+                 "Ты уже настроил свой бюджет. Кубышка и Хотелка в безопасности.\n"
                  "Что хочешь сделать?",
             reply_markup=get_start_choice_keyboard()
         )
@@ -273,7 +275,7 @@ async def menu_status(callback: CallbackQuery):
              f"📉 <b>Потрачено:</b> {spent:,.0f}₽\n"
              f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
              f"🏦 <b>Кубышка:</b> {budget.black_day_fund:,.0f}₽\n"
-             f"🎯 <b>Мечта:</b> {budget.wishlist_target:,.0f}₽\n"
+             f"🎯 <b>Хотелка:</b> {budget.wishlist_target:,.0f}₽\n"
              f"📅 <b>Осталось дней:</b> {days_left}{period_text}\n\n"
              f"💵 <b>Осталось:</b> {remaining:,.0f}₽",
         reply_markup=await get_main_menu_keyboard(callback.from_user.id)
@@ -332,7 +334,7 @@ async def menu_daily(callback: CallbackQuery):
         f"📊 <b>Всего:</b> {budget.total_income:,.0f}₽\n"
         f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
         f"🏦 <b>Кубышка:</b> {budget.black_day_fund:,.0f}₽\n"
-        f"🎯 <b>Мечта:</b> {budget.wishlist_target:,.0f}₽"
+        f"🎯 <b>Хотелка:</b> {budget.wishlist_target:,.0f}₽"
     )
 
     await callback.message.edit_text(text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id))
@@ -360,6 +362,9 @@ async def skip_step(callback: CallbackQuery, state: FSMContext):
         await _advance_onboarding(callback, state)
     elif current_state == BudgetSetup.waiting_for_wishlist_name.state:
         await state.update_data(wishlist_name="", wishlist_price=0)
+        await _advance_onboarding(callback, state)
+    elif current_state == BudgetSetup.waiting_for_rounding_mode.state:
+        await state.update_data(rounding_mode=0)
         await _finish_onboarding(callback, state)
     else:
         await callback.answer()
@@ -396,6 +401,20 @@ async def _advance_onboarding(source: CallbackQuery | Message, state: FSMContext
             await source.message.edit_text(text=text, reply_markup=get_onboarding_keyboard())
         else:
             await source.answer(text=text, reply_markup=get_onboarding_keyboard())
+    elif current_state == BudgetSetup.waiting_for_wishlist_name.state:
+        await state.set_state(BudgetSetup.waiting_for_rounding_mode)
+        kw = get_rounding_mode_keyboard()
+        text = ("✅ Запомнил!\n\n"
+                "🐖 Бро, хочешь копить незаметно? Я могу округлять твои траты, "
+                "а сдачу закидывать в копилку.\n\n"
+                "До какого шага округляем?")
+        if isinstance(source, CallbackQuery):
+            await source.message.edit_text(text=text, reply_markup=kw)
+        else:
+            await source.answer(text=text, reply_markup=kw)
+    elif current_state == BudgetSetup.waiting_for_rounding_mode.state:
+        await state.update_data(rounding_mode=0)
+        await _finish_onboarding(source, state)
 
 
 async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext):
@@ -418,7 +437,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         return
 
     month = datetime.now().strftime("%Y-%m")
-    wishlist_name = data.get("wishlist_name", "Мечта") or "Мечта"
+    wishlist_name = data.get("wishlist_name", "Хотелка") or "Хотелка"
     wishlist_price = data.get("wishlist_price", 0)
     period_start_day = data.get("period_start_day", 1)
 
@@ -432,6 +451,18 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         wishlist_price=wishlist_price,
         period_start_day=period_start_day
     )
+
+    rounding_mode = data.get("rounding_mode", 0)
+    async with async_session_maker() as session:
+        settings_result = await session.execute(
+            select(UserSettings).where(UserSettings.telegram_id == telegram_id)
+        )
+        user_settings = settings_result.scalar_one_or_none()
+        if user_settings:
+            user_settings.rounding_mode = rounding_mode
+        else:
+            session.add(UserSettings(telegram_id=telegram_id, rounding_mode=rounding_mode))
+        await session.commit()
 
     import calendar
     today = datetime.now()
@@ -455,7 +486,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
             f"• Общий доход: {data.get('income', 0):,.0f}₽\n"
             f"• Обязательные: {data.get('mandatory', 0):,.0f}₽\n"
             f"• Кубышка: {data.get('black_day', 0):,.0f}₽\n"
-            f"• Мечта: {wishlist_price:,.0f}₽\n"
+            f"• Хотелка: {wishlist_price:,.0f}₽\n"
             f"{period_note}\n"
             f"💰 <b>Дневной лимит: {daily_limit:,.0f}₽</b>")
 
@@ -619,7 +650,7 @@ def _parse_wishlist(text: str) -> tuple[str, float]:
         except:
             continue
     if not name:
-        name = "Мечта"
+        name = "Хотелка"
     elif name[0].islower():
         name = name[0].upper() + name[1:]
     return name, price
@@ -630,7 +661,37 @@ async def process_wishlist_name(message: Message, state: FSMContext):
     await _cleanup_old_buttons(state, message.bot)
     name, price = _parse_wishlist(message.text.strip())
     await state.update_data(wishlist_name=name, wishlist_price=price)
-    await _finish_onboarding(message, state)
+    await _advance_onboarding(message, state)
+
+
+# ============ ROUNDING MODE ============
+
+@router.callback_query(F.data.in_(["rounding_off", "rounding_10", "rounding_100"]))
+async def handle_rounding_choice(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    mode_map = {"rounding_off": 0, "rounding_10": 10, "rounding_100": 100}
+    mode = mode_map[callback.data]
+    current_state = await state.get_state()
+    if current_state == BudgetSetup.waiting_for_rounding_mode.state:
+        await state.update_data(rounding_mode=mode)
+        await _finish_onboarding(callback, state)
+    else:
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(UserSettings).where(UserSettings.telegram_id == callback.from_user.id)
+            )
+            settings = result.scalar_one_or_none()
+            if settings:
+                settings.rounding_mode = mode
+            else:
+                session.add(UserSettings(telegram_id=callback.from_user.id, rounding_mode=mode))
+            await session.commit()
+        user_name = callback.from_user.first_name or "друг"
+        label = "выключено" if mode == 0 else f"{mode} ₽"
+        await callback.message.edit_text(
+            text=f"✅ Готово, {user_name}! Округление: <b>{label}</b>",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
 
 
 # ============ ADD EXPENSE ============
@@ -700,6 +761,9 @@ async def process_expense(message: Message, state: FSMContext):
     await state.clear()
     user_name = message.from_user.first_name or "друг"
 
+    round_up_text = await try_apply_round_up(message.from_user.id, amount)
+    extra = round_up_text or ""
+
     await _cleanup_keyboard(message.bot, message.chat.id)
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{expense_id}")],
@@ -708,7 +772,8 @@ async def process_expense(message: Message, state: FSMContext):
     msg = await message.answer(
         text=f"✅ Записано, {user_name}!\n\n"
              f"💰 {amount:,.0f}₽ — {description}\n"
-             f"{emoji} {cat_name}",
+             f"{emoji} {cat_name}"
+             f"{extra}",
         reply_markup=kb
     )
     _track_keyboard(message.chat.id, msg.message_id)
@@ -892,13 +957,21 @@ async def handle_fix_overdraft(callback: CallbackQuery):
 
     overdraft = float(parts[2])
     if action == "wishlist":
-        budget = await get_budget_or_none(callback.from_user.id)
-        if budget and budget.wishlist_target > 0:
-            new_target = max(budget.wishlist_target - overdraft, 0)
-            await update_budget_field(callback.from_user.id, "wishlist_target", new_target)
-            text = f"🎯 Покрыли перерасход из Мечты! Остаток цели: {int(new_target)}₽"
-        else:
-            text = "❌ Мечта не настроена. Попробуй другой вариант."
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Wishlist)
+                .where(Wishlist.telegram_id == callback.from_user.id, Wishlist.is_active == True)
+                .order_by(Wishlist.id)
+                .limit(1)
+            )
+            goal = result.scalar_one_or_none()
+            if goal and goal.current_amount > 0:
+                deduction = min(overdraft, goal.current_amount)
+                goal.current_amount -= deduction
+                await session.commit()
+                text = f"🎯 Покрыли {int(deduction)}₽ из Хотелки! Остаток: {int(goal.current_amount)}₽"
+            else:
+                text = "❌ В Хотелке пока пусто. Попробуй другой вариант."
         await callback.message.edit_text(text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id))
 
     elif action == "cubyshka":
@@ -968,6 +1041,12 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
         return
 
     period_info = f"📅 Период: с {budget.period_start_day}-го" if budget.period_start_day != 1 else "📅 Период: весь месяц"
+    async with async_session_maker() as session:
+        settings_result = await session.execute(
+            select(UserSettings).where(UserSettings.telegram_id == callback.from_user.id)
+        )
+        user_settings = settings_result.scalar_one_or_none()
+        rounding_label = f"{user_settings.rounding_mode} ₽" if (user_settings and user_settings.rounding_mode > 0) else "выкл"
     await callback.message.edit_text(
         text=f"⚙️ {user_name}, что меняем?\n\n"
              f"📊 Текущий бюджет:\n"
@@ -975,6 +1054,7 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
              f"• Обязательные: {budget.mandatory_payments:,.0f}₽\n"
              f"• Кубышка: {budget.black_day_fund:,.0f}₽\n"
              f"• {budget.wishlist_name}: {budget.wishlist_target:,.0f}₽\n"
+             f"• Округление: {rounding_label}\n"
              f"{period_info}",
         reply_markup=get_settings_keyboard()
     )
@@ -1178,6 +1258,27 @@ async def save_wishlist(message: Message, state: FSMContext):
     await state.clear()
 
 
+# ============ ROUNDING MODE SETTINGS ============
+
+@router.callback_query(F.data == "edit_rounding")
+async def edit_rounding(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(UserSettings).where(UserSettings.telegram_id == callback.from_user.id)
+        )
+        settings = result.scalar_one_or_none()
+        current = settings.rounding_mode if settings else 0
+
+    label = "выключено" if current == 0 else f"{current} ₽"
+    await callback.message.edit_text(
+        text=f"🐖 Сейчас округление: <b>{label}</b>\n\n"
+             "Мне округлять твои траты, а сдачу закидывать в копилку?",
+        reply_markup=get_rounding_mode_keyboard(),
+    )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
+
+
 # ============ CANCEL / BACK ============
 
 @router.callback_query(F.data == "cancel")
@@ -1274,6 +1375,9 @@ async def handle_text(message: Message, state: FSMContext):
 
         user_name = message.from_user.first_name or "друг"
 
+        round_up_text = await try_apply_round_up(message.from_user.id, amount)
+        extra = round_up_text or ""
+
         await _cleanup_keyboard(message.bot, message.chat.id)
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{expense_id}")],
@@ -1282,7 +1386,8 @@ async def handle_text(message: Message, state: FSMContext):
         msg = await message.answer(
             text=f"✅ Записано, {user_name}!\n\n"
                  f"💰 {amount:,.0f}₽ — {description}\n"
-                 f"{emoji} {cat_name}",
+                 f"{emoji} {cat_name}"
+                 f"{extra}",
             reply_markup=kb
         )
         _track_keyboard(message.chat.id, msg.message_id)

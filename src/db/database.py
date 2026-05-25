@@ -91,6 +91,14 @@ async def migrate_schema():
             await conn.execute(text("ALTER TABLE categories ALTER COLUMN type DROP NOT NULL"))
             logger.info("Migrated categories: type is now nullable")
 
+        result = await conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='user_settings' AND column_name='rounding_mode'"
+        ))
+        if not result.fetchone():
+            await conn.execute(text("ALTER TABLE user_settings ADD COLUMN rounding_mode INTEGER DEFAULT 0"))
+            logger.info("Migrated user_settings: added rounding_mode")
+
 
 async def close_db():
     await engine.dispose()

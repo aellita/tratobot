@@ -19,7 +19,7 @@ async def save_budget(telegram_id: int, month: str, income: float, mandatory: fl
             budget.total_income = income
             budget.mandatory_payments = mandatory
             budget.black_day_fund = black_day
-            budget.wishlist_name = wishlist_name or "Мечта"
+            budget.wishlist_name = wishlist_name or "Хотелка"
             budget.wishlist_target = wishlist_price
             budget.period_start_day = period_start_day
         else:
@@ -29,7 +29,7 @@ async def save_budget(telegram_id: int, month: str, income: float, mandatory: fl
                 total_income=income,
                 mandatory_payments=mandatory,
                 black_day_fund=black_day,
-                wishlist_name=wishlist_name or "Мечта",
+                wishlist_name=wishlist_name or "Хотелка",
                 wishlist_target=wishlist_price,
                 period_start_day=period_start_day
             )

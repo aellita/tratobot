@@ -37,7 +37,7 @@ class Budget(Base):
     total_income: Mapped[float] = mapped_column(Float, default=0)
     mandatory_payments: Mapped[float] = mapped_column(Float, default=0)
     black_day_fund: Mapped[float] = mapped_column(Float, default=0)
-    wishlist_name: Mapped[str] = mapped_column(String(255), default="Мечта")
+    wishlist_name: Mapped[str] = mapped_column(String(255), default="Хотелка")
     wishlist_target: Mapped[float] = mapped_column(Float, default=0)
     period_start_day: Mapped[int] = mapped_column(Integer, default=1)
     
@@ -136,3 +136,4 @@ class UserSettings(Base):
     morning_report_time: Mapped[str] = mapped_column(String(5), default="08:00")
     evening_report_time: Mapped[str] = mapped_column(String(5), default="22:00")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    rounding_mode: Mapped[int] = mapped_column(Integer, default=0)

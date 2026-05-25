@@ -61,6 +61,7 @@ def get_settings_keyboard():
         [InlineKeyboardButton(text="🏦 Кубышка", callback_data="edit_black_day")],
         [InlineKeyboardButton(text="🎯 Хотелка", callback_data="edit_wishlist")],
         [InlineKeyboardButton(text="📅 День старта", callback_data="edit_period_start")],
+        [InlineKeyboardButton(text="🐖 Округление", callback_data="edit_rounding")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_back")],
     ])
 
@@ -83,6 +84,15 @@ def get_cancel_keyboard():
 def get_onboarding_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_step")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="cancel")],
+    ])
+
+
+def get_rounding_mode_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Не надо", callback_data="rounding_off")],
+        [InlineKeyboardButton(text="10 ₽", callback_data="rounding_10")],
+        [InlineKeyboardButton(text="100 ₽", callback_data="rounding_100")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="cancel")],
     ])
 
