@@ -273,7 +273,7 @@ async def menu_status(callback: CallbackQuery):
     days_left = budget.days_remaining
     period_text = f" (с {budget.period_start_day}-го)" if budget.period_start_day != 1 else ""
     if budget.free_money > 0:
-        money_line = f"💵 <b>Свободно:</b> {budget.free_money:,.0f}₽\n"
+        money_line = f"📊 <b>Бюджет на период:</b> {budget.free_money:,.0f}₽\n"
         remaining = max(budget.free_money - spent, 0)
     else:
         remaining = budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent
@@ -338,7 +338,7 @@ async def menu_daily(callback: CallbackQuery):
     days_left = budget.days_remaining
 
     if budget.free_money > 0:
-        total_line = f"📊 <b>Всего свободно:</b> {budget.free_money:,.0f}₽"
+        total_line = f"📊 <b>Бюджет на период:</b> {budget.free_money:,.0f}₽"
     else:
         total_line = f"📊 <b>Всего:</b> {budget.total_income:,.0f}₽"
 
