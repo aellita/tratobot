@@ -32,6 +32,4 @@ async def cmd_test_teaser(message: Message, bot: Bot):
 
 @router.message(Command("test_morning"))
 async def cmd_test_morning(message: Message, bot: Bot):
-    await message.answer("🚀 Запускаю принудительный УТРЕННИЙ отчёт...")
     await send_morning_reports(bot)
-    await message.answer("🏁 Утренний отчёт выполнен!")

@@ -1005,7 +1005,7 @@ async def handle_fix_overdraft(callback: CallbackQuery):
 async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(CriticalReset.waiting_for_real_balance)
-    await callback.message.edit_text(
+    msg = await callback.message.answer(
         text="🚀 Давай начнём с чистого листа!\n\n"
              "Сколько у тебя сейчас свободных денег на карте?\n"
              "(Введи сумму, например: 25000)",
@@ -1013,6 +1013,7 @@ async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
             [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
         ]),
     )
+    _track_keyboard(callback.message.chat.id, msg.message_id)
 
 
 @router.message(CriticalReset.waiting_for_real_balance)
@@ -1025,7 +1026,7 @@ async def save_real_balance(message: Message, state: FSMContext):
         await message.answer("❌ Введи число. Например: 25000")
         return
 
-    new_limit = await reconcile_budget_with_reality(message.from_user.id, real_cash)
+    new_limit, days_left = await reconcile_budget_with_reality(message.from_user.id, real_cash)
     user_name = message.from_user.first_name or "друг"
 
     await state.clear()
@@ -1033,7 +1034,7 @@ async def save_real_balance(message: Message, state: FSMContext):
     msg = await message.answer(
         text=f"✅ Ревизия завершена, {user_name}!\n\n"
              f"💰 Новый остаток: {int(real_cash)}₽\n"
-             f"📅 Осталось дней в периоде\n"
+             f"📅 Осталось дней в периоде: {days_left}\n"
              f"📊 Новый дневной лимит: {int(new_limit)}₽\n\n"
              f"С чистого листа — вперёд! 🚀",
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
@@ -1056,7 +1057,8 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
         )
         return
 
-    period_info = f"📅 Период: с {budget.period_start_day}-го" if budget.period_start_day != 1 else "📅 Период: весь месяц"
+    period_day = budget.period_start_day or 1
+    period_info = f"📅 Период: с {period_day}-го" if period_day != 1 else "📅 Период: весь месяц"
     async with async_session_maker() as session:
         settings_result = await session.execute(
             select(UserSettings).where(UserSettings.telegram_id == callback.from_user.id)
@@ -1066,10 +1068,10 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=f"⚙️ {user_name}, что меняем?\n\n"
              f"📊 Текущий бюджет:\n"
-             f"• Доход: {budget.total_income:,.0f}₽\n"
+             f"• Всего денег: {budget.total_income:,.0f}₽\n"
              f"• Обязательные: {budget.mandatory_payments:,.0f}₽\n"
              f"• Кубышка: {budget.black_day_fund:,.0f}₽\n"
-             f"• {budget.wishlist_name}: {budget.wishlist_target:,.0f}₽\n"
+             f"• {budget.wishlist_name or 'Хотелка'}: {budget.wishlist_target:,.0f}₽\n"
              f"• Округление: {rounding_label}\n"
              f"{period_info}",
         reply_markup=get_settings_keyboard()
@@ -1300,7 +1302,13 @@ async def edit_rounding(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "cancel")
 async def cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+    current_state = await state.get_state()
     await state.clear()
+
+    if current_state == CriticalReset.waiting_for_real_balance.state:
+        await callback.message.delete()
+        return
+
     user_name = callback.from_user.first_name or "друг"
     await callback.message.edit_text(
         text=f"⬅️ Вернулись, {user_name}!",
