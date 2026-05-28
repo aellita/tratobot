@@ -29,10 +29,10 @@ dp.include_router(menu_router)
 
 
 async def on_startup():
-    logger.info("Migrating schema...")
-    await migrate_schema()
     logger.info("Initializing database...")
     await init_db()
+    logger.info("Migrating schema...")
+    await migrate_schema()
     setup_scheduler(bot)
     logger.info("Bot started!")
 
