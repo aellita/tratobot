@@ -40,6 +40,7 @@ class Budget(Base):
     wishlist_name: Mapped[str] = mapped_column(String(255), default="Хотелка")
     wishlist_target: Mapped[float] = mapped_column(Float, default=0)
     period_start_day: Mapped[int] = mapped_column(Integer, default=1)
+    free_money: Mapped[float] = mapped_column(Float, default=0)
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -77,7 +78,10 @@ class Budget(Base):
 
     @property
     def daily_limit(self) -> float:
-        available = self.total_income - self.mandatory_payments - self.black_day_fund
+        if self.free_money > 0:
+            available = self.free_money
+        else:
+            available = self.total_income - self.mandatory_payments - self.black_day_fund
         total = max(self._period_total_days, 1)
         return max(available / total, 0)
 

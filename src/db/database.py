@@ -99,6 +99,14 @@ async def migrate_schema():
             await conn.execute(text("ALTER TABLE user_settings ADD COLUMN rounding_mode INTEGER DEFAULT 0"))
             logger.info("Migrated user_settings: added rounding_mode")
 
+        result = await conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='budgets' AND column_name='free_money'"
+        ))
+        if not result.fetchone():
+            await conn.execute(text("ALTER TABLE budgets ADD COLUMN free_money FLOAT DEFAULT 0"))
+            logger.info("Migrated budgets: added free_money")
+
 
 async def close_db():
     await engine.dispose()

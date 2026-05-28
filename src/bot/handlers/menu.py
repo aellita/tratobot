@@ -263,15 +263,20 @@ async def menu_status(callback: CallbackQuery):
         )
         spent = result.scalar() or 0
 
-    remaining = budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent
     daily = budget.daily_limit
     days_left = budget.days_remaining
     period_text = f" (с {budget.period_start_day}-го)" if budget.period_start_day != 1 else ""
+    if budget.free_money > 0:
+        money_line = f"💵 <b>Свободно:</b> {budget.free_money:,.0f}₽\n"
+        remaining = max(budget.free_money - spent, 0)
+    else:
+        remaining = budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent
+        money_line = f"📈 <b>Общий:</b> {budget.total_income:,.0f}₽\n"
 
     await callback.message.edit_text(
         text=f"📊 <b>Статус на {datetime.now().strftime('%d %B')}:</b>\n\n"
              f"💰 <b>Дневной лимит:</b> {daily:,.0f}₽\n"
-             f"📈 <b>Общий:</b> {budget.total_income:,.0f}₽\n"
+             f"{money_line}"
              f"📉 <b>Потрачено:</b> {spent:,.0f}₽\n"
              f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
              f"🏦 <b>Кубышка:</b> {budget.black_day_fund:,.0f}₽\n"
@@ -326,12 +331,17 @@ async def menu_daily(callback: CallbackQuery):
     remaining = max(daily - spent_today, 0)
     days_left = budget.days_remaining
 
+    if budget.free_money > 0:
+        total_line = f"📊 <b>Всего свободно:</b> {budget.free_money:,.0f}₽"
+    else:
+        total_line = f"📊 <b>Всего:</b> {budget.total_income:,.0f}₽"
+
     text = (
         f"💰 <b>Дневной лимит:</b> {daily:,.0f}₽\n"
         f"📉 <b>Потрачено сегодня:</b> {spent_today:,.0f}₽\n"
         f"✅ <b>Осталось на сегодня:</b> {remaining:,.0f}₽\n\n"
         f"📅 <b>Осталось дней:</b> {days_left}\n"
-        f"📊 <b>Всего:</b> {budget.total_income:,.0f}₽\n"
+        f"{total_line}\n"
         f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
         f"🏦 <b>Кубышка:</b> {budget.black_day_fund:,.0f}₽\n"
         f"🎯 <b>Хотелка:</b> {budget.wishlist_target:,.0f}₽"
@@ -1006,9 +1016,12 @@ async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(CriticalReset.waiting_for_real_balance)
     msg = await callback.message.answer(
-        text="🚀 Давай начнём с чистого листа!\n\n"
-             "Сколько у тебя сейчас свободных денег на карте?\n"
-             "(Введи сумму, например: 25000)",
+        text="🚀 Окей, забудь про вчерашний кошмар, мы всё обнулили. 👌\n\n"
+             "Открой своё банковское приложение и посмотри на баланс.\n"
+             "Сколько у тебя прямо сейчас свободных денег на жизнь на картах?\n\n"
+             "⚠️ <b>Важно:</b> Не считай деньги, которые уже отложены\n"
+             "на Обязательные платежи 📌, в Кубышку 🏦 или на Хотелку 🎯.\n"
+             "Только чистый кэш на еду и карманные расходы!",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
         ]),
@@ -1029,14 +1042,17 @@ async def save_real_balance(message: Message, state: FSMContext):
     new_limit, days_left = await reconcile_budget_with_reality(message.from_user.id, real_cash)
     user_name = message.from_user.first_name or "друг"
 
+    budget = await get_budget_or_none(message.from_user.id)
+    cubyshka_note = f"💰 (Кстати, твоя Кубышка 🏦 {int(budget.black_day_fund)}₽ в полной безопасности, её я не трогал!)" if budget and budget.black_day_fund > 0 else ""
+
     await state.clear()
     await _cleanup_keyboard(message.bot, message.chat.id)
     msg = await message.answer(
-        text=f"✅ Ревизия завершена, {user_name}!\n\n"
-             f"💰 Новый остаток: {int(real_cash)}₽\n"
-             f"📅 Осталось дней в периоде: {days_left}\n"
-             f"📊 Новый дневной лимит: {int(new_limit)}₽\n\n"
-             f"С чистого листа — вперёд! 🚀",
+        text=f"🚀 Система перезагружена, {user_name}! Старый минус стерт, летим дальше.\n\n"
+             f"💰 Твой новый лимит на сегодня: <b>{int(new_limit)} ₽</b>\n"
+             f"📅 Осталось дней до периода: {days_left}\n"
+             f"📊 Всего денег на жизнь: <b>{int(real_cash)} ₽</b>\n\n"
+             f"{cubyshka_note}",
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     _track_keyboard(message.chat.id, msg.message_id)
@@ -1065,10 +1081,14 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
         )
         user_settings = settings_result.scalar_one_or_none()
         rounding_label = f"{user_settings.rounding_mode} ₽" if (user_settings and user_settings.rounding_mode > 0) else "выкл"
+    if budget.free_money > 0:
+        money_line = f"• Свободных: {budget.free_money:,.0f}₽"
+    else:
+        money_line = f"• Всего доход: {budget.total_income:,.0f}₽"
     await callback.message.edit_text(
         text=f"⚙️ {user_name}, что меняем?\n\n"
              f"📊 Текущий бюджет:\n"
-             f"• Всего денег: {budget.total_income:,.0f}₽\n"
+             f"{money_line}\n"
              f"• Обязательные: {budget.mandatory_payments:,.0f}₽\n"
              f"• Кубышка: {budget.black_day_fund:,.0f}₽\n"
              f"• {budget.wishlist_name or 'Хотелка'}: {budget.wishlist_target:,.0f}₽\n"
@@ -1151,7 +1171,11 @@ async def edit_period_start(callback: CallbackQuery, state: FSMContext):
 async def save_income(message: Message, state: FSMContext):
     try:
         amount = float(message.text.replace(" ", "").replace(",", "."))
-        await update_budget_field(message.from_user.id, "total_income", amount)
+        budget = await get_budget_or_none(message.from_user.id)
+        if budget and budget.free_money > 0:
+            await update_budget_field(message.from_user.id, "free_money", amount)
+        else:
+            await update_budget_field(message.from_user.id, "total_income", amount)
 
         await _cleanup_keyboard(message.bot, message.chat.id)
         sent = await message.answer(
@@ -1206,8 +1230,12 @@ async def save_add_income(message: Message, state: FSMContext):
             await message.answer("❌ Сначала настрой бюджет через /start")
             await state.clear()
             return
-        new_total = budget.total_income + amount
-        await update_budget_field(message.from_user.id, "total_income", new_total)
+        if budget.free_money > 0:
+            new_total = budget.free_money + amount
+            await update_budget_field(message.from_user.id, "free_money", new_total)
+        else:
+            new_total = budget.total_income + amount
+            await update_budget_field(message.from_user.id, "total_income", new_total)
         user_name = message.from_user.first_name or "друг"
 
         await _cleanup_keyboard(message.bot, message.chat.id)

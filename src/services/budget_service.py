@@ -96,7 +96,7 @@ async def reconcile_budget_with_reality(telegram_id: int, real_cash: float) -> t
         if not budget:
             return 0.0, 1
 
-        budget.total_income = real_cash
+        budget.free_money = real_cash
         days_left = budget.days_remaining
         if days_left <= 0:
             days_left = 1

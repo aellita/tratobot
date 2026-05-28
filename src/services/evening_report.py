@@ -125,7 +125,10 @@ async def send_actual_report(tg_id: int, bot: Bot) -> bool:
 
         if budget:
             days_left = budget.days_remaining
-            total_available = budget.total_income - budget.mandatory_payments - budget.black_day_fund
+            if budget.free_money > 0:
+                total_available = budget.free_money
+            else:
+                total_available = budget.total_income - budget.mandatory_payments - budget.black_day_fund
             period_spent = await get_current_period_expenses_sum(tg_id)
             available_cash = max(total_available - period_spent, 0)
             wishlist_name = budget.wishlist_name or "Хотелка"
