@@ -36,18 +36,7 @@ async def _get_daily_limit_text(telegram_id: int) -> str | None:
         if not budget or budget.daily_limit <= 0:
             return None
 
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        result = await session.execute(
-            select(func.sum(Expense.amount)).where(
-                Expense.telegram_id == telegram_id,
-                Expense.is_deleted == False,
-                Expense.date >= today_start
-            )
-        )
-        spent_today = result.scalar() or 0
-
-    remaining = max(budget.daily_limit - spent_today, 0)
-    text = f"💰 Дневной лимит: {remaining:,.0f}₽"
+    text = f"💰 Дневной лимит: {budget.daily_limit:,.0f}₽"
     if len(text) > 64:
         return None
     return text

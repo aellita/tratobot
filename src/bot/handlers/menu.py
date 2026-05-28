@@ -12,7 +12,7 @@ from sqlalchemy import select, func
 
 from ...db.database import async_session_maker
 from ...db.models.models import User, Budget, Expense, Category, Wishlist, UserSettings
-from ...services.budget_service import save_budget, update_budget_field, reconcile_budget_with_reality
+from ...services.budget_service import save_budget, update_budget_field, reconcile_budget_with_reality, apply_reconciliation
 from ...services.categorization import GREETINGS, detect_category_db, get_category_display, add_keyword_to_category, get_user_categories, seed_user_categories, clean_and_normalize, _dump_keywords
 from ...services.expense_service import parse_expense_text, parse_multi_expense_text, try_apply_round_up
 from ...services.user_service import get_or_create_user
@@ -58,6 +58,12 @@ class CustomCategory(StatesGroup):
 
 class CriticalReset(StatesGroup):
     waiting_for_real_balance = State()
+
+
+class FreshStart(StatesGroup):
+    waiting_for_mandatory = State()
+    waiting_for_black_day = State()
+    waiting_for_balance = State()
 
 
 async def get_user_or_none(telegram_id: int) -> User | None:
@@ -743,11 +749,14 @@ async def process_expense(message: Message, state: FSMContext):
             description = "трата"
         total_amount += amount
 
-        try:
-            cat, matched = await detect_category_db(description, message.from_user.id)
-        except Exception as e:
-            logging.error("Category detection failed", exc_info=e)
+        if description == "трата":
             cat = None
+        else:
+            try:
+                cat, matched = await detect_category_db(description, message.from_user.id)
+            except Exception as e:
+                logging.error("Category detection failed", exc_info=e)
+                cat = None
 
         cat_id = cat.id if cat else None
         emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")
@@ -1018,10 +1027,10 @@ async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
     msg = await callback.message.answer(
         text="🚀 Окей, забудь про вчерашний кошмар, мы всё обнулили. 👌\n\n"
              "Открой своё банковское приложение и посмотри на баланс.\n"
-             "Сколько у тебя прямо сейчас свободных денег на жизнь на картах?\n\n"
-             "⚠️ <b>Важно:</b> Не считай деньги, которые уже отложены\n"
-             "на Обязательные платежи 📌, в Кубышку 🏦 или на Хотелку 🎯.\n"
-             "Только чистый кэш на еду и карманные расходы!",
+             "Сколько у тебя прямо сейчас <b>всего денег на карте</b>?\n\n"
+             "⚠️ Просто посмотри на общий баланс в приложении банка\n"
+             "и введи эту цифру целиком. Дальше я сам разберусь,\n"
+             "сколько из этого на жизнь, а сколько — обязательное.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
         ]),
@@ -1032,27 +1041,184 @@ async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
 @router.message(CriticalReset.waiting_for_real_balance)
 async def save_real_balance(message: Message, state: FSMContext):
     try:
-        real_cash = float(message.text.replace(" ", "").replace(",", "."))
-        if real_cash < 0:
+        total_balance = float(message.text.replace(" ", "").replace(",", "."))
+        if total_balance < 0:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Введи число. Например: 25000")
+        await message.answer("❌ Введи число. Например: 50000")
         return
 
-    new_limit, days_left = await reconcile_budget_with_reality(message.from_user.id, real_cash)
     user_name = message.from_user.first_name or "друг"
+    new_limit, days_left, money_for_life, mandatory, cubyshka = await reconcile_budget_with_reality(
+        message.from_user.id, total_balance
+    )
 
-    budget = await get_budget_or_none(message.from_user.id)
-    cubyshka_note = f"💰 (Кстати, твоя Кубышка 🏦 {int(budget.black_day_fund)}₽ в полной безопасности, её я не трогал!)" if budget and budget.black_day_fund > 0 else ""
+    await _cleanup_keyboard(message.bot, message.chat.id)
 
+    # 🟢 Зона 1: Всё ок (лимит > 500₽)
+    if new_limit > 500:
+        await apply_reconciliation(message.from_user.id, money_for_life)
+        cubyshka_note = f"\n\n💰 Кстати, твоя Кубышка 🏦 {int(cubyshka)}₽ в полной безопасности, её я не трогал!" if cubyshka > 0 else ""
+        await state.clear()
+        msg = await message.answer(
+            text=f"🚀 Система перезагружена, {user_name}! Старый минус стерт, летим дальше.\n\n"
+                 f"💰 Твой новый лимит на сегодня: <b>{int(new_limit)} ₽</b>\n"
+                 f"📅 Осталось дней до периода: {days_left}\n"
+                 f"📊 Всего денег на жизнь: <b>{int(money_for_life)} ₽</b>"
+                 f"{cubyshka_note}",
+            reply_markup=await get_main_menu_keyboard(message.from_user.id),
+        )
+        _track_keyboard(message.chat.id, msg.message_id)
+        return
+
+    # 🟡 Зона 2: Турбо-экономия (лимит 100–500₽)
+    if new_limit >= 100:
+        await apply_reconciliation(message.from_user.id, money_for_life)
+        await state.clear()
+        msg = await message.answer(
+            text=f"Уф, {user_name}, ситуация жесткая. После вычета Кубышки 🏦 {int(cubyshka)}₽ "
+                 f"и обязательных 📌 {int(mandatory)}₽ на жизнь остается всего "
+                 f"<b>{int(money_for_life)} ₽</b>.\n"
+                 f"Твой лимит: <b>{int(new_limit)} ₽</b> в день — это меньше косаря!\n\n"
+                 f"🚨 <b>Включаю режим ТУРБО-ЭКОНОМИИ!</b>\n\n"
+                 f"Мы либо объявляем хардкорный челлендж и держимся на гречке "
+                 f"до 20-го числа, либо ты можешь зайти в настройки и достать "
+                 f"немного денег из Кубышки на жизнь.\n\n"
+                 f"Что делаем? Принимаешь вызов или идем потрошить Кубышку?",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="💪 Принимаю вызов!", callback_data="menu_back")],
+                [InlineKeyboardButton(text="🏦 Взять из Кубышки", callback_data="edit_black_day")],
+            ]),
+        )
+        _track_keyboard(message.chat.id, msg.message_id)
+        return
+
+    # 🔴 Зона 3: Тотальный фреш-старт (лимит < 100₽ или в минусе)
+    await state.set_state(FreshStart.waiting_for_mandatory)
+    msg = await message.answer(
+        text=f"🚨 <b>Бро, это системный сбой!</b>\n\n"
+             f"На твоей карте осталось меньше, чем мы отложили "
+             f"на Обязательные платежи и Кубышку.\n"
+             f"Математика больше не работает. Твой лимит на жизнь: <b>0 ₽</b>.\n\n"
+             f"Нам нужен <b>Тотальный Фреш-Старт</b>. Мы обнулим все старые "
+             f"планы и ты введёшь новые, честные цифры.\n\n"
+             f"Готова пересобрать бюджет за 1 минуту?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⚙️ Сбросить всё и начать заново", callback_data="fresh_start_begin")],
+            [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
+        ]),
+    )
+    _track_keyboard(message.chat.id, msg.message_id)
+
+
+# ============ FRESH START (RE-ONBOARDING) ============
+
+@router.callback_query(F.data == "fresh_start_begin")
+async def fresh_start_step1(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(FreshStart.waiting_for_mandatory)
+    await callback.message.edit_text(
+        text="📌 <b>Шаг 1.</b> Давай пересчитаем твои обязательные платежи "
+             "(аренда, кредиты, подписки) с сегодняшнего дня и до конца периода.\n\n"
+             "Сколько тебе <b>ЕЩЁ</b> предстоит обязательно заплатить "
+             "в этом месяце?\n"
+             "Если всё уже оплачено, просто напиши <b>0</b>.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
+        ]),
+    )
+
+
+@router.message(FreshStart.waiting_for_mandatory)
+async def fresh_start_save_mandatory(message: Message, state: FSMContext):
+    try:
+        mandatory = float(message.text.replace(" ", "").replace(",", "."))
+        if mandatory < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введи число. Например: 15000")
+        return
+    await state.update_data(fresh_mandatory=mandatory)
+    await state.set_state(FreshStart.waiting_for_black_day)
+    await message.answer(
+        text="🏦 <b>Шаг 2.</b> Что делаем с Кубышкой?\n\n"
+             "Сколько денег ты РЕАЛЬНО готова откладывать "
+             "и неприкосновенно хранить прямо сейчас?\n"
+             "Если пока нечего — напиши <b>0</b>, "
+             "это нормально, сначала выберемся из кризиса.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
+        ]),
+    )
+
+
+@router.message(FreshStart.waiting_for_black_day)
+async def fresh_start_save_black_day(message: Message, state: FSMContext):
+    try:
+        cubyshka = float(message.text.replace(" ", "").replace(",", "."))
+        if cubyshka < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введи число. Например: 5000")
+        return
+    await state.update_data(fresh_black_day=cubyshka)
+    await state.set_state(FreshStart.waiting_for_balance)
+    await message.answer(
+        text="💰 <b>Шаг 3.</b> И финальный шаг.\n\n"
+             "Какая <b>ОБЩАЯ</b> сумма прямо сейчас лежит "
+             "на твоей карте? (Какую видишь в приложении банка).",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
+        ]),
+    )
+
+
+@router.message(FreshStart.waiting_for_balance)
+async def fresh_start_save_balance(message: Message, state: FSMContext):
+    try:
+        total_balance = float(message.text.replace(" ", "").replace(",", "."))
+        if total_balance < 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введи число. Например: 50000")
+        return
+
+    data = await state.get_data()
+    new_mandatory = data.get("fresh_mandatory", 0)
+    new_cubyshka = data.get("fresh_black_day", 0)
+
+    money_for_life = max(total_balance - new_mandatory - new_cubyshka, 0)
+    days_left_budget = await get_budget_or_none(message.from_user.id)
+    days_left = days_left_budget.days_remaining if days_left_budget else 1
+    if days_left <= 0:
+        days_left = 1
+    new_limit = max(money_for_life / days_left, 0)
+
+    await apply_reconciliation(
+        message.from_user.id,
+        free_money=money_for_life,
+        new_mandatory=new_mandatory,
+        new_black_day=new_cubyshka,
+    )
+
+    user_name = message.from_user.first_name or "друг"
     await state.clear()
     await _cleanup_keyboard(message.bot, message.chat.id)
+
+    zone_note = ""
+    if new_limit < 100:
+        zone_note = "\n\n⚠️ Режим Турбо-экономии включён автоматически — лимит меньше 100₽."
+    elif new_limit <= 500:
+        zone_note = "\n\n💪 Режим Турбо-экономии включён — лимит меньше 500₽."
+
     msg = await message.answer(
-        text=f"🚀 Система перезагружена, {user_name}! Старый минус стерт, летим дальше.\n\n"
-             f"💰 Твой новый лимит на сегодня: <b>{int(new_limit)} ₽</b>\n"
-             f"📅 Осталось дней до периода: {days_left}\n"
-             f"📊 Всего денег на жизнь: <b>{int(real_cash)} ₽</b>\n\n"
-             f"{cubyshka_note}",
+        text=f"Идеально, {user_name}! Новые настройки применились.\n\n"
+             f"📌 {int(new_mandatory)} ₽ — забронировал на оставшиеся обязательные платежи.\n"
+             f"🏦 {int(new_cubyshka)} ₽ — упаковал обратно в твою Кубышку.\n"
+             f"📊 На жизнь осталось: <b>{int(money_for_life)} ₽</b>.\n"
+             f"💰 Твой новый честный лимит на сегодня: <b>{int(new_limit)} ₽</b>."
+             f"{zone_note}\n\n"
+             f"Держимся, Бро! В этот раз мы справимся! ✊",
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     _track_keyboard(message.chat.id, msg.message_id)
@@ -1333,7 +1499,10 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
     await state.clear()
 
-    if current_state == CriticalReset.waiting_for_real_balance.state:
+    if current_state and (
+        current_state.startswith("CriticalReset.") or
+        current_state.startswith("FreshStart.")
+    ):
         await callback.message.delete()
         return
 
@@ -1400,11 +1569,14 @@ async def handle_text(message: Message, state: FSMContext):
                 description = "трата"
             total_amount += amount
 
-            try:
-                cat, matched = await detect_category_db(description, message.from_user.id)
-            except Exception as e:
-                logging.error("Category detection failed", exc_info=e)
+            if description == "трата":
                 cat = None
+            else:
+                try:
+                    cat, matched = await detect_category_db(description, message.from_user.id)
+                except Exception as e:
+                    logging.error("Category detection failed", exc_info=e)
+                    cat = None
 
             cat_id = cat.id if cat else None
             emoji, cat_name = get_category_display(cat.name) if cat else ("📦", "Прочее")

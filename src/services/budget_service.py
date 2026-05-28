@@ -83,7 +83,9 @@ async def get_days_remaining(telegram_id: int) -> int:
         return budget.days_remaining
 
 
-async def reconcile_budget_with_reality(telegram_id: int, real_cash: float) -> tuple[float, int]:
+async def reconcile_budget_with_reality(
+    telegram_id: int, total_balance: float
+) -> tuple[float, int, float, float, float]:
     month = datetime.now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
@@ -94,13 +96,36 @@ async def reconcile_budget_with_reality(telegram_id: int, real_cash: float) -> t
         )
         budget = result.scalar_one_or_none()
         if not budget:
-            return 0.0, 1
+            return 0.0, 1, 0.0, 0.0, 0.0
 
-        budget.free_money = real_cash
+        money_for_life = max(total_balance - budget.mandatory_payments - budget.black_day_fund, 0)
         days_left = budget.days_remaining
         if days_left <= 0:
             days_left = 1
 
-        new_daily_limit = max(real_cash / days_left, 0)
+        new_daily_limit = max(money_for_life / days_left, 0)
+        return new_daily_limit, days_left, money_for_life, budget.mandatory_payments, budget.black_day_fund
+
+
+async def apply_reconciliation(
+    telegram_id: int, free_money: float,
+    new_mandatory: float | None = None, new_black_day: float | None = None,
+) -> None:
+    from datetime import datetime
+    month = datetime.now().strftime("%Y-%m")
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Budget).where(
+                Budget.telegram_id == telegram_id,
+                Budget.month == month,
+            )
+        )
+        budget = result.scalar_one_or_none()
+        if not budget:
+            return
+        budget.free_money = free_money
+        if new_mandatory is not None:
+            budget.mandatory_payments = new_mandatory
+        if new_black_day is not None:
+            budget.black_day_fund = new_black_day
         await session.commit()
-        return new_daily_limit, days_left
