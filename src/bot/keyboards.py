@@ -17,6 +17,7 @@ async def get_main_menu_keyboard(telegram_id: int = None):
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💸 Добавить трату", callback_data="menu_add")],
         [InlineKeyboardButton(text=button_text, callback_data="menu_daily")],
+        [InlineKeyboardButton(text="📊 Статус", callback_data="menu_status")],
         [InlineKeyboardButton(text="📜 История", callback_data="menu_history")],
         [InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu_settings")],
         [InlineKeyboardButton(text="📋 Помощь", callback_data="menu_help")],
