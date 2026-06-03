@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from ...db.database import async_session_maker
 from ...db.models.models import Expense
+from ...utils.helpers import safe
 from ...services.expense_service import parse_expense_text, get_today_expenses_sum, get_today_daily_limit
 from ...services.evening_report import EveningState, EVENING_KB, _build_container_text, get_evening_message
 from ...services.budget_service import get_active_budget
@@ -46,7 +47,7 @@ async def handle_evening_expense(message: Message, state: FSMContext):
             telegram_id=user_id,
             amount=amount,
             description=description,
-            date=datetime.utcnow(),
+            date=datetime.now(timezone.utc),
         )
         session.add(expense)
         await session.commit()
@@ -55,7 +56,7 @@ async def handle_evening_expense(message: Message, state: FSMContext):
     container_id = data.get("container_id")
     session_expenses = data.get("session_expenses", [])
 
-    line = f"  💰 {amount:,.0f}₽ — {description}" if description else f"  💰 {amount:,.0f}₽"
+    line = f"  💰 {amount:,.0f}₽ — {safe(description)}" if description else f"  💰 {amount:,.0f}₽"
     session_expenses.append(line)
     await state.update_data(session_expenses=session_expenses)
 

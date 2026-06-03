@@ -222,11 +222,7 @@ async def send_morning_reports(bot: Bot):
             kb = _build_morning_keyboard(btn_type)
             await bot.send_message(tg_id, full_text, reply_markup=kb)
 
-            logger.info(
-                f"Утренний отчёт {tg_id}: зона {zone}, "
-                f"pct_pred={pct_pred:.0f}%, pct_sim={pct_sim:.0f}%, "
-                f"вчера {int(yesterday_spent)}₽"
-            )
+            logger.info(f"Утренний отчёт отправлен {tg_id} (зона {zone})")
 
             await asyncio.sleep(0.05)
         except Exception as e:

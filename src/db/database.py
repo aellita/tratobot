@@ -8,6 +8,20 @@ logger = logging.getLogger(__name__)
 
 is_postgres = settings.DATABASE_URL.startswith("postgresql://")
 
+ALLOWED_TABLES = {
+    "budgets", "expenses", "categories", "wishlists",
+    "black_day_funds", "user_settings", "users",
+}
+ALLOWED_COLUMNS = {
+    "user_id", "telegram_id", "id", "period_start_day",
+    "rounding_mode", "free_money",
+}
+
+
+def _validate_identifier(name: str, allowed: set[str]):
+    if name not in allowed:
+        raise ValueError(f"Unauthorized SQL identifier: {name}")
+
 engine = create_async_engine(
     settings.db_url,
     echo=False,
@@ -33,11 +47,14 @@ async def init_db():
 
 
 async def _has_column(conn, table: str, column: str) -> bool:
+    _validate_identifier(table, ALLOWED_TABLES)
+    _validate_identifier(column, ALLOWED_COLUMNS)
     if is_postgres:
-        result = await conn.execute(text(
-            "SELECT column_name FROM information_schema.columns "
-            f"WHERE table_name='{table}' AND column_name='{column}'"
-        ))
+        result = await conn.execute(
+            text("SELECT column_name FROM information_schema.columns "
+                 "WHERE table_name = :table AND column_name = :col"),
+            {"table": table, "col": column},
+        )
         return result.fetchone() is not None
     else:
         result = await conn.execute(text(f"PRAGMA table_info('{table}')"))
@@ -52,6 +69,8 @@ async def migrate_schema():
             for table, old_col in [("budgets", "user_id"), ("expenses", "user_id"),
                                     ("categories", "user_id"), ("wishlists", "user_id"),
                                     ("black_day_funds", "user_id"), ("user_settings", "user_id")]:
+                _validate_identifier(table, ALLOWED_TABLES)
+                _validate_identifier(old_col, ALLOWED_COLUMNS)
                 if await _has_column(conn, table, old_col):
                     await conn.execute(text(f"ALTER TABLE {table} RENAME COLUMN {old_col} TO telegram_id"))
                     logger.info(f"Migrated {table}: {old_col} → telegram_id")
@@ -66,16 +85,16 @@ async def migrate_schema():
             # Categories: make telegram_id and type nullable
             row = (await conn.execute(text(
                 "SELECT is_nullable FROM information_schema.columns "
-                "WHERE table_name='categories' AND column_name='telegram_id'"
-            ))).fetchone()
+                "WHERE table_name = :table AND column_name = :col"
+            ), {"table": "categories", "col": "telegram_id"})).fetchone()
             if row and row[0] == 'NO':
                 await conn.execute(text("ALTER TABLE categories ALTER COLUMN telegram_id DROP NOT NULL"))
                 logger.info("Migrated categories: telegram_id is now nullable")
 
             row = (await conn.execute(text(
                 "SELECT is_nullable FROM information_schema.columns "
-                "WHERE table_name='categories' AND column_name='type'"
-            ))).fetchone()
+                "WHERE table_name = :table AND column_name = :col"
+            ), {"table": "categories", "col": "type"})).fetchone()
             if row and row[0] == 'NO':
                 await conn.execute(text("ALTER TABLE categories ALTER COLUMN type DROP NOT NULL"))
                 logger.info("Migrated categories: type is now nullable")

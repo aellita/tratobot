@@ -38,30 +38,33 @@ def clean_description(text: str) -> str:
     import re
     pattern = r'\b(' + '|'.join(re.escape(w) for w in IGNORE_WORDS) + r')\b'
     text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-    # Also handle standalone "р" (ruble abbreviation) with word boundaries
     text = re.sub(r'\bр\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'[\s\+]+', ' ', text).strip()
-    return text
+    return text[:500]
 
 
 def parse_expense_text(text: str) -> tuple[float, str] | None:
     import re
     numbers = re.findall(r'\d+(?:[,\.]\d+)?', text)
     total = 0.0
+    first_num = None
     for num_str in numbers:
         try:
             amount = float(num_str.replace(",", "."))
             if amount > 0:
-                total += amount
-        except:
+                if first_num is None:
+                    first_num = num_str
+                    total = amount
+                break
+        except (ValueError, TypeError):
             continue
 
     if total <= 0:
         return None
 
     description = text
-    for num_str in numbers:
-        description = description.replace(num_str, "")
+    if first_num:
+        description = description.replace(first_num, "", 1)
     description = clean_description(description)
 
     return total, description

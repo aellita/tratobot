@@ -1,13 +1,14 @@
 import logging
 import random
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from cachetools import TTLCache
 from sqlalchemy import select, func
 
 from ...db.database import async_session_maker
@@ -16,6 +17,7 @@ from ...services.budget_service import save_budget, update_budget_field, reconci
 from ...services.categorization import GREETINGS, detect_category_db, get_category_display, add_keyword_to_category, get_user_categories, seed_user_categories, clean_and_normalize, _dump_keywords
 from ...services.expense_service import parse_expense_text, parse_multi_expense_text, try_apply_round_up
 from ...services.user_service import get_or_create_user
+from ...utils.helpers import parse_amount, safe
 from ..keyboards import (
     get_cancel_keyboard,
     get_main_menu_keyboard,
@@ -76,7 +78,7 @@ async def get_budget_or_none(telegram_id: int) -> Budget | None:
     return await get_active_budget(telegram_id)
 
 
-_last_keyboard = {}  # chat_id -> message_id
+_last_keyboard: TTLCache = TTLCache(maxsize=1024, ttl=3600)  # chat_id -> message_id
 
 
 async def _cleanup_keyboard(bot: Bot, chat_id: int):
@@ -692,7 +694,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
 @router.message(BudgetSetup.waiting_for_income)
 async def process_income(message: Message, state: FSMContext):
     try:
-        amount = float(message.text.replace(" ", "").replace(",", "."))
+        amount = parse_amount(message.text)
     except ValueError:
         await message.answer("❌ Введи число. Например: 50000")
         return
@@ -760,6 +762,17 @@ async def process_period_start(message: Message, state: FSMContext):
     try:
         day = int(message.text.strip())
     except (ValueError, TypeError):
+        data = await state.get_data()
+        retries = data.get("_retry_count", 0) + 1
+        await state.update_data(_retry_count=retries)
+        if retries >= 3:
+            await state.clear()
+            sent = await message.answer(
+                "🙅 Слишком много неудачных попыток. Возвращаю в меню.",
+                reply_markup=await get_main_menu_keyboard(message.from_user.id),
+            )
+            _track_keyboard(message.chat.id, sent.message_id)
+            return
         await message.answer("❌ Введи число. Например: 25")
         return
 
@@ -787,8 +800,8 @@ async def process_period_start(message: Message, state: FSMContext):
 @router.message(BudgetSetup.waiting_for_mandatory)
 async def process_mandatory(message: Message, state: FSMContext):
     try:
-        amount = float(message.text.replace(" ", "").replace(",", "."))
-    except ValueError:
+        amount = parse_amount(message.text, allow_zero=True)
+    except (ValueError, TypeError):
         await message.answer("❌ Введи число. Например: 15000")
         return
 
@@ -807,7 +820,7 @@ async def process_mandatory(message: Message, state: FSMContext):
 @router.message(BudgetSetup.waiting_for_black_day)
 async def process_black_day(message: Message, state: FSMContext):
     try:
-        amount = float(message.text.replace(" ", "").replace(",", "."))
+        amount = parse_amount(message.text, allow_zero=True)
     except ValueError:
         await message.answer("❌ Введи число. Например: 5000")
         return
@@ -835,7 +848,7 @@ def _parse_wishlist(text: str) -> tuple[str, float]:
             price = float(num_str.replace(" ", ""))
             name = text.replace(num_str, "").strip()
             break
-        except:
+        except (ValueError, TypeError):
             continue
     if not name:
         name = "Хотелка"
@@ -908,6 +921,18 @@ async def process_expense(message: Message, state: FSMContext):
 
     parsed_list = parse_multi_expense_text(message.text.strip())
     if not parsed_list:
+        data = await state.get_data()
+        retries = data.get("_retry_count", 0) + 1
+        await state.update_data(_retry_count=retries)
+        if retries >= 3:
+            await state.clear()
+            await _cleanup_keyboard(message.bot, message.chat.id)
+            sent = await message.answer(
+                "🙅 Слишком много неудачных попыток. Возвращаю в меню.",
+                reply_markup=await get_main_menu_keyboard(message.from_user.id),
+            )
+            _track_keyboard(message.chat.id, sent.message_id)
+            return
         await message.answer("❌ Введи сумму. Например: 500 кофе")
         return
 
@@ -940,7 +965,7 @@ async def process_expense(message: Message, state: FSMContext):
                     amount=amount,
                     description=description or cat_name,
                     category_id=cat_id,
-                    date=datetime.utcnow()
+                    date=datetime.now(timezone.utc)
                 )
                 session.add(expense)
                 await session.commit()
@@ -951,7 +976,7 @@ async def process_expense(message: Message, state: FSMContext):
             errors += 1
             continue
 
-        lines.append(f"💰 {amount:,.0f}₽ — {description} {emoji}{cat_name}")
+        lines.append(f"💰 {amount:,.0f}₽ — {safe(description)} {emoji}{cat_name}")
 
     await state.clear()
 
@@ -959,7 +984,7 @@ async def process_expense(message: Message, state: FSMContext):
         await message.answer("❌ Ошибка при сохранении трат. Попробуй ещё раз.")
         return
 
-    user_name = message.from_user.first_name or "друг"
+    user_name = safe(message.from_user.first_name or "друг")
 
     total_round_up = ""
     if total_amount > 0:
@@ -991,7 +1016,14 @@ async def process_expense(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith("change_cat:"))
 async def change_category(callback: CallbackQuery):
     await callback.answer()
-    expense_id = int(callback.data.split(":")[1])
+    try:
+        expense_id = int(callback.data.split(":")[1])
+    except (IndexError, ValueError, TypeError):
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
 
     categories = await seed_user_categories(callback.from_user.id)
 
@@ -1025,9 +1057,23 @@ async def change_category(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("set_cat:"))
 async def set_category(callback: CallbackQuery):
     await callback.answer()
-    _, expense_id_str, category_id_str = callback.data.split(":")
-    expense_id = int(expense_id_str)
-    category_id = int(category_id_str)
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
+    _, expense_id_str, category_id_str = parts
+    try:
+        expense_id = int(expense_id_str)
+        category_id = int(category_id_str)
+    except (ValueError, TypeError):
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
 
     async with async_session_maker() as session:
         result = await session.execute(
@@ -1046,7 +1092,10 @@ async def set_category(callback: CallbackQuery):
             return
 
         result = await session.execute(
-            select(Category).where(Category.id == category_id)
+            select(Category).where(
+                Category.id == category_id,
+                (Category.telegram_id == callback.from_user.id) | (Category.telegram_id == None),
+            )
         )
         cat = result.scalar_one_or_none()
         if not cat:
@@ -1066,7 +1115,7 @@ async def set_category(callback: CallbackQuery):
     emoji, cat_name = get_category_display(cat.name)
     await callback.message.edit_text(
         text=f"✅ Категория изменена!\n\n"
-             f"💰 {expense.amount:,.0f}₽ — {expense.description or cat_name}\n"
+             f"💰 {expense.amount:,.0f}₽ — {safe(expense.description or cat_name)}\n"
              f"{emoji} {cat_name}",
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
@@ -1085,7 +1134,14 @@ async def back_from_category_change(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("new_cat:"))
 async def new_category_prompt(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    expense_id = int(callback.data.split(":")[1])
+    try:
+        expense_id = int(callback.data.split(":")[1])
+    except (IndexError, ValueError, TypeError):
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
     await state.update_data(new_cat_expense_id=expense_id)
     await state.set_state(CustomCategory.waiting_for_name)
     await callback.message.edit_text(
@@ -1151,6 +1207,12 @@ async def save_new_category(message: Message, state: FSMContext):
 async def handle_fix_overdraft(callback: CallbackQuery):
     await callback.answer()
     parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
     action = parts[1]
 
     if action == "reduce_limit":
@@ -1162,7 +1224,14 @@ async def handle_fix_overdraft(callback: CallbackQuery):
         )
         return
 
-    overdraft = float(parts[2])
+    try:
+        overdraft = float(parts[2])
+    except (IndexError, ValueError, TypeError):
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
     if action == "wishlist":
         async with async_session_maker() as session:
             result = await session.execute(
@@ -1213,9 +1282,7 @@ async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
 @router.message(CriticalReset.waiting_for_real_balance)
 async def save_real_balance(message: Message, state: FSMContext):
     try:
-        total_balance = float(message.text.replace(" ", "").replace(",", "."))
-        if total_balance < 0:
-            raise ValueError
+        total_balance = parse_amount(message.text, allow_zero=True)
     except ValueError:
         await message.answer("❌ Введи число. Например: 50000")
         return
@@ -1304,9 +1371,7 @@ async def fresh_start_step1(callback: CallbackQuery, state: FSMContext):
 @router.message(FreshStart.waiting_for_mandatory)
 async def fresh_start_save_mandatory(message: Message, state: FSMContext):
     try:
-        mandatory = float(message.text.replace(" ", "").replace(",", "."))
-        if mandatory < 0:
-            raise ValueError
+        mandatory = parse_amount(message.text, allow_zero=True)
     except ValueError:
         await message.answer("❌ Введи число. Например: 15000")
         return
@@ -1327,9 +1392,7 @@ async def fresh_start_save_mandatory(message: Message, state: FSMContext):
 @router.message(FreshStart.waiting_for_black_day)
 async def fresh_start_save_black_day(message: Message, state: FSMContext):
     try:
-        cubyshka = float(message.text.replace(" ", "").replace(",", "."))
-        if cubyshka < 0:
-            raise ValueError
+        cubyshka = parse_amount(message.text, allow_zero=True)
     except ValueError:
         await message.answer("❌ Введи число. Например: 5000")
         return
@@ -1348,9 +1411,7 @@ async def fresh_start_save_black_day(message: Message, state: FSMContext):
 @router.message(FreshStart.waiting_for_balance)
 async def fresh_start_save_balance(message: Message, state: FSMContext):
     try:
-        total_balance = float(message.text.replace(" ", "").replace(",", "."))
-        if total_balance < 0:
-            raise ValueError
+        total_balance = parse_amount(message.text, allow_zero=True)
     except ValueError:
         await message.answer("❌ Введи число. Например: 50000")
         return
@@ -1429,7 +1490,7 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
              f"{money_line}\n"
              f"• Обязательные: {budget.mandatory_payments:,.0f}₽\n"
              f"• Кубышка: {budget.black_day_fund:,.0f}₽\n"
-             f"• {budget.wishlist_name or 'Хотелка'}: {budget.wishlist_target:,.0f}₽\n"
+             f"• {safe(budget.wishlist_name or 'Хотелка')}: {budget.wishlist_target:,.0f}₽\n"
              f"• Округление: {rounding_label}\n"
              f"{period_info}",
         reply_markup=get_settings_keyboard()
@@ -1508,7 +1569,7 @@ async def edit_period_start(callback: CallbackQuery, state: FSMContext):
 @router.message(EditBudget.waiting_for_income)
 async def save_income(message: Message, state: FSMContext):
     try:
-        amount = float(message.text.replace(" ", "").replace(",", "."))
+        amount = parse_amount(message.text)
         budget = await get_budget_or_none(message.from_user.id)
         if budget and budget.free_money > 0:
             await update_budget_field(message.from_user.id, "free_money", amount)
@@ -1562,7 +1623,7 @@ async def save_edit_period_start(message: Message, state: FSMContext):
 @router.message(EditBudget.waiting_for_add_income)
 async def save_add_income(message: Message, state: FSMContext):
     try:
-        amount = float(message.text.replace(" ", "").replace(",", "."))
+        amount = parse_amount(message.text)
         budget = await get_budget_or_none(message.from_user.id)
         if not budget:
             await message.answer("❌ Сначала настрой бюджет через /start")
@@ -1591,7 +1652,7 @@ async def save_add_income(message: Message, state: FSMContext):
 @router.message(EditBudget.waiting_for_mandatory)
 async def save_mandatory(message: Message, state: FSMContext):
     try:
-        amount = float(message.text.replace(" ", "").replace(",", "."))
+        amount = parse_amount(message.text, allow_zero=True)
         await update_budget_field(message.from_user.id, "mandatory_payments", amount)
         user_name = message.from_user.first_name or "друг"
 
@@ -1609,7 +1670,7 @@ async def save_mandatory(message: Message, state: FSMContext):
 @router.message(EditBudget.waiting_for_black_day)
 async def save_black_day(message: Message, state: FSMContext):
     try:
-        amount = float(message.text.replace(" ", "").replace(",", "."))
+        amount = parse_amount(message.text, allow_zero=True)
         await update_budget_field(message.from_user.id, "black_day_fund", amount)
         user_name = message.from_user.first_name or "друг"
 
@@ -1627,6 +1688,7 @@ async def save_black_day(message: Message, state: FSMContext):
 @router.message(EditBudget.waiting_for_wishlist)
 async def save_wishlist(message: Message, state: FSMContext):
     name, price = _parse_wishlist(message.text.strip())
+    name = name[:255]
 
     await update_budget_field(message.from_user.id, "wishlist_name", name)
     await update_budget_field(message.from_user.id, "wishlist_target", price)
@@ -1760,7 +1822,7 @@ async def handle_text(message: Message, state: FSMContext):
                         amount=amount,
                         description=description or cat_name,
                         category_id=cat_id,
-                        date=datetime.utcnow()
+                        date=datetime.now(timezone.utc)
                     )
                     session.add(expense)
                     await session.commit()
@@ -1773,13 +1835,13 @@ async def handle_text(message: Message, state: FSMContext):
                     logging.error("Caused by: %s: %s", type(cause).__name__, cause)
                 continue
 
-            lines.append(f"💰 {amount:,.0f}₽ — {description} {emoji}{cat_name}")
+            lines.append(f"💰 {amount:,.0f}₽ — {safe(description)} {emoji}{cat_name}")
 
         if not lines:
             await message.answer("❌ Ошибка при сохранении трат. Попробуй ещё раз.")
             return
 
-        user_name = message.from_user.first_name or "друг"
+        user_name = safe(message.from_user.first_name or "друг")
 
         total_round_up = ""
         if total_amount > 0:

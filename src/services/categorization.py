@@ -5,6 +5,8 @@ from sqlalchemy import select
 from ..db.database import async_session_maker
 from ..db.models.models import Category
 
+_seeded_users: set[int] = set()
+
 
 GREETINGS = [
     "Наконец-то ты пришел! Давай сделаем так, чтобы твои деньги перестали испаряться",
@@ -52,6 +54,9 @@ def clean_and_normalize(word: str) -> str:
 
 async def seed_user_categories(telegram_id: int):
     """Create or migrate default categories for a user."""
+    if telegram_id in _seeded_users:
+        return []
+
     async with async_session_maker() as session:
         result = await session.execute(
             select(Category).where(Category.telegram_id == telegram_id)
@@ -61,6 +66,7 @@ async def seed_user_categories(telegram_id: int):
         if existing:
             has_keywords = any(_parse_keywords(c.keywords) for c in existing)
             if has_keywords:
+                _seeded_users.add(telegram_id)
                 return existing
             # Old categories with empty keywords: update in-place
             name_to_new_keywords = {}
@@ -71,6 +77,7 @@ async def seed_user_categories(telegram_id: int):
                 kw = name_to_new_keywords.get(cat.name.lower(), [])
                 cat.keywords = _dump_keywords(kw)
             await session.commit()
+            _seeded_users.add(telegram_id)
             return existing
 
         categories = []
@@ -85,6 +92,7 @@ async def seed_user_categories(telegram_id: int):
             categories.append(cat)
 
         await session.commit()
+        _seeded_users.add(telegram_id)
         return categories
 
 

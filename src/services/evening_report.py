@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from ..db.database import async_session_maker
 from ..db.models.models import User, UserSettings
+from ..utils.helpers import safe
 from .expense_service import get_today_expenses_sum, get_today_daily_limit
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
     evening_phrases = [
         f"👀 <b>Ночной аудит:</b>\nСегодня мы перебрали на <b>{int(overdraft)} ₽</b>. Математика штука упрямая: если продолжим в том же духе, перейдём на гречку и воду уже через <b>{days_to_grease} дн.</b> Отдыхай, завтра придумаем, как вырулить! 🔧",
 
-        f"🔋 <b>Вечерний аудит:</b>\nСегодня мы шиканули на лишние <b>{int(overdraft)} ₽</b>. Это не катастрофа, но «{wishlist_name}» отодвинулась примерно на <b>{wishlist_delay} дн.</b> назад в будущее. 🗺 Убираю калькулятор, ложись спать, утро вечера мудренее.",
+        f"🔋 <b>Вечерний аудит:</b>\nСегодня мы шиканули на лишние <b>{int(overdraft)} ₽</b>. Это не катастрофа, но «{safe(wishlist_name)}» отодвинулась примерно на <b>{wishlist_delay} дн.</b> назад в будущее. 🗺 Убираю калькулятор, ложись спать, утро вечера мудренее.",
 
         f"📊 <b>Фиксирую дневной овердрафт:</b>\nМы вышли за край на <b>{int(overdraft)} ₽</b>. Если не сбавим обороты, последние <b>{min(5, days_left)} дн.</b> до зарплаты придётся провести в режиме супер-эконома. Закрывай банковские приложения, на сегодня финансовые игры окончены. Спокойной ночи! 🌙",
     ]

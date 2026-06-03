@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from ...db.database import async_session_maker
 from ...db.models.models import Expense, Category
+from ...utils.helpers import parse_amount, safe
 from ...services.expense_service import (
     get_expense_page,
     soft_delete_expense,
@@ -44,7 +45,7 @@ async def _get_category_info(expense: Expense) -> tuple[str, str]:
 async def _expense_line(idx: int, exp: Expense) -> str:
     emoji, cat_name = await _get_category_info(exp)
     date_str = exp.date.strftime("%d %b").lower()
-    desc = exp.description or cat_name
+    desc = safe(exp.description) or cat_name
     return f"{idx}. {emoji} {exp.amount:,.0f}₽ — {desc} ({date_str})"
 
 
@@ -127,7 +128,14 @@ async def cmd_history(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("exp_page:"))
 async def history_page(callback: CallbackQuery):
     await callback.answer()
-    page = int(callback.data.split(":")[1])
+    try:
+        page = int(callback.data.split(":")[1])
+    except (IndexError, ValueError, TypeError):
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
 
     expenses, total, total_pages = await get_expense_page(callback.from_user.id, page)
 
@@ -149,7 +157,14 @@ async def history_page(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("exp_sel:"))
 async def expense_detail(callback: CallbackQuery):
     await callback.answer()
-    expense_id = int(callback.data.split(":")[1])
+    try:
+        expense_id = int(callback.data.split(":")[1])
+    except (IndexError, ValueError, TypeError):
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
 
     async with async_session_maker() as session:
         result = await session.execute(
@@ -174,7 +189,7 @@ async def expense_detail(callback: CallbackQuery):
     text = (f"⚙️ <b>Управление транзакцией:</b>\n\n"
             f"{emoji} <b>{cat_name.capitalize()}</b>\n"
             f"💰 <b>Сумма:</b> {expense.amount:,.0f}₽\n"
-            f"📝 <b>Описание:</b> {expense.description or '—'}\n"
+            f"📝 <b>Описание:</b> {safe(expense.description) or '—'}\n"
             f"📅 <b>Дата:</b> {date_str}")
 
     await callback.message.edit_text(
@@ -188,7 +203,14 @@ async def expense_detail(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("exp_del:"))
 async def delete_expense(callback: CallbackQuery):
     await callback.answer()
-    expense_id = int(callback.data.split(":")[1])
+    try:
+        expense_id = int(callback.data.split(":")[1])
+    except (IndexError, ValueError, TypeError):
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
 
     expense = await soft_delete_expense(callback.from_user.id, expense_id)
 
@@ -201,7 +223,7 @@ async def delete_expense(callback: CallbackQuery):
 
     await callback.message.edit_text(
         text=f"🗑️ <b>Трата удалена</b>\n\n"
-             f"💰 {expense.amount:,.0f}₽ — {expense.description or 'трата'}\n\n"
+             f"💰 {expense.amount:,.0f}₽ — {safe(expense.description) or 'трата'}\n\n"
              f"Если ошиблись — нажмите «Восстановить»",
         reply_markup=_build_deleted_keyboard(expense.id)
     )
@@ -212,7 +234,14 @@ async def delete_expense(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("exp_undo:"))
 async def undo_delete(callback: CallbackQuery):
     await callback.answer()
-    expense_id = int(callback.data.split(":")[1])
+    try:
+        expense_id = int(callback.data.split(":")[1])
+    except (IndexError, ValueError, TypeError):
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
 
     expense = await restore_expense(callback.from_user.id, expense_id)
 
@@ -225,7 +254,7 @@ async def undo_delete(callback: CallbackQuery):
 
     await callback.message.edit_text(
         text=f"✅ <b>Трата восстановлена!</b>\n\n"
-             f"💰 {expense.amount:,.0f}₽ — {expense.description or 'трата'}",
+             f"💰 {expense.amount:,.0f}₽ — {safe(expense.description) or 'трата'}",
         reply_markup=_build_detail_keyboard(expense.id)
     )
 
@@ -235,7 +264,14 @@ async def undo_delete(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("exp_edit:"))
 async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    expense_id = int(callback.data.split(":")[1])
+    try:
+        expense_id = int(callback.data.split(":")[1])
+    except (IndexError, ValueError, TypeError):
+        await callback.message.edit_text(
+            text="❌ Ошибка в данных.",
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
 
     async with async_session_maker() as session:
         result = await session.execute(
@@ -261,7 +297,7 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             text=f"✏️ Введи новую сумму для траты:\n\n"
                  f"💰 Текущая сумма: {expense.amount:,.0f}₽\n"
-                 f"📝 {expense.description or 'трата'}",
+                 f"📝 {safe(expense.description) or 'трата'}",
             reply_markup=get_cancel_keyboard()
         )
     except TelegramBadRequest:
@@ -269,7 +305,7 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer(
             text=f"✏️ Введи новую сумму для траты:\n\n"
                  f"💰 Текущая сумма: {expense.amount:,.0f}₽\n"
-                 f"📝 {expense.description or 'трата'}",
+                 f"📝 {safe(expense.description) or 'трата'}",
             reply_markup=get_cancel_keyboard()
         )
 
@@ -284,10 +320,18 @@ async def save_edit_expense(message: Message, state: FSMContext):
         return
 
     try:
-        amount = float(message.text.replace(" ", "").replace(",", "."))
-        if amount <= 0:
-            raise ValueError
+        amount = parse_amount(message.text)
     except ValueError:
+        data = await state.get_data()
+        retries = data.get("_retry_count", 0) + 1
+        await state.update_data(_retry_count=retries)
+        if retries >= 3:
+            await state.clear()
+            await message.answer(
+                "🙅 Слишком много неудачных попыток. Возвращаю в меню.",
+                reply_markup=await get_main_menu_keyboard(message.from_user.id),
+            )
+            return
         await message.answer("❌ Введи число. Например: 500")
         return
 
@@ -303,7 +347,7 @@ async def save_edit_expense(message: Message, state: FSMContext):
     await message.answer(
         text=f"✅ <b>Сумма обновлена!</b>\n\n"
              f"💰 Новая сумма: {expense.amount:,.0f}₽\n"
-             f"📝 {expense.description or 'трата'}",
+             f"📝 {safe(expense.description) or 'трата'}",
         reply_markup=await get_main_menu_keyboard(message.from_user.id)
     )
 

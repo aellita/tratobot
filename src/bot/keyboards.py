@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from ..db.database import async_session_maker

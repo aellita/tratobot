@@ -64,7 +64,16 @@ async def save_budget(telegram_id: int, month: str, income: float, mandatory: fl
         await session.commit()
 
 
+ALLOWED_FIELDS = {
+    "total_income", "mandatory_payments", "black_day_fund",
+    "free_money", "wishlist_name", "wishlist_target",
+    "period_start_day",
+}
+
+
 async def update_budget_field(telegram_id: int, field: str, value):
+    if field not in ALLOWED_FIELDS:
+        raise ValueError(f"Invalid budget field: {field}")
     month = datetime.now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
