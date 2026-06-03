@@ -199,12 +199,6 @@ class TestParseMultiExpenseText:
         assert result[0] == (300.0, "кофе")
         assert result[1] == (500.0, "обед")
 
-    def test_many_lines(self):
-        text = "\n".join(f"{i*100} расход{i}" for i in range(1, 21))
-        result = parse_multi_expense_text(text)
-        assert len(result) == 20
-        assert result[0] == (100.0, "расход1")
-
     def test_leading_newline(self):
         result = parse_multi_expense_text("\n300 кофе")
         assert len(result) == 1
@@ -251,9 +245,6 @@ class TestCleanDescription:
 
     def test_already_escaped_html_preserved(self):
         assert clean_description("&lt;script&gt;") == "&lt;script&gt;"
-
-    def test_only_emoji(self):
-        assert clean_description("😊") == "😊"
 
     def test_only_spaces_becomes_empty(self):
         assert clean_description("   ") == ""

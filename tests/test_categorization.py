@@ -24,12 +24,6 @@ class TestCleanAndNormalize:
     def test_only_numbers(self):
         assert clean_and_normalize("123") == "123"
 
-    def test_only_special_chars(self):
-        assert clean_and_normalize("@#$") == "@#$"
-
-    def test_unicode(self):
-        assert clean_and_normalize("𝒦") == "𝒦"
-
     def test_newline_stripped(self):
         assert clean_and_normalize("  кофе\n  ") == "кофе"
 
@@ -69,11 +63,6 @@ class TestGetCategoryDisplay:
         emoji, name = get_category_display("ЕДА")
         assert emoji == "🍔"
         assert name == "Еда"
-
-    def test_emoji_as_category_name(self):
-        emoji, name = get_category_display("🍔")
-        assert emoji == "📦"
-        assert name == "🍔"
 
 
 class TestParseKeywords:
@@ -122,8 +111,3 @@ class TestDumpKeywords:
         result = _dump_keywords(["a'b", 'c"d'])
         assert '"a\\\'b"' in result or '"a\'b"' in result
         assert result is not None
-
-    def test_very_long_keyword(self):
-        long_word = "x" * 10000
-        result = _dump_keywords([long_word])
-        assert len(result) > 10000

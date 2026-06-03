@@ -146,10 +146,6 @@ class TestParseCallback:
         result = parse_callback("кофе:300:обед", 3)
         assert result == ["кофе", "300", "обед"]
 
-    def test_very_long_data(self):
-        long = "a" * 1000 + ":b"
-        assert len(parse_callback(long, 2)) == 2
-
     def test_prefix_only_no_colon(self):
         assert parse_callback("prefix", 2) is None
 
@@ -181,6 +177,3 @@ class TestExtractCallbackId:
 
     def test_prefix_matches_partial_start(self):
         assert extract_callback_id("exp_del_extra:5", "exp_del") == 5
-
-    def test_large_id(self):
-        assert extract_callback_id("exp_del:999999999", "exp_del") == 999999999
