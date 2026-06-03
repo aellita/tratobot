@@ -1,8 +1,34 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Budget
+
+
+async def get_active_budget(telegram_id: int) -> Budget | None:
+    today = datetime.now()
+    this_month = today.strftime("%Y-%m")
+    last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Budget)
+            .where(
+                Budget.telegram_id == telegram_id,
+                Budget.month.in_([this_month, last_month]),
+            )
+            .order_by(Budget.month.desc())
+        )
+        budgets = result.scalars().all()
+
+    for budget in budgets:
+        start = budget.period_start_day or 1
+        if today.day >= start and budget.month == this_month:
+            return budget
+        if today.day < start and budget.month == last_month:
+            return budget
+
+    return None
 
 
 async def save_budget(telegram_id: int, month: str, income: float, mandatory: float, black_day: float, wishlist_name: str = None, wishlist_price: float = 0, period_start_day: int = 1):

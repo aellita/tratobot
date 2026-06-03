@@ -1,32 +1,27 @@
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
 from aiogram import Bot
 
-from ...services.evening_report import send_evening_teaser
+from ...services.evening_report import send_evening_teaser, EveningState, EVENING_KB, INITIAL_TEXT
 from ...services.morning_report import send_morning_reports
 
 router = Router()
 
 
 @router.message(Command("test_evening"))
-async def cmd_test_evening(message: Message):
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏁 Показать отчет", callback_data="generate_evening_report")],
-    ])
-    await message.answer(
-        text="👁 Псс, день подходит к концу!\n\n"
-             "Твой вечерний отчет по тратам уже готов. Если забыл что-то внести "
-             "(например, ту самую чистку или аптеку), допиши прямо сейчас обычным сообщением.\n\n"
-             "Если всё внесено — жми кнопку ниже, подведем итоги! 📊",
-        reply_markup=keyboard,
-    )
+async def cmd_test_evening(message: Message, state: FSMContext):
+    msg = await message.answer(INITIAL_TEXT, reply_markup=EVENING_KB)
+    await state.set_state(EveningState.filling)
+    await state.update_data(container_id=msg.message_id, session_expenses=[])
+    await message.delete()
 
 
 @router.message(Command("test_teaser"))
-async def cmd_test_teaser(message: Message, bot: Bot):
+async def cmd_test_teaser(message: Message, bot: Bot, state: FSMContext):
     await message.answer("🚀 Запускаю принудительный тизер...")
-    await send_evening_teaser(bot)
+    await send_evening_teaser(bot, state.storage)
     await message.answer("🏁 Тизер отправлен всем пользователям!")
 
 

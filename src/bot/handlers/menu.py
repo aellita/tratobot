@@ -72,15 +72,8 @@ async def get_user_or_none(telegram_id: int) -> User | None:
 
 
 async def get_budget_or_none(telegram_id: int) -> Budget | None:
-    month = datetime.now().strftime("%Y-%m")
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Budget).where(
-                Budget.telegram_id == telegram_id,
-                Budget.month == month
-            )
-        )
-        return result.scalar_one_or_none()
+    from ...services.budget_service import get_active_budget
+    return await get_active_budget(telegram_id)
 
 
 _last_keyboard = {}  # chat_id -> message_id
@@ -266,10 +259,10 @@ async def menu_status(callback: CallbackQuery):
     savings = budget.black_day_fund
 
     if budget.free_money > 0:
-        money_for_life = max(budget.free_money - spent_period, 0)
+        money_for_life = budget.free_money - spent_period
         total_budget = budget.free_money
     else:
-        money_for_life = max(budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period, 0)
+        money_for_life = budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period
         total_budget = budget.total_income
 
     dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
@@ -383,7 +376,7 @@ async def menu_status(callback: CallbackQuery):
             footer = random.choice([
                 f"Бро, мы пробили дно! 🚨 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>План спасения!</b> Кубышка ({int(savings):,} ₽) поднимет лимит до <b>{int(dl_simulated):,} ₽</b>! Выходим из кризиса в зеленую зону!",
                 f"Глубокое финансовое пике. 🟥 Прогноз {int(dl_pred):,} ₽.\n\n💡 <b>Подушка безопасности!</b> Кубышка вытащит нас в стабильную зону с лимитом <b>{int(dl_simulated):,} ₽</b>!",
-                f"Все полимеры проиграны, лимит {int(dl_pred):,} ₽. 🚨\n\n💡 <b>Время вскрывать резервы!</b> Кубышка поднимет дневную норму до <b>{int(dl_simulated):,} ₽</b>!",
+                f"Критический перерасход! 🚨 Прогноз — {int(dl_pred):,} ₽ в день.\n\n💡 <b>Время вскрывать резервы!</b> Кубышка поднимет дневную норму до <b>{int(dl_simulated):,} ₽</b>!",
             ])
             btns = "FROM_RED_TO_BLUE"
         elif pct_sim >= 26:

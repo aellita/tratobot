@@ -8,102 +8,53 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
-from ..db.models.models import User, UserSettings, Budget, Wishlist
-from .expense_service import get_yesterday_expenses_sum, get_today_daily_limit
-from .budget_service import get_days_remaining
+from ..db.models.models import User, UserSettings, Budget
+from .expense_service import get_yesterday_expenses_sum, get_current_period_expenses_sum
 
 logger = logging.getLogger(__name__)
 
 
-async def _get_morning_scenario(tg_id: int, overdraft: float, daily_limit: float) -> tuple[str, InlineKeyboardMarkup | None, str]:
-    overdraft_percent = (overdraft / daily_limit) * 100
-
-    if overdraft_percent <= 20:
-        text = random.choice([
-            f"☀️ Утречко! Вчера слегка вышли за рамки (на {int(overdraft)}₽). Ничего страшного, бюджет пересчитан. Твой чистый лимит на сегодня: <b>{int(daily_limit)} ₽</b>.",
-            f"☀️ Доброе утро! Вчерашний день слегка покусал наши планы (на {int(overdraft)}₽). Я раскидал этот минус по остатку месяца. Сегодня гуляем на <b>{int(daily_limit)} ₽</b>.",
+def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
+    if btn_type == "REGULAR":
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
         ])
-        return text, None, ""
-
-    async with async_session_maker() as session:
-        budget_result = await session.execute(
-            select(Budget).where(
-                Budget.telegram_id == tg_id,
-                Budget.month == datetime.now().strftime("%Y-%m"),
-            )
-        )
-        budget = budget_result.scalar_one_or_none()
-        cubyshka = budget.black_day_fund if budget else 0
-
-        goal_result = await session.execute(
-            select(Wishlist.current_amount)
-            .where(Wishlist.telegram_id == tg_id, Wishlist.is_active == True)
-            .order_by(Wishlist.id)
-            .limit(1)
-        )
-        goal_amount = float(goal_result.scalar() or 0.0)
-
-        goal_name = budget.wishlist_name if budget else "Хотелка"
-        days_left = budget.days_remaining if budget else 1
-
-    has_cubyshka = cubyshka > 0
-    has_goal = goal_amount > 0
-
-    if overdraft > daily_limit:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 С чистого листа (Ревизия)", callback_data="trigger_critical_reset")],
-            [InlineKeyboardButton(text="📉 Урезать лимит на месяц", callback_data="fix_overdraft:reduce_limit")],
+    if btn_type == "FRESH_START":
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Начать с чистого листа", callback_data="trigger_critical_reset")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
         ])
-        text = random.choice([
-            f"🚨 Оу... Вчерашние траты превысили наш лимит на <b>{int(overdraft_percent)}%</b>! "
-            f"Мы официально на мели. Если продолжим в том же духе, придётся месяц питаться воздухом. "
-            f"Давай распечатаем заначку и начнём с чистого листа?",
-
-            f"💥 <b>Критический перерасход:</b>\nВчера мы пробили дно — минус <b>{int(overdraft)} ₽</b> к лимиту. "
-            f"Такими темпами к концу периода нас ждёт только гречка и вода. "
-            f"Время принимать жёсткие решения. Выбирай:",
+    if btn_type == "FROM_YELLOW_TO_GREEN":
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🍏 Вернуть комфорт из Кубышки", callback_data="use_savings")],
+            [InlineKeyboardButton(text="💪 Буду экономить", callback_data="menu_back")],
         ])
-        return text, kb, "D"
-
-    if has_cubyshka and has_goal:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎯 Покрыть из Хотелки", callback_data=f"fix_overdraft:wishlist:{overdraft}")],
-            [InlineKeyboardButton(text="🆘 Взять из Кубышки", callback_data=f"fix_overdraft:cubyshka:{overdraft}")],
-            [InlineKeyboardButton(text="📉 Урезать лимит на месяц", callback_data="fix_overdraft:reduce_limit")],
+    if btn_type == "FROM_YELLOW_TO_BLUE":
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🟩 Поднять лимит из Кубышки", callback_data="use_savings")],
+            [InlineKeyboardButton(text="💪 Буду экономить", callback_data="menu_back")],
         ])
-        text = f"☀️ Утречко! Вчера мы превысили лимит на <b>{int(overdraft)} ₽</b>. " \
-               f"Найти клад под подушкой — план хороший, но у нас есть варианты полегче. " \
-               f"Выбирай, откуда спишем вчерашнее веселье, и я выдам тебе чистый лимит на сегодня:"
-        return text, kb, "A"
-
-    if has_goal:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎯 Покрыть из Хотелки", callback_data=f"fix_overdraft:wishlist:{overdraft}")],
-            [InlineKeyboardButton(text="📉 Урезать лимит на месяц", callback_data="fix_overdraft:reduce_limit")],
+    if btn_type == "FROM_RED_TO_GREEN":
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Вернуть Зеленую зону из Кубышки", callback_data="use_savings")],
+            [InlineKeyboardButton(text="🔄 С чистого листа", callback_data="trigger_critical_reset")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
         ])
-        text = f"☕️ Доброе утро, бро! Вчерашние траты оставили нам хвостик в <b>-{int(overdraft)} ₽</b>. " \
-               f"Наша Кубышка пуста, так что спасать положение придётся либо за счёт накоплений на «{goal_name}», " \
-               f"либо затянув пояса до конца периода. Твой ход:"
-        return text, kb, "B"
-
-    if has_cubyshka:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🆘 Взять из Кубышки", callback_data=f"fix_overdraft:cubyshka:{overdraft}")],
-            [InlineKeyboardButton(text="📉 Урезать лимит на месяц", callback_data="fix_overdraft:reduce_limit")],
+    if btn_type == "FROM_RED_TO_BLUE":
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Выйти из кризиса в Зеленую зону", callback_data="use_savings")],
+            [InlineKeyboardButton(text="🔄 С чистого листа", callback_data="trigger_critical_reset")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
         ])
-        text = f"👋 Привет! Твой кошелёк просил передать, что вчера ему было больно на <b>{int(overdraft)} ₽</b>. " \
-               f"На хотелки мы ещё ничего не скопили, так что выбор небольшой: распечатываем Кубышку " \
-               f"или принудительно худеем по лимитам на оставшиеся {days_left} дней. Что делаем?"
-        return text, kb, "V"
-
-    # Neither has money
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📉 Изменить лимит (Урезать)", callback_data="fix_overdraft:reduce_limit")],
+    if btn_type == "FROM_RED_TO_YELLOW":
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚨 Спасти бюджет из Кубышки", callback_data="use_savings")],
+            [InlineKeyboardButton(text="🔄 С чистого листа", callback_data="trigger_critical_reset")],
+            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
     ])
-    text = f"🚨 Так, бро. Вчера зафиксирован овердрафт на <b>{int(overdraft)} ₽</b>, а на балансах у нас по нулям. " \
-           f"Кубышка пуста, на хотелку ничего нет. Сейчас остаётся только жестко урезать дневной лимит. " \
-           f"Но если найдёшь деньги под подушкой, добавь их через кнопку \"➕ Добавить доход\" в настройках, и мы вздохнём свободнее!"
-    return text, kb, "G"
 
 
 async def send_morning_reports(bot: Bot):
@@ -123,37 +74,159 @@ async def send_morning_reports(bot: Bot):
                 if settings and not settings.notifications_enabled:
                     continue
 
-            daily_limit = await get_today_daily_limit(tg_id)
-            if daily_limit <= 0:
+            from .budget_service import get_active_budget
+            budget = await get_active_budget(tg_id)
+
+            if not budget or budget.daily_limit <= 0:
                 continue
 
             yesterday_spent = await get_yesterday_expenses_sum(tg_id)
+            spent_period = await get_current_period_expenses_sum(tg_id)
 
-            if yesterday_spent <= daily_limit:
-                menu_kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="open_menu")],
-                ])
-                await bot.send_message(
-                    tg_id,
-                    f"☀️ Доброе утро, бро! Вчера мы красавчики, уложились в лимит.\n"
-                    f"На сегодня у нас есть <b>{int(daily_limit)} ₽</b>. Держим темп!",
-                    reply_markup=menu_kb,
-                )
-                await asyncio.sleep(0.05)
-                continue
+            days_left = budget.days_remaining
+            dl_base = budget.daily_limit
+            savings = budget.black_day_fund
 
-            overdraft = yesterday_spent - daily_limit
-            text, kb, scenario = await _get_morning_scenario(tg_id, overdraft, daily_limit)
-
-            if kb:
-                await bot.send_message(tg_id, text, reply_markup=kb)
+            if budget.free_money > 0:
+                money_for_life = budget.free_money - spent_period
             else:
-                menu_kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="open_menu")],
-                ])
-                await bot.send_message(tg_id, text, reply_markup=menu_kb)
+                money_for_life = budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period
 
-            logger.info(f"Утренний отчёт {tg_id}: сценарий {scenario}, овердрафт {int(overdraft)}₽")
+            dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
+            dl_simulated = max((money_for_life + savings) / max(days_left, 1), 0)
+            pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0
+            pct_sim = dl_simulated / max(dl_base, 1) * 100 if dl_base > 0 else 0
+
+            end_of_period = days_left <= 3
+
+            overdraft = max(yesterday_spent - dl_base, 0)
+            if yesterday_spent <= dl_base:
+                yesterday_line = (
+                    f"📅 <b>Вчера:</b> потрачено {int(yesterday_spent):,} ₽ из {int(dl_base):,} ₽ ✅"
+                )
+            else:
+                yesterday_line = (
+                    f"📅 <b>Вчера:</b> потрачено {int(yesterday_spent):,} ₽ "
+                    f"из {int(dl_base):,} ₽ — перерасход <b>{int(overdraft):,} ₽</b> 🚨"
+                )
+
+            if end_of_period:
+                if money_for_life <= 0:
+                    zone = "END_EMPTY"
+                    btn_type = "FRESH_START"
+                else:
+                    zone = "END_OK"
+                    btn_type = "REGULAR"
+            elif pct_pred > 80:
+                zone = "GREEN"
+                btn_type = "REGULAR"
+            elif pct_pred >= 51:
+                zone = "YELLOW_LIGHT"
+                btn_type = "REGULAR"
+            elif pct_pred >= 26:
+                if pct_sim > 80:
+                    zone = "YELLOW_SIM_GREEN"
+                    btn_type = "FROM_YELLOW_TO_GREEN"
+                elif pct_sim >= 51:
+                    zone = "YELLOW_SIM_BLUE"
+                    btn_type = "FROM_YELLOW_TO_BLUE"
+                else:
+                    zone = "YELLOW_SIM_NONE"
+                    btn_type = "REGULAR"
+            else:
+                if pct_sim > 80:
+                    zone = "RED_SIM_GREEN"
+                    btn_type = "FROM_RED_TO_GREEN"
+                elif pct_sim >= 51:
+                    zone = "RED_SIM_BLUE"
+                    btn_type = "FROM_RED_TO_BLUE"
+                elif pct_sim >= 26:
+                    zone = "RED_SIM_YELLOW"
+                    btn_type = "FROM_RED_TO_YELLOW"
+                else:
+                    zone = "RED_DEAD"
+                    btn_type = "FRESH_START"
+
+            if zone == "END_EMPTY":
+                zone_text = random.choice([
+                    f"Финишная прямая, но деньги на нуле. 🏁 Осталось {days_left} дн. Держимся на морально-волевых!",
+                    f"До конца периода {days_left} дн., кэш закончился. 💪 Терпим, бро, финиш уже виден!",
+                ])
+            elif zone == "END_OK":
+                zone_text = random.choice([
+                    f"Осталось {days_left} дн. до конца периода, а у нас ещё {int(money_for_life):,} ₽! 🥳 Отличный финиш!",
+                    f"Финишная прямая с деньгами в кармане! 🥳 До конца периода {days_left} дн., остаток {int(money_for_life):,} ₽.",
+                ])
+            elif zone == "GREEN":
+                zone_text = random.choice([
+                    f"🟩 Всё по плану! Прогнозный лимит: {int(dl_pred):,} ₽/день. Продолжаем в том же духе!",
+                    f"🟩 Идём идеально по графику. Прогноз: {int(dl_pred):,} ₽/день.",
+                ])
+            elif zone == "YELLOW_LIGHT":
+                zone_text = random.choice([
+                    f"📉 Мы потихоньку отстаём от графика. Прогноз: {int(dl_pred):,} ₽/день. Давай чуть притормозим?",
+                    f"📉 Прогнозный лимит снизился до {int(dl_pred):,} ₽/день. Включаем осознанность!",
+                ])
+            elif zone == "YELLOW_SIM_GREEN":
+                zone_text = random.choice([
+                    f"🟨 Режим турбо-экономии! Прогноз: {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Кубышка ({int(savings):,} ₽) вернёт нас в зелёную зону — лимит будет {int(dl_simulated):,} ₽/день!",
+                    f"🟨 Затягиваем пояса — прогноз {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Вскрываем Кубышку? Это подбросит лимит до {int(dl_simulated):,} ₽/день!",
+                ])
+            elif zone == "YELLOW_SIM_BLUE":
+                zone_text = random.choice([
+                    f"🟨 Режим турбо-экономии! Прогноз: {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Кубышка поднимет лимит до <b>{int(dl_simulated):,} ₽</b>/день.",
+                    f"🟨 Бюджет трещит по швам, прогноз {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Кубышка готова помочь — поднимем планку до {int(dl_simulated):,} ₽/день!",
+                ])
+            elif zone == "YELLOW_SIM_NONE":
+                zone_text = random.choice([
+                    f"🟨 Режим турбо-экономии. Прогноз: {int(dl_pred):,} ₽/день. Держимся!",
+                    f"🟨 Включаю режим супер-экономии. Прогноз {int(dl_pred):,} ₽/день.",
+                ])
+            elif zone == "RED_SIM_GREEN":
+                zone_text = random.choice([
+                    f"🔴 Мы на дне! Прогноз: {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Кубышка ({int(savings):,} ₽) моментом вытащит нас! Лимит взлетит до <b>{int(dl_simulated):,} ₽</b>/день!",
+                    f"🔴 Критическая ситуация: {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Секретное оружие — Кубышка! Лимит станет {int(dl_simulated):,} ₽/день!",
+                ])
+            elif zone == "RED_SIM_BLUE":
+                zone_text = random.choice([
+                    f"🔴 Глубокое пике. Прогноз: {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Кубышка вытащит нас в стабильную зону: {int(dl_simulated):,} ₽/день!",
+                    f"🔴 Бюджет на минимуме — {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Время вскрывать резервы! Кубышка поднимет лимит до {int(dl_simulated):,} ₽/день!",
+                ])
+            elif zone == "RED_SIM_YELLOW":
+                zone_text = random.choice([
+                    f"🔴 Мы на дне. Прогноз: {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Кубышка ({int(savings):,} ₽) подрастит лимит до {int(dl_simulated):,} ₽/день.",
+                    f"🔴 Денег почти не осталось — {int(dl_pred):,} ₽/день.\n"
+                    f"💡 Кубышка смягчит падение: лимит будет {int(dl_simulated):,} ₽/день.",
+                ])
+            else:
+                zone_text = random.choice([
+                    "🔴 Мы пробили дно. Денег нет. 🚀 Нужен фреш-старт.",
+                    "🔴 Катастрофа! Бюджет исчерпан. Пора начинать с чистого листа.",
+                ])
+
+            full_text = (
+                f"☀️ Доброе утро, бро!\n\n"
+                f"{yesterday_line}\n\n"
+                f"{zone_text}"
+            )
+
+            kb = _build_morning_keyboard(btn_type)
+            await bot.send_message(tg_id, full_text, reply_markup=kb)
+
+            logger.info(
+                f"Утренний отчёт {tg_id}: зона {zone}, "
+                f"pct_pred={pct_pred:.0f}%, pct_sim={pct_sim:.0f}%, "
+                f"вчера {int(yesterday_spent)}₽"
+            )
 
             await asyncio.sleep(0.05)
         except Exception as e:

@@ -175,53 +175,40 @@ async def get_today_expenses_sum(telegram_id: int) -> float:
 
 
 async def get_today_daily_limit(telegram_id: int) -> float:
-    month = datetime.now().strftime("%Y-%m")
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Budget).where(
-                Budget.telegram_id == telegram_id,
-                Budget.month == month,
-            )
-        )
-        budget = result.scalar_one_or_none()
-        if not budget:
-            return 0.0
-        return budget.daily_limit
+    from .budget_service import get_active_budget
+    budget = await get_active_budget(telegram_id)
+    if not budget:
+        return 0.0
+    return budget.daily_limit
 
 
 async def get_current_period_expenses_sum(telegram_id: int) -> float:
     import calendar
     from datetime import timedelta
+    from .budget_service import get_active_budget
 
-    month = datetime.now().strftime("%Y-%m")
+    budget = await get_active_budget(telegram_id)
+    if not budget:
+        return 0.0
+
+    today = datetime.now()
+    start_day = budget.period_start_day or 1
+    clamped = min(start_day, calendar.monthrange(today.year, today.month)[1])
+
+    if clamped == 1:
+        period_start = datetime(today.year, today.month, 1)
+        next_month = today.replace(day=1) + timedelta(days=32)
+        period_end = datetime(next_month.year, next_month.month, 1) - timedelta(seconds=1)
+    elif today.day >= clamped:
+        period_start = datetime(today.year, today.month, clamped)
+        next_month = today.replace(day=1) + timedelta(days=32)
+        period_end = datetime(next_month.year, next_month.month, clamped - 1, 23, 59, 59)
+    else:
+        last_month = datetime(today.year, today.month, 1) - timedelta(days=1)
+        period_start = datetime(last_month.year, last_month.month, clamped)
+        period_end = datetime(today.year, today.month, clamped - 1, 23, 59, 59)
+
     async with async_session_maker() as session:
-        budget_result = await session.execute(
-            select(Budget).where(
-                Budget.telegram_id == telegram_id,
-                Budget.month == month,
-            )
-        )
-        budget = budget_result.scalar_one_or_none()
-        if not budget:
-            return 0.0
-
-        today = datetime.now()
-        start_day = budget.period_start_day or 1
-        clamped = min(start_day, calendar.monthrange(today.year, today.month)[1])
-
-        if clamped == 1:
-            period_start = datetime(today.year, today.month, 1)
-            next_month = today.replace(day=1) + timedelta(days=32)
-            period_end = datetime(next_month.year, next_month.month, 1) - timedelta(seconds=1)
-        elif today.day >= clamped:
-            period_start = datetime(today.year, today.month, clamped)
-            next_month = today.replace(day=1) + timedelta(days=32)
-            period_end = datetime(next_month.year, next_month.month, clamped - 1, 23, 59, 59)
-        else:
-            last_month = datetime(today.year, today.month, 1) - timedelta(days=1)
-            period_start = datetime(last_month.year, last_month.month, clamped)
-            period_end = datetime(today.year, today.month, clamped - 1, 23, 59, 59)
-
         result = await session.execute(
             select(func.sum(Expense.amount))
             .where(Expense.telegram_id == telegram_id)

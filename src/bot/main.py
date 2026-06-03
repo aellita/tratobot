@@ -33,7 +33,7 @@ async def on_startup():
     await init_db()
     logger.info("Migrating schema...")
     await migrate_schema()
-    setup_scheduler(bot)
+    setup_scheduler(bot, dp.storage)
     logger.info("Bot started!")
 
 

@@ -4,20 +4,44 @@ import asyncio
 from datetime import datetime
 
 from aiogram import Bot
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.base import StorageKey, BaseStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
-from ..db.models.models import User, UserSettings, Budget
-from .expense_service import get_today_expenses_sum, get_today_daily_limit, get_current_period_expenses_sum
+from ..db.models.models import User, UserSettings
+from .expense_service import get_today_expenses_sum, get_today_daily_limit
 
 logger = logging.getLogger(__name__)
 
-_reported_today: set[int] = set()
+
+class EveningState(StatesGroup):
+    filling = State()
 
 
-def clear_reported_set():
-    _reported_today.clear()
+EVENING_KB = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="🏁 Показать отчет", callback_data="show_final_evening_report")],
+])
+
+INITIAL_TEXT = (
+    "👁 День подошел к концу, время зафиксировать добычу.\n\n"
+    "Если забыла внести какие-то расходы (аптеку, такси или тот самый кофе), "
+    "просто напиши их сюда обычным сообщением. Я добавлю их к сегодняшнему дню.\n\n"
+    "Если всё учтено — отсекаем лишнее и смотрим итог."
+)
+
+
+def _build_container_text(session_expenses: list[str]) -> str:
+    if not session_expenses:
+        return INITIAL_TEXT
+    expenses_text = "\n".join(session_expenses)
+    return (
+        f"👁 Оп, поймал. Докидываю в общую кучу, вот что пока вспомнили:\n\n"
+        f"{expenses_text}\n\n"
+        f"Что-то еще выпало из кармана? Пиши, не стесняйся. Или сворачиваемся."
+    )
 
 
 def get_evening_message(limit: float, spent: float, available_cash: float, days_left: int, wishlist_name: str) -> str:
@@ -58,16 +82,12 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
     return random.choice(evening_phrases)
 
 
-async def send_evening_teaser(bot: Bot):
+async def send_evening_teaser(bot: Bot, storage: BaseStorage):
     logger.info("Запуск вечернего тизера в 22:00...")
 
     async with async_session_maker() as session:
         result = await session.execute(select(User.telegram_id))
         user_ids = result.scalars().all()
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🏁 Показать отчет", callback_data="generate_evening_report")],
-    ])
 
     for tg_id in user_ids:
         try:
@@ -79,84 +99,27 @@ async def send_evening_teaser(bot: Bot):
                 if settings and not settings.notifications_enabled:
                     continue
 
-            limit = await get_today_daily_limit(tg_id)
-            if limit <= 0:
+            from .budget_service import get_active_budget
+            budget = await get_active_budget(tg_id)
+            if not budget or budget.daily_limit <= 0:
                 continue
 
-            await bot.send_message(
-                chat_id=tg_id,
-                text="👁 Псс, день подходит к концу!\n\n"
-                     "Твой вечерний отчет по тратам уже готов. Если забыл что-то внести "
-                     "(например, ту самую чистку или аптеку), допиши прямо сейчас обычным сообщением.\n\n"
-                     "Если всё внесено — жми кнопку ниже, подведем итоги! 📊",
-                reply_markup=keyboard,
-            )
-            logger.info(f"Тизер отправлен {tg_id}")
+            msg = await bot.send_message(tg_id, INITIAL_TEXT, reply_markup=EVENING_KB)
+
+            storage_key = StorageKey(bot_id=bot.id, chat_id=tg_id, user_id=tg_id)
+            state = FSMContext(storage=storage, key=storage_key)
+            await state.set_state(EveningState.filling)
+            await state.update_data(container_id=msg.message_id, session_expenses=[])
+
+            logger.info(f"Вечерняя сессия открыта {tg_id}")
             await asyncio.sleep(0.05)
         except Exception as e:
-            logger.error(f"Не удалось отправить тизер для {tg_id}: {e}")
+            logger.error(f"Не удалось открыть вечернюю сессию для {tg_id}: {e}")
 
-    logger.info("Рассылка тизеров завершена.")
-
-
-async def send_actual_report(tg_id: int, bot: Bot) -> bool:
-    try:
-        async with async_session_maker() as session:
-            settings_result = await session.execute(
-                select(UserSettings).where(UserSettings.telegram_id == tg_id)
-            )
-            settings = settings_result.scalar_one_or_none()
-            if settings and not settings.notifications_enabled:
-                return False
-
-            budget_result = await session.execute(
-                select(Budget).where(
-                    Budget.telegram_id == tg_id,
-                    Budget.month == datetime.now().strftime("%Y-%m"),
-                )
-            )
-            budget = budget_result.scalar_one_or_none()
-
-        limit = await get_today_daily_limit(tg_id)
-        if limit <= 0:
-            return False
-
-        spent = await get_today_expenses_sum(tg_id)
-
-        if budget:
-            days_left = budget.days_remaining
-            if budget.free_money > 0:
-                total_available = budget.free_money
-            else:
-                total_available = budget.total_income - budget.mandatory_payments - budget.black_day_fund
-            period_spent = await get_current_period_expenses_sum(tg_id)
-            available_cash = max(total_available - period_spent, 0)
-            wishlist_name = budget.wishlist_name or "Хотелка"
-        else:
-            days_left = 1
-            available_cash = 0
-            wishlist_name = "Хотелка"
-
-        text = get_evening_message(
-            limit=limit,
-            spent=spent,
-            available_cash=available_cash,
-            days_left=days_left,
-            wishlist_name=wishlist_name,
-        )
-
-        menu_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="open_menu")],
-        ])
-        await bot.send_message(chat_id=tg_id, text=text, reply_markup=menu_kb)
-        logger.info(f"Вечерний отчёт отправлен {tg_id}")
-        return True
-    except Exception as e:
-        logger.error(f"Не удалось отправить вечерний отчёт для {tg_id}: {e}")
-        return False
+    logger.info("Рассылка вечерних сессий завершена.")
 
 
-async def send_auto_close_reports(bot: Bot):
+async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
     logger.info("Запуск авто-закрытия дня в 23:30...")
 
     async with async_session_maker() as session:
@@ -164,9 +127,40 @@ async def send_auto_close_reports(bot: Bot):
         user_ids = result.scalars().all()
 
     for tg_id in user_ids:
-        if tg_id in _reported_today:
-            continue
-        await send_actual_report(tg_id, bot)
-        await asyncio.sleep(0.05)
+        try:
+            storage_key = StorageKey(bot_id=bot.id, chat_id=tg_id, user_id=tg_id)
+            state = FSMContext(storage=storage, key=storage_key)
+            current_state = await state.get_state()
+            if current_state != EveningState.filling.state:
+                continue
+
+            data = await state.get_data()
+            container_id = data.get("container_id")
+
+            if container_id:
+                try:
+                    await bot.edit_message_reply_markup(
+                        chat_id=tg_id, message_id=container_id, reply_markup=None
+                    )
+                except Exception:
+                    pass
+
+            total = await get_today_expenses_sum(tg_id)
+
+            await bot.send_message(
+                tg_id,
+                f"🌙 <b>23:30 — Время вышло, подводим итоги автоматически.</b>\n\n"
+                f"Твой фундамент на сегодня: <b>{int(total):,} ₽</b>.\n"
+                f"Состояние сброшено.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="open_menu")],
+                ]),
+            )
+
+            await state.clear()
+            logger.info(f"Авто-закрытие вечерней сессии {tg_id}")
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.error(f"Ошибка авто-закрытия для {tg_id}: {e}")
 
     logger.info("Авто-закрытие дня завершено.")
