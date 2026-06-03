@@ -98,6 +98,30 @@
 - **Сделано:** L2 — `_last_keyboard` заменён на `TTLCache` из `cachetools` (добавлен в requirements.txt)
 - **Проверено:** L4/L6/L7 уже были исправлены в коде, обновлён статус в progress.md
 
+### 2026-06-03 — Начало юнит-тестов (pytest)
+
+**Bug-трекинг завершён.** Все security-фиксы (19/19) и L-задачи (7/7) закрыты.
+
+**План тестирования:**
+
+**Инфраструктура:**
+- `pytest` + `pytest-asyncio` + `pytest-cov` в requirements.txt
+- `tests/conftest.py` — общие фикстуры
+- `tests/` — плоская структура (по модулям)
+
+**Очередь 1 — чистые функции (без БД/Telegram):**
+1. `tests/test_expense_parser.py` — `parse_expense_text`, `parse_multi_expense_text`, `clean_description`
+2. `tests/test_helpers.py` — `parse_amount`, `safe`, `parse_callback`, `extract_callback_id`
+3. `tests/test_categorization.py` — `clean_and_normalize`, `get_category_display`, `_parse_keywords`, `_dump_keywords`
+
+**Очередь 2 — с моками БД:**
+4. `tests/test_budget_service.py` — `get_active_budget`, `reconcile_budget_with_reality`
+5. `tests/test_goal_service.py` — `add_spare_change_to_goal`, `deduct_from_goal`
+6. `tests/test_expense_service_db.py` — `try_apply_round_up`, `get_current_period_expenses_sum`
+
+**Очередь 3 — FSM и интеграционные:**
+7. `tests/test_fsm.py` — сценарии онбординга, critical reset, edit flow
+
 ---
 
 ## Шпаргалка для агента
