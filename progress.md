@@ -113,13 +113,27 @@
 - `tests/test_helpers.py` — `parse_amount`, `safe`, `parse_callback`, `extract_callback_id`
 - `tests/test_categorization.py` — `clean_and_normalize`, `get_category_display`, `_parse_keywords`, `_dump_keywords`
 
-**Предстоит (Очередь 2 — с моками БД):**
-- `tests/test_budget_service.py` — `get_active_budget`, `reconcile_budget_with_reality`, `update_budget_field`
-- `tests/test_goal_service.py` — `add_spare_change_to_goal`, `deduct_from_goal`
-- `tests/test_expense_service_db.py` — `try_apply_round_up`, `get_current_period_expenses_sum`, `get_today_expenses_sum`
+---
 
-**Очередь 3 — FSM и интеграционные (дальняя перспектива):**
-- онбординг, critical reset, edit flow
+### 2026-06-04 — Тесты: Очередь 2 (с моками БД)
+
+**Сделано:**
+- `tests/conftest.py` — in-memory SQLite engine, `async_session_maker` monkeypatch, фикстуры (test_user, test_budget, test_goal, test_expense, test_settings)
+- `tests/test_budget_service.py` — 21 тест: `get_active_budget` (7), `reconcile_budget_with_reality` (7), `update_budget_field` (7)
+- `tests/test_goal_service.py` — 18 тестов: `add_spare_change_to_goal` (8), `deduct_from_goal` (10)
+- `tests/test_expense_service_db.py` — 20 тестов: `try_apply_round_up` (10), `get_current_period_expenses_sum` (10)
+- Итого: 59 новых тестов (всего 192)
+- Продакшен-код не менялся — багов не найдено
+
+**Отклонено:** `get_today_expenses_sum` — не вошёл в запрос, сделан только по ТЗ
+
+**Предстоит (Очередь 3 — FSM и интеграционные):**
+- онбординг (FSM BudgetSetup)
+- critical reset callback
+- edit flow (save_edit_expense)
+- pre-commit hooks (Ruff)
+- GitHub Actions CI
+- `phrases.py` — вынос строк
 
 ---
 
