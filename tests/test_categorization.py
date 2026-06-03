@@ -21,6 +21,18 @@ class TestCleanAndNormalize:
     def test_mixed_case(self):
         assert clean_and_normalize("МакДоналдс") == "макдоналдс"
 
+    def test_only_numbers(self):
+        assert clean_and_normalize("123") == "123"
+
+    def test_only_special_chars(self):
+        assert clean_and_normalize("@#$") == "@#$"
+
+    def test_unicode(self):
+        assert clean_and_normalize("𝒦") == "𝒦"
+
+    def test_newline_stripped(self):
+        assert clean_and_normalize("  кофе\n  ") == "кофе"
+
 
 class TestGetCategoryDisplay:
     def test_known_category_returns_emoji(self):
@@ -48,6 +60,21 @@ class TestGetCategoryDisplay:
         assert emoji == "📦"
         assert name == ""
 
+    def test_leading_trailing_spaces(self):
+        emoji, name = get_category_display("  Еда  ")
+        assert emoji == "🍔"
+        assert name == "Еда"
+
+    def test_all_caps(self):
+        emoji, name = get_category_display("ЕДА")
+        assert emoji == "🍔"
+        assert name == "Еда"
+
+    def test_emoji_as_category_name(self):
+        emoji, name = get_category_display("🍔")
+        assert emoji == "📦"
+        assert name == "🍔"
+
 
 class TestParseKeywords:
     def test_valid_json(self):
@@ -68,6 +95,15 @@ class TestParseKeywords:
     def test_unicode(self):
         assert _parse_keywords('["кофе", "обед"]') == ["кофе", "обед"]
 
+    def test_very_long_json(self):
+        long = ["word"] * 1000
+        import json
+        result = _parse_keywords(json.dumps(long))
+        assert len(result) == 1000
+
+    def test_nested_json_returns_whatever_json_loads(self):
+        assert _parse_keywords('{"key": "value"}') == {"key": "value"}
+
 
 class TestDumpKeywords:
     def test_basic_list(self):
@@ -81,3 +117,13 @@ class TestDumpKeywords:
         result = _dump_keywords(["🍔", "еда"])
         assert "🍔" in result
         assert "еда" in result
+
+    def test_special_chars(self):
+        result = _dump_keywords(["a'b", 'c"d'])
+        assert '"a\\\'b"' in result or '"a\'b"' in result
+        assert result is not None
+
+    def test_very_long_keyword(self):
+        long_word = "x" * 10000
+        result = _dump_keywords([long_word])
+        assert len(result) > 10000
