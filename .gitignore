@@ -8,3 +8,4 @@ bot.log
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
+описание идей бота.rtfd/
