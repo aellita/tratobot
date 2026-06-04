@@ -23,15 +23,14 @@ Telegram-бот для учёта личных финансов. Ироничн�
 - **Деплой:** Docker, Railway.app, кросс-платформенная миграция БД
 - **Команды разработчика:** `/test_evening`, `/test_teaser`, `/test_morning`
 
-### In Progress
+### Completed
 
-- [ ] **pre-commit hooks:** Ruff проверяет код перед коммитом
-- [ ] **GitHub Actions CI:** автоматический прогон Ruff + pytest при push
+- [x] **pre-commit hooks:** ruff (lint+format), mypy, pytest, базовые хуки (`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`)
+- [x] **GitHub Actions CI:** автоматический прогон ruff (check + format), mypy, pytest при push/PR на main
+- [x] **Юнит-тесты:** 269 тестов — чистые функции (133), DB-mocked сервисы (59), FSM/integration (77)
 
 ### Remaining
 
-- [x] **Юнит-тесты (чистые функции + DB-mocked):** парсер расходов (133), сервисы бюджета/целей/расходов (59) — 192 теста
-- [ ] **Юнит-тесты (FSM и интеграционные):** онбординг, critical reset, edit flow
 - [ ] **phrases.py:** вынести все пользовательские строки из хендлеров в единый файл
 - [ ] **Голосовые сообщения:** парсинг через ASR + AI (заглушка готова)
 - [ ] **Умные итоги месяца:** AI-генерация сводки с инсайтами
@@ -64,16 +63,34 @@ tratobot/
 │   ├── bot/
 │   │   ├── handlers/   # menu.py, history.py, evening_flow.py, test_commands.py
 │   │   ├── keyboards.py
+│   │   ├── middleware.py
 │   │   ├── scheduler.py
 │   │   └── main.py
-│   ├── services/        # budget, expense, goal, categorization, morning/evening report
+│   ├── services/        # budget, expense, goal, categorization, morning/evening report, user
 │   ├── db/
 │   │   ├── models/
 │   │   └── database.py
+│   ├── utils/           # helpers.py
 │   └── core/
 │       └── config.py
+├── tests/               # 269 тестов
+│   ├── conftest.py
+│   ├── test_budget_service.py
+│   ├── test_categorization.py
+│   ├── test_critical_reset.py
+│   ├── test_expense_parser.py
+│   ├── test_expense_service_db.py
+│   ├── test_goal_service.py
+│   ├── test_helpers.py
+│   ├── test_history_edit.py
+│   └── test_onboarding_fsm.py
+├── .github/workflows/   # CI (GitHub Actions)
+├── .pre-commit-config.yaml
 ├── Dockerfile
 ├── railway.json
+├── pyproject.toml
+├── requirements.txt
+├── requirements-dev.txt
 ├── PRD.md
 ├── RULES.md
 └── progress.md

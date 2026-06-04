@@ -127,13 +127,32 @@
 
 **Отклонено:** `get_today_expenses_sum` — не вошёл в запрос, сделан только по ТЗ
 
-**Предстоит (Очередь 3 — FSM и интеграционные):**
-- онбординг (FSM BudgetSetup)
-- critical reset callback
-- edit flow (save_edit_expense)
-- pre-commit hooks (Ruff)
-- GitHub Actions CI
-- `phrases.py` — вынос строк
+---
+
+### 2026-06-04 — Queue 3: FSM/integration tests + ruff fix + pre-commit + CI
+
+**Сделано:**
+- `tests/test_onboarding_fsm.py` — 33 теста: `_parse_wishlist` (9), `process_income` (4), `process_period_start` (5), `process_mandatory` (3), `process_black_day` (3), `process_wishlist_name` (2), `skip_step` (5), `handle_rounding_choice` (3), `handle_period_start_choice` (4)
+- `tests/test_critical_reset.py` — 15 тестов: `trigger_critical_reset` (1), `save_real_balance` green/yellow/red zone (5), `fresh_start_save_mandatory` (3), `fresh_start_save_black_day` (3), `fresh_start_save_balance` (3)
+- `tests/test_history_edit.py` — 10 тестов: `save_edit_expense` (7), `start_edit_expense` (3)
+- `tests/test_expense_service_db.py` — расширен `soft_delete_expense` (4), `restore_expense` (4), `update_expense_amount` (5) — 13 новых тестов
+- Итого: 77 новых тестов (всего 269)
+- `conftest.py` — добавлен `keyboards.py` в `_patch_session_maker` (хендлеры вызывают `get_main_menu_keyboard`, которая уходила в реальную БД)
+
+**Ruff auto-fix incident:**
+- Применила `ruff check --fix --unsafe-fixes`, который заменил `Expense.is_deleted == False` на `not Expense.is_deleted` в SQLAlchemy WHERE-выражениях. В SQLAlchemy `not` над Column выбрасывает `ValueError`.
+- **Решение:** откатила unsafe-изменения в 4 файлах (expense_service.py, goal_service.py, menu.py, history.py), применила только безопасные фиксы (import sorting, f-string, UP017, whitespace).
+- **Вывод:** `--unsafe-fixes` для E712 нельзя применять к коду с SQLAlchemy.
+
+**pre-commit + CI:**
+- `.pre-commit-config.yaml` — ruff (lint+format), mypy, pytest, базовые хуки
+- `.github/workflows/test.yml` — GitHub Actions (ruff check + format, mypy, pytest)
+- `pyproject.toml` — конфиг ruff (line-length=100), mypy
+- `requirements-dev.txt` — ruff, mypy, pre-commit
+
+**Предстоит:**
+- `phrases.py` — вынос строк из хендлеров
+- Пуш на GitHub (ожидает команды пользователя)
 
 ---
 
