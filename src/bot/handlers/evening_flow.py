@@ -55,7 +55,7 @@ async def handle_evening_expense(message: Message, state: FSMContext):
             telegram_id=user_id,
             amount=amount,
             description=description,
-            date=datetime.now(UTC),
+            date=datetime.now(UTC).replace(tzinfo=None),
         )
         session.add(expense)
         await session.commit()

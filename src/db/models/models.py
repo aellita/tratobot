@@ -10,6 +10,10 @@ class Base(DeclarativeBase):
     pass
 
 
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 class CategoryType(StrEnum):
     FOOD = "food"
     TRANSPORT = "transport"
@@ -25,7 +29,7 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class Budget(Base):
@@ -43,8 +47,8 @@ class Budget(Base):
     period_start_day: Mapped[int] = mapped_column(Integer, default=1)
     free_money: Mapped[float] = mapped_column(Float, default=0)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     @property
     def _clamped_start(self) -> int:
@@ -105,7 +109,7 @@ class Expense(Base):
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     amount: Mapped[float] = mapped_column(Float)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    date: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    date: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     is_emergency: Mapped[bool] = mapped_column(Boolean, default=False)
     is_from_wishlist: Mapped[bool] = mapped_column(Boolean, default=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -120,7 +124,7 @@ class Wishlist(Base):
     target_amount: Mapped[float] = mapped_column(Float)
     current_amount: Mapped[float] = mapped_column(Float, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class BlackDayFund(Base):

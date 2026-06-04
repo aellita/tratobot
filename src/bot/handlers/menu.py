@@ -981,7 +981,7 @@ async def process_expense(message: Message, state: FSMContext):
                     amount=amount,
                     description=description or cat_name,
                     category_id=cat_id,
-                    date=datetime.now(UTC)
+                    date=datetime.now(UTC).replace(tzinfo=None)
                 )
                 session.add(expense)
                 await session.commit()
@@ -1838,7 +1838,7 @@ async def handle_text(message: Message, state: FSMContext):
                         amount=amount,
                         description=description or cat_name,
                         category_id=cat_id,
-                        date=datetime.now(UTC)
+                        date=datetime.now(UTC).replace(tzinfo=None)
                     )
                     session.add(expense)
                     await session.commit()
