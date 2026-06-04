@@ -66,7 +66,11 @@ async def handle_evening_expense(message: Message, state: FSMContext):
     container_id = data.get("container_id")
     session_expenses = data.get("session_expenses", [])
 
-    line = phrases.EVENING_LINE_DESC.format(amount=f"{amount:,.0f}", desc=safe(description)) if description else phrases.EVENING_LINE.format(amount=f"{amount:,.0f}")
+    line = (
+        phrases.EVENING_LINE_DESC.format(amount=f"{amount:,.0f}", desc=safe(description))
+        if description
+        else phrases.EVENING_LINE.format(amount=f"{amount:,.0f}")
+    )
     session_expenses.append(line)
     await state.update_data(session_expenses=session_expenses)
 
@@ -101,7 +105,9 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
         if budget.free_money > 0:
             total_available = budget.free_money
         else:
-            total_available = budget.total_income - budget.mandatory_payments - budget.black_day_fund
+            total_available = (
+                budget.total_income - budget.mandatory_payments - budget.black_day_fund
+            )
         period_spent = await get_current_period_expenses_sum(user_id)
         available_cash = max(total_available - period_spent, 0)
         wishlist_name = budget.wishlist_name or "Хотелка"
@@ -126,9 +132,11 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
         wishlist_name=wishlist_name,
     )
 
-    main_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
-    ])
+    main_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
+        ]
+    )
     await callback.message.answer(text, reply_markup=main_kb)
 
     await state.clear()

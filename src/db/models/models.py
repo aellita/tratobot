@@ -53,6 +53,7 @@ class Budget(Base):
     @property
     def _clamped_start(self) -> int:
         import calendar
+
         today = datetime.now()
         raw = self.period_start_day or 1
         return min(raw, calendar.monthrange(today.year, today.month)[1])
@@ -60,6 +61,7 @@ class Budget(Base):
     @property
     def days_remaining(self) -> int:
         import calendar
+
         today = datetime.now()
         start = self._clamped_start
         days_in_month = calendar.monthrange(today.year, today.month)[1]
@@ -75,6 +77,7 @@ class Budget(Base):
     @property
     def _period_total_days(self) -> int:
         import calendar
+
         today = datetime.now()
         start = self._clamped_start
         if start == 1:
@@ -97,7 +100,9 @@ class Category(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int | None] = mapped_column(ForeignKey("users.telegram_id"), nullable=True)
     name: Mapped[str] = mapped_column(String(100))
-    type: Mapped[CategoryType | None] = mapped_column(SQLEnum(CategoryType), nullable=True, default=None)
+    type: Mapped[CategoryType | None] = mapped_column(
+        SQLEnum(CategoryType), nullable=True, default=None
+    )
     keywords: Mapped[str] = mapped_column(Text, default="[]")
 
 

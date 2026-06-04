@@ -92,6 +92,7 @@ async def get_user_or_none(telegram_id: int) -> User | None:
 
 async def get_budget_or_none(telegram_id: int) -> Budget | None:
     from ...services.budget_service import get_active_budget
+
     return await get_active_budget(telegram_id)
 
 
@@ -103,9 +104,7 @@ async def _cleanup_keyboard(bot: Bot, chat_id: int):
     if msg_id:
         try:
             await bot.edit_message_reply_markup(
-                chat_id=chat_id,
-                message_id=msg_id,
-                reply_markup=None
+                chat_id=chat_id, message_id=msg_id, reply_markup=None
             )
         except Exception:
             pass
@@ -122,9 +121,7 @@ async def _cleanup_old_buttons(state: FSMContext, bot: Bot):
     if msg_id and chat_id:
         try:
             await bot.edit_message_reply_markup(
-                chat_id=chat_id,
-                message_id=msg_id,
-                reply_markup=None
+                chat_id=chat_id, message_id=msg_id, reply_markup=None
             )
         except Exception:
             pass
@@ -136,6 +133,7 @@ async def _save_msg_id(state: FSMContext, msg: Message):
 
 # ============ MENU HANDLERS ============
 
+
 @router.callback_query(F.data == "menu_back")
 async def menu_back(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -143,7 +141,7 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
         text=phrases.WELCOME_MENU.format(name=user_name),
-        reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+        reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -154,7 +152,7 @@ async def menu_help(callback: CallbackQuery):
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
         text=phrases.HELP_TEXT.format(name=user_name),
-        reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+        reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -172,21 +170,20 @@ async def cmd_start(message: Message, state: FSMContext):
         await get_or_create_user(
             telegram_id=telegram_id,
             first_name=message.from_user.first_name,
-            username=message.from_user.username
+            username=message.from_user.username,
         )
         greeting = random.choice(GREETINGS)
         await message.answer(text=greeting)
 
         sent = await message.answer(
-            text=phrases.ONBOARDING_START,
-            reply_markup=get_onboarding_keyboard()
+            text=phrases.ONBOARDING_START, reply_markup=get_onboarding_keyboard()
         )
         await _save_msg_id(state, sent)
         await state.set_state(BudgetSetup.waiting_for_income)
     else:
         await message.answer(
             text=phrases.WELCOME_BACK.format(name=user_name),
-            reply_markup=get_start_choice_keyboard()
+            reply_markup=get_start_choice_keyboard(),
         )
 
 
@@ -197,7 +194,7 @@ async def open_menu(callback: CallbackQuery, state: FSMContext):
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
         text=phrases.WELCOME_MENU.format(name=user_name),
-        reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+        reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -210,7 +207,7 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
     await get_or_create_user(
         telegram_id=callback.from_user.id,
         first_name=callback.from_user.first_name,
-        username=callback.from_user.username
+        username=callback.from_user.username,
     )
 
     await delete_current_budget(callback.from_user.id)
@@ -219,8 +216,7 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(text=greeting)
 
     sent = await callback.message.answer(
-        text=phrases.ONBOARDING_RESTART,
-        reply_markup=get_onboarding_keyboard()
+        text=phrases.ONBOARDING_RESTART, reply_markup=get_onboarding_keyboard()
     )
     await _save_msg_id(state, sent)
     await state.set_state(BudgetSetup.waiting_for_income)
@@ -236,7 +232,7 @@ async def menu_status(callback: CallbackQuery):
     if not budget:
         await callback.message.edit_text(
             text=phrases.NO_BUDGET.format(name=user_name),
-            reply_markup=await get_main_menu_keyboard(tg_id)
+            reply_markup=await get_main_menu_keyboard(tg_id),
         )
         return
 
@@ -246,7 +242,7 @@ async def menu_status(callback: CallbackQuery):
             select(func.sum(Expense.amount)).where(
                 Expense.telegram_id == tg_id,
                 Expense.is_deleted == False,
-                Expense.date >= today_start
+                Expense.date >= today_start,
             )
         )
         spent_today = result.scalar() or 0
@@ -267,7 +263,9 @@ async def menu_status(callback: CallbackQuery):
         money_for_life = budget.free_money - spent_period
         total_budget = budget.free_money
     else:
-        money_for_life = budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period
+        money_for_life = (
+            budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period
+        )
         total_budget = budget.total_income
 
     dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
@@ -280,7 +278,9 @@ async def menu_status(callback: CallbackQuery):
     period_end_day = budget._clamped_start
     period_end_str = f"{period_end_day}-го" if period_end_day > 1 else f"{period_end_day}-го"
 
-    end_of_period = days_left <= 3  # Wait, the comment says "менее 3 дней", so <= 2 probably. Let me use the user's definition: Осталось <= 3 дней
+    end_of_period = (
+        days_left <= 3
+    )  # Wait, the comment says "менее 3 дней", so <= 2 probably. Let me use the user's definition: Осталось <= 3 дней
     # Actually user says "Осталось <= 3 дней" in section 4, meaning days_left <= 3 for the special mode. Actually, 3 days means "до 3 дней" = up to 3 days = 1, 2, or 3.
 
     is_critical = money_for_life <= 0 or pct_pred <= 25
@@ -296,9 +296,13 @@ async def menu_status(callback: CallbackQuery):
         spent_line += phrases.STATUS_BIG_SPEND
 
     if remaining_period < 0:
-        period_left_line = phrases.STATUS_PERIOD_NEGATIVE.format(amount=f"{int(remaining_period):,}")
+        period_left_line = phrases.STATUS_PERIOD_NEGATIVE.format(
+            amount=f"{int(remaining_period):,}"
+        )
     elif remaining_period > 0:
-        period_left_line = phrases.STATUS_PERIOD_POSITIVE.format(amount=f"{int(remaining_period):,}")
+        period_left_line = phrases.STATUS_PERIOD_POSITIVE.format(
+            amount=f"{int(remaining_period):,}"
+        )
     else:
         period_left_line = phrases.STATUS_PERIOD_ZERO
 
@@ -320,83 +324,105 @@ async def menu_status(callback: CallbackQuery):
     # Footer zone logic
     if end_of_period:
         if money_for_life <= 0:
-            footer = random.choice([
-                "Финишная прямая! До конца периода осталось всего ничего. 🏁 Включаем режим супергероя и дотягиваем без новых долгов!",
-                "До обнуления периода осталось всего пару дней, но наш кошелек пуст. 🏁 Держимся на морально-волевых, финиш уже виден!",
-                "Последние метры дистанции, Бро! Деньги на нуле, но мы обязаны доползти до даты отсечки без новых кредитов. Терпим!",
-            ])
+            footer = random.choice(
+                [
+                    "Финишная прямая! До конца периода осталось всего ничего. 🏁 Включаем режим супергероя и дотягиваем без новых долгов!",
+                    "До обнуления периода осталось всего пару дней, но наш кошелек пуст. 🏁 Держимся на морально-волевых, финиш уже виден!",
+                    "Последние метры дистанции, Бро! Деньги на нуле, но мы обязаны доползти до даты отсечки без новых кредитов. Терпим!",
+                ]
+            )
             btns = "FRESH_START"
         else:
-            footer = random.choice([
-                "Осталось всего пару дней до конца периода, а у нас еще есть кэш! 🥳 Бро, мы досрочно победили этот месяц, ты супер-менеджер!",
-                "Финишная прямая, а в кармане еще шуршат купюры! 🥳 Горжусь твоей дисциплиной!",
-                "Период почти закрыт, а бюджет не пробит! 🥳 Бро, это абсолютная финансовая победа!",
-            ])
+            footer = random.choice(
+                [
+                    "Осталось всего пару дней до конца периода, а у нас еще есть кэш! 🥳 Бро, мы досрочно победили этот месяц, ты супер-менеджер!",
+                    "Финишная прямая, а в кармане еще шуршат купюры! 🥳 Горжусь твоей дисциплиной!",
+                    "Период почти закрыт, а бюджет не пробит! 🥳 Бро, это абсолютная финансовая победа!",
+                ]
+            )
             btns = "REGULAR"
     elif pct_pred > 80:
-        footer = random.choice([
-            f"Идем идеально по графику, Бро! 🟩 Твой прогнозный лимит: {int(dl_pred):,} ₽ на день. Твоя внутренняя жаба спокойна!",
-            "Бюджет улыбается тебе. 🟩 Все фонды целы, лимит комфортный. Продолжай в том же духе, ты супер-менеджер своей жизни!",
-            "Твоя финансовая карма в идеальном порядке. 🟩 Мы четко вписываемся в график, так что сегодня можно позволить себе чуточку больше!",
-        ])
+        footer = random.choice(
+            [
+                f"Идем идеально по графику, Бро! 🟩 Твой прогнозный лимит: {int(dl_pred):,} ₽ на день. Твоя внутренняя жаба спокойна!",
+                "Бюджет улыбается тебе. 🟩 Все фонды целы, лимит комфортный. Продолжай в том же духе, ты супер-менеджер своей жизни!",
+                "Твоя финансовая карма в идеальном порядке. 🟩 Мы четко вписываемся в график, так что сегодня можно позволить себе чуточку больше!",
+            ]
+        )
         btns = "REGULAR"
     elif pct_pred >= 51:
-        footer = random.choice([
-            f"Заметил, что мы немного ускорились. 📉 Если продолжим тратить в том же темпе, к концу периода твой дневной лимит сожмется до {int(dl_pred):,} ₽. Давай чуть притормозим, чтобы оставаться в зеленой зоне?",
-            f"Бро, мы потихоньку съезжаем с идеального курса. 📉 Прогноз упал до {int(dl_pred):,} ₽ в день. Ситуация полностью под контролем, но давай включим осознанность.",
-            f"График трат пополз вниз, Бро. 📉 Прогноз {int(dl_pred):,} ₽ на день — давай удержим эту планку?",
-        ])
+        footer = random.choice(
+            [
+                f"Заметил, что мы немного ускорились. 📉 Если продолжим тратить в том же темпе, к концу периода твой дневной лимит сожмется до {int(dl_pred):,} ₽. Давай чуть притормозим, чтобы оставаться в зеленой зоне?",
+                f"Бро, мы потихоньку съезжаем с идеального курса. 📉 Прогноз упал до {int(dl_pred):,} ₽ в день. Ситуация полностью под контролем, но давай включим осознанность.",
+                f"График трат пополз вниз, Бро. 📉 Прогноз {int(dl_pred):,} ₽ на день — давай удержим эту планку?",
+            ]
+        )
         btns = "REGULAR"
     elif pct_pred >= 26:
         if pct_sim > 80:
-            footer = random.choice([
-                f"Уф, Бро, мы катимся вниз. 🎢 Прогноз: лимит сожмется до {int(dl_pred):,} ₽ в день. Включен режим ТУРБО-ЭКОНОМИИ.\n\n💡 Мы можем вернуть всё как было! Если добавим деньги из Кубышки, восстановим лимит до <b>{int(dl_simulated):,} ₽</b> на день и вернемся в зеленую зону!",
-                f"Ситуация накаляется. 📉 Лимит упал до {int(dl_pred):,} ₽. Пора затягивать пояса...\n\n💡 Твоя Кубышка может полностью перекрыть этот кризис! Вскрываем заначку? Это подбросит лимит до <b>{int(dl_simulated):,} ₽</b>!",
-                f"Мы официально проедаем бюджет быстрее плана. 🎢 Текущий прогноз: {int(dl_pred):,} ₽ на день.\n\n💡 Спасаем положение? Кубышка может поднять лимит до <b>{int(dl_simulated):,} ₽</b>!",
-            ])
+            footer = random.choice(
+                [
+                    f"Уф, Бро, мы катимся вниз. 🎢 Прогноз: лимит сожмется до {int(dl_pred):,} ₽ в день. Включен режим ТУРБО-ЭКОНОМИИ.\n\n💡 Мы можем вернуть всё как было! Если добавим деньги из Кубышки, восстановим лимит до <b>{int(dl_simulated):,} ₽</b> на день и вернемся в зеленую зону!",
+                    f"Ситуация накаляется. 📉 Лимит упал до {int(dl_pred):,} ₽. Пора затягивать пояса...\n\n💡 Твоя Кубышка может полностью перекрыть этот кризис! Вскрываем заначку? Это подбросит лимит до <b>{int(dl_simulated):,} ₽</b>!",
+                    f"Мы официально проедаем бюджет быстрее плана. 🎢 Текущий прогноз: {int(dl_pred):,} ₽ на день.\n\n💡 Спасаем положение? Кубышка может поднять лимит до <b>{int(dl_simulated):,} ₽</b>!",
+                ]
+            )
             btns = "FROM_YELLOW_TO_GREEN"
         elif pct_sim >= 51:
-            footer = random.choice([
-                f"Уф, Бро, лимит сожмется до {int(dl_pred):,} ₽ в день. 🎢 Включен режим ТУРБО-ЭКОНОМИИ.\n\n💡 Но есть хорошая новость! Твоя Кубышка ({int(savings):,} ₽) может поднять лимит до <b>{int(dl_simulated):,} ₽</b> в день. Вернемся в зеленую зону!",
-                f"Мы на грани, лимит зажат до {int(dl_pred):,} ₽. 🎢\n\n💡 План перехвата: Кубышка вытащит нас в безопасную зону. Лимит станет <b>{int(dl_simulated):,} ₽</b> в день!",
-                f"Бюджет трещит по швам, лимит {int(dl_pred):,} ₽. 📉\n\n💡 Кубышка готова прийти на помощь! Поднимем планку до <b>{int(dl_simulated):,} ₽</b>!",
-            ])
+            footer = random.choice(
+                [
+                    f"Уф, Бро, лимит сожмется до {int(dl_pred):,} ₽ в день. 🎢 Включен режим ТУРБО-ЭКОНОМИИ.\n\n💡 Но есть хорошая новость! Твоя Кубышка ({int(savings):,} ₽) может поднять лимит до <b>{int(dl_simulated):,} ₽</b> в день. Вернемся в зеленую зону!",
+                    f"Мы на грани, лимит зажат до {int(dl_pred):,} ₽. 🎢\n\n💡 План перехвата: Кубышка вытащит нас в безопасную зону. Лимит станет <b>{int(dl_simulated):,} ₽</b> в день!",
+                    f"Бюджет трещит по швам, лимит {int(dl_pred):,} ₽. 📉\n\n💡 Кубышка готова прийти на помощь! Поднимем планку до <b>{int(dl_simulated):,} ₽</b>!",
+                ]
+            )
             btns = "FROM_YELLOW_TO_BLUE"
         else:
-            footer = random.choice([
-                f"Уф, Бро, лимит сожмется до {int(dl_pred):,} ₽ в день. 🎢 Включен режим ТУРБО-ЭКОНОМИИ.",
-                f"Включаю режим супер-экономии. 🟨 Прогноз — {int(dl_pred):,} ₽ в день. Постарайся сегодня ничего не покупать!",
-                f"До конца периода придется посидеть на гречке. 🟨 Лимит {int(dl_pred):,} ₽ в день. Держимся!",
-            ])
+            footer = random.choice(
+                [
+                    f"Уф, Бро, лимит сожмется до {int(dl_pred):,} ₽ в день. 🎢 Включен режим ТУРБО-ЭКОНОМИИ.",
+                    f"Включаю режим супер-экономии. 🟨 Прогноз — {int(dl_pred):,} ₽ в день. Постарайся сегодня ничего не покупать!",
+                    f"До конца периода придется посидеть на гречке. 🟨 Лимит {int(dl_pred):,} ₽ в день. Держимся!",
+                ]
+            )
             btns = "REGULAR"
     else:
         if pct_sim > 80:
-            footer = random.choice([
-                f"Бро, мы пробили дно бюджета! 🚨 Прогноз — {int(dl_pred):,} ₽ в день. Это катастрофа.\n\n💡 <b>Но у нас есть супер-план!</b> Кубышка ({int(savings):,} ₽) моментом вытащит нас из ада! Лимит взлетит до <b>{int(dl_simulated):,} ₽</b>!",
-                f"Бюджет объявил дефолт. 🟥 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>Секретное оружие!</b> Кубышка полностью решает проблему. Лимит станет <b>{int(dl_simulated):,} ₽</b>!",
-                f"Потратили всё. 🚨 На жизнь {int(dl_pred):,} ₽ в день.\n\n💡 <b>Кубышка спасает!</b> Накопления вернут нас в зеленую зону с лимитом <b>{int(dl_simulated):,} ₽</b>!",
-            ])
+            footer = random.choice(
+                [
+                    f"Бро, мы пробили дно бюджета! 🚨 Прогноз — {int(dl_pred):,} ₽ в день. Это катастрофа.\n\n💡 <b>Но у нас есть супер-план!</b> Кубышка ({int(savings):,} ₽) моментом вытащит нас из ада! Лимит взлетит до <b>{int(dl_simulated):,} ₽</b>!",
+                    f"Бюджет объявил дефолт. 🟥 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>Секретное оружие!</b> Кубышка полностью решает проблему. Лимит станет <b>{int(dl_simulated):,} ₽</b>!",
+                    f"Потратили всё. 🚨 На жизнь {int(dl_pred):,} ₽ в день.\n\n💡 <b>Кубышка спасает!</b> Накопления вернут нас в зеленую зону с лимитом <b>{int(dl_simulated):,} ₽</b>!",
+                ]
+            )
             btns = "FROM_RED_TO_GREEN"
         elif pct_sim >= 51:
-            footer = random.choice([
-                f"Бро, мы пробили дно! 🚨 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>План спасения!</b> Кубышка ({int(savings):,} ₽) поднимет лимит до <b>{int(dl_simulated):,} ₽</b>! Выходим из кризиса в зеленую зону!",
-                f"Глубокое финансовое пике. 🟥 Прогноз {int(dl_pred):,} ₽.\n\n💡 <b>Подушка безопасности!</b> Кубышка вытащит нас в стабильную зону с лимитом <b>{int(dl_simulated):,} ₽</b>!",
-                f"Критический перерасход! 🚨 Прогноз — {int(dl_pred):,} ₽ в день.\n\n💡 <b>Время вскрывать резервы!</b> Кубышка поднимет дневную норму до <b>{int(dl_simulated):,} ₽</b>!",
-            ])
+            footer = random.choice(
+                [
+                    f"Бро, мы пробили дно! 🚨 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>План спасения!</b> Кубышка ({int(savings):,} ₽) поднимет лимит до <b>{int(dl_simulated):,} ₽</b>! Выходим из кризиса в зеленую зону!",
+                    f"Глубокое финансовое пике. 🟥 Прогноз {int(dl_pred):,} ₽.\n\n💡 <b>Подушка безопасности!</b> Кубышка вытащит нас в стабильную зону с лимитом <b>{int(dl_simulated):,} ₽</b>!",
+                    f"Критический перерасход! 🚨 Прогноз — {int(dl_pred):,} ₽ в день.\n\n💡 <b>Время вскрывать резервы!</b> Кубышка поднимет дневную норму до <b>{int(dl_simulated):,} ₽</b>!",
+                ]
+            )
             btns = "FROM_RED_TO_BLUE"
         elif pct_sim >= 26:
-            footer = random.choice([
-                f"Бро, мы пробили дно! 🚨 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>План спасения!</b> Кубышка ({int(savings):,} ₽) поднимет лимит до <b>{int(dl_simulated):,} ₽</b>. Выберемся из кризиса в режим экономии.",
-                f"Бюджет нажал кнопку катапультирования. 💣 На жизнь {int(dl_pred):,} ₽.\n\n💡 <b>План эвакуации:</b> Кубышка подрастит лимит до <b>{int(dl_simulated):,} ₽</b>. Спасемся от голодовки!",
-                f"Мы на самом дне, лимит {int(dl_pred):,} ₽. 🚨\n\n💡 <b>Частичное спасение:</b> Кубышка поднимет лимит до <b>{int(dl_simulated):,} ₽</b>. Лучше, чем ничего!",
-            ])
+            footer = random.choice(
+                [
+                    f"Бро, мы пробили дно! 🚨 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>План спасения!</b> Кубышка ({int(savings):,} ₽) поднимет лимит до <b>{int(dl_simulated):,} ₽</b>. Выберемся из кризиса в режим экономии.",
+                    f"Бюджет нажал кнопку катапультирования. 💣 На жизнь {int(dl_pred):,} ₽.\n\n💡 <b>План эвакуации:</b> Кубышка подрастит лимит до <b>{int(dl_simulated):,} ₽</b>. Спасемся от голодовки!",
+                    f"Мы на самом дне, лимит {int(dl_pred):,} ₽. 🚨\n\n💡 <b>Частичное спасение:</b> Кубышка поднимет лимит до <b>{int(dl_simulated):,} ₽</b>. Лучше, чем ничего!",
+                ]
+            )
             btns = "FROM_RED_TO_YELLOW"
         else:
-            footer = random.choice([
-                "Бро, мы пробили дно бюджета! 🚨 Это катастрофа.\n\nНам нужен Тотальный Фреш-Старт, старые цифры больше не работают.",
-                "Оу... Дальше ехать некуда. 🟥 Деньги закончились. Давай начнем с чистого листа?",
-                "Математика бота больше не бьется с картой. 🚨 Хватит мучить бюджет, давай обнулим этот месяц!",
-            ])
+            footer = random.choice(
+                [
+                    "Бро, мы пробили дно бюджета! 🚨 Это катастрофа.\n\nНам нужен Тотальный Фреш-Старт, старые цифры больше не работают.",
+                    "Оу... Дальше ехать некуда. 🟥 Деньги закончились. Давай начнем с чистого листа?",
+                    "Математика бота больше не бьется с картой. 🚨 Хватит мучить бюджет, давай обнулим этот месяц!",
+                ]
+            )
             btns = "FRESH_START"
 
     kb = _build_status_keyboard(btns, tg_id)
@@ -408,45 +434,97 @@ async def menu_status(callback: CallbackQuery):
 
 def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
     if btn_type == "REGULAR":
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
     if btn_type == "FRESH_START":
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_FRESH_START, callback_data="trigger_critical_reset")],
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_FRESH_START, callback_data="trigger_critical_reset"
+                    )
+                ],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
     if btn_type == "FROM_YELLOW_TO_GREEN":
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_USE_SAVINGS_COMFORT, callback_data="use_savings")],
-            [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_USE_SAVINGS_COMFORT, callback_data="use_savings"
+                    )
+                ],
+                [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
+            ]
+        )
     if btn_type == "FROM_YELLOW_TO_BLUE":
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_RAISE_LIMIT_SAVINGS, callback_data="use_savings")],
-            [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_RAISE_LIMIT_SAVINGS, callback_data="use_savings"
+                    )
+                ],
+                [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
+            ]
+        )
     if btn_type == "FROM_RED_TO_GREEN":
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings")],
-            [InlineKeyboardButton(text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset")],
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
+                    )
+                ],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
     if btn_type == "FROM_RED_TO_BLUE":
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_EXIT_CRISIS_GREEN, callback_data="use_savings")],
-            [InlineKeyboardButton(text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset")],
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_EXIT_CRISIS_GREEN, callback_data="use_savings"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
+                    )
+                ],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
     if btn_type == "FROM_RED_TO_YELLOW":
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings")],
-            [InlineKeyboardButton(text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset")],
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
+                    )
+                ],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
             [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-        ])
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-    ])
+        ]
+    )
 
 
 @router.callback_query(F.data == "use_savings")
@@ -480,23 +558,20 @@ async def menu_daily(callback: CallbackQuery):
     if not user:
         await callback.message.edit_text(
             text=phrases.NO_BUDGET_SHORT.format(name=user_name),
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
 
     async with async_session_maker() as session:
         month = datetime.now().strftime("%Y-%m")
         result = await session.execute(
-            select(Budget).where(
-                Budget.telegram_id == callback.from_user.id,
-                Budget.month == month
-            )
+            select(Budget).where(Budget.telegram_id == callback.from_user.id, Budget.month == month)
         )
         budget = result.scalar_one_or_none()
         if not budget:
             await callback.message.edit_text(
                 text=phrases.NO_BUDGET_MONTH.format(name=user_name),
-                reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+                reply_markup=await get_main_menu_keyboard(callback.from_user.id),
             )
             return
 
@@ -505,7 +580,7 @@ async def menu_daily(callback: CallbackQuery):
             select(func.sum(Expense.amount)).where(
                 Expense.telegram_id == callback.from_user.id,
                 Expense.is_deleted == False,
-                Expense.date >= today_start
+                Expense.date >= today_start,
             )
         )
         spent_today = result.scalar() or 0
@@ -530,11 +605,14 @@ async def menu_daily(callback: CallbackQuery):
         f"🎯 <b>Хотелка:</b> {budget.wishlist_target:,.0f}₽"
     )
 
-    await callback.message.edit_text(text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id))
+    await callback.message.edit_text(
+        text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+    )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 # ============ ONBOARDING / SKIP ============
+
 
 @router.callback_query(F.data == "skip_step")
 async def skip_step(callback: CallbackQuery, state: FSMContext):
@@ -542,7 +620,9 @@ async def skip_step(callback: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
 
     if current_state == BudgetSetup.waiting_for_income.state:
-        await state.update_data(income=0, mandatory=0, black_day=0, wishlist_name="", wishlist_price=0)
+        await state.update_data(
+            income=0, mandatory=0, black_day=0, wishlist_name="", wishlist_price=0
+        )
         await _finish_onboarding(callback, state)
     elif current_state == BudgetSetup.waiting_for_period_start.state:
         await state.update_data(period_start_day=1)
@@ -609,7 +689,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         await get_or_create_user(
             telegram_id=telegram_id,
             first_name=source.from_user.first_name,
-            username=source.from_user.username
+            username=source.from_user.username,
         )
     except Exception:
         text = phrases.ERR_DB
@@ -621,7 +701,9 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         return
 
     month = datetime.now().strftime("%Y-%m")
-    wishlist_name = data.get("wishlist_name", phrases.DEFAULT_WISHLIST_NAME) or phrases.DEFAULT_WISHLIST_NAME
+    wishlist_name = (
+        data.get("wishlist_name", phrases.DEFAULT_WISHLIST_NAME) or phrases.DEFAULT_WISHLIST_NAME
+    )
     wishlist_price = data.get("wishlist_price", 0)
     period_start_day = data.get("period_start_day", 1)
 
@@ -633,7 +715,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         black_day=data.get("black_day", 0),
         wishlist_name=wishlist_name,
         wishlist_price=wishlist_price,
-        period_start_day=period_start_day
+        period_start_day=period_start_day,
     )
 
     rounding_mode = data.get("rounding_mode", 0)
@@ -649,6 +731,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         await session.commit()
 
     import calendar
+
     today = datetime.now()
     available = data.get("income", 0) - data.get("mandatory", 0) - data.get("black_day", 0)
     days_in_month = calendar.monthrange(today.year, today.month)[1]
@@ -687,6 +770,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
 
 # ============ BUDGET SETUP STEPS ============
 
+
 @router.message(BudgetSetup.waiting_for_income)
 async def process_income(message: Message, state: FSMContext):
     try:
@@ -700,7 +784,7 @@ async def process_income(message: Message, state: FSMContext):
     await state.set_state(BudgetSetup.waiting_for_period_start)
     sent = await message.answer(
         text=f"✅ Принял!\n\n{phrases.PERIOD_START_CHOICE}",
-        reply_markup=get_period_start_keyboard()
+        reply_markup=get_period_start_keyboard(),
     )
     await _save_msg_id(state, sent)
 
@@ -708,14 +792,12 @@ async def process_income(message: Message, state: FSMContext):
 @router.callback_query(F.data.in_(["period_today", "period_first", "period_other"]))
 async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext):
     import calendar
+
     today = datetime.now()
     current_state = await state.get_state()
 
     if callback.data == "period_other":
-        await callback.message.edit_text(
-            text=phrases.PERIOD_CUSTOM_PROMPT,
-            reply_markup=None
-        )
+        await callback.message.edit_text(text=phrases.PERIOD_CUSTOM_PROMPT, reply_markup=None)
         await callback.answer()
         return
 
@@ -732,15 +814,14 @@ async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext)
         await state.update_data(period_start_day=day)
         await state.set_state(BudgetSetup.waiting_for_mandatory)
         await callback.message.edit_text(
-            text=phrases.INCOME_SAVED_PERIOD,
-            reply_markup=get_onboarding_keyboard()
+            text=phrases.INCOME_SAVED_PERIOD, reply_markup=get_onboarding_keyboard()
         )
     elif current_state == EditBudget.waiting_for_period_start.state:
         await update_budget_field(callback.from_user.id, "period_start_day", day)
         user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
         await callback.message.edit_text(
             text=phrases.PERIOD_UPDATED.format(name=user_name, day=day),
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         await state.clear()
 
@@ -750,6 +831,7 @@ async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext)
 @router.message(BudgetSetup.waiting_for_period_start)
 async def process_period_start(message: Message, state: FSMContext):
     import calendar
+
     today = datetime.now()
     try:
         day = int(message.text.strip())
@@ -781,8 +863,7 @@ async def process_period_start(message: Message, state: FSMContext):
     await state.update_data(period_start_day=day)
     await state.set_state(BudgetSetup.waiting_for_mandatory)
     sent = await message.answer(
-        text=phrases.INCOME_SAVED_PERIOD,
-        reply_markup=get_onboarding_keyboard()
+        text=phrases.INCOME_SAVED_PERIOD, reply_markup=get_onboarding_keyboard()
     )
     await _save_msg_id(state, sent)
 
@@ -799,8 +880,7 @@ async def process_mandatory(message: Message, state: FSMContext):
     await state.update_data(mandatory=amount)
     await state.set_state(BudgetSetup.waiting_for_black_day)
     sent = await message.answer(
-        text=phrases.ONBOARDING_MANDATORY_PROMPT,
-        reply_markup=get_onboarding_keyboard()
+        text=phrases.ONBOARDING_MANDATORY_PROMPT, reply_markup=get_onboarding_keyboard()
     )
     await _save_msg_id(state, sent)
 
@@ -817,14 +897,13 @@ async def process_black_day(message: Message, state: FSMContext):
     await state.update_data(black_day=amount)
     await state.set_state(BudgetSetup.waiting_for_wishlist_name)
     sent = await message.answer(
-        text=phrases.ONBOARDING_WISHLIST_PROMPT,
-        reply_markup=get_onboarding_keyboard()
+        text=phrases.ONBOARDING_WISHLIST_PROMPT, reply_markup=get_onboarding_keyboard()
     )
     await _save_msg_id(state, sent)
 
 
 def _parse_wishlist(text: str) -> tuple[str, float]:
-    numbers = re.findall(r'[\d ]+', text.replace(',', '.'))
+    numbers = re.findall(r"[\d ]+", text.replace(",", "."))
     name = text
     price = 0
     for num_str in numbers:
@@ -850,6 +929,7 @@ async def process_wishlist_name(message: Message, state: FSMContext):
 
 
 # ============ ROUNDING MODE ============
+
 
 @router.callback_query(F.data.in_(["rounding_off", "rounding_10", "rounding_100"]))
 async def handle_rounding_choice(callback: CallbackQuery, state: FSMContext):
@@ -881,14 +961,14 @@ async def handle_rounding_choice(callback: CallbackQuery, state: FSMContext):
 
 # ============ ADD EXPENSE ============
 
+
 @router.callback_query(F.data == "menu_add")
 async def menu_add(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await state.set_state(AddExpense.waiting_for_amount)
     await callback.message.edit_text(
-        text=phrases.ADD_EXPENSE_PROMPT.format(name=user_name),
-        reply_markup=get_cancel_keyboard()
+        text=phrases.ADD_EXPENSE_PROMPT.format(name=user_name), reply_markup=get_cancel_keyboard()
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -898,7 +978,7 @@ async def process_expense(message: Message, state: FSMContext):
     await get_or_create_user(
         telegram_id=message.from_user.id,
         first_name=message.from_user.first_name,
-        username=message.from_user.username
+        username=message.from_user.username,
     )
 
     parsed_list = parse_multi_expense_text(message.text.strip())
@@ -947,7 +1027,7 @@ async def process_expense(message: Message, state: FSMContext):
                     amount=amount,
                     description=description or cat_name,
                     category_id=cat_id,
-                    date=datetime.now(UTC).replace(tzinfo=None)
+                    date=datetime.now(UTC).replace(tzinfo=None),
                 )
                 session.add(expense)
                 await session.commit()
@@ -958,7 +1038,11 @@ async def process_expense(message: Message, state: FSMContext):
             errors += 1
             continue
 
-        lines.append(phrases.EXPENSE_SAVED_LINE.format(amount=f"{amount:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name))
+        lines.append(
+            phrases.EXPENSE_SAVED_LINE.format(
+                amount=f"{amount:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
+            )
+        )
 
     await state.clear()
 
@@ -977,23 +1061,34 @@ async def process_expense(message: Message, state: FSMContext):
     await _cleanup_keyboard(message.bot, message.chat.id)
 
     if len(lines) == 1:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_CHANGE_CATEGORY, callback_data=f"change_cat:{first_id}")],
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-        ])
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_CHANGE_CATEGORY, callback_data=f"change_cat:{first_id}"
+                    )
+                ],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
     else:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-        ])
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
 
     msg = await message.answer(
-        text=phrases.EXPENSE_SAVED_ALL.format(name=user_name, lines="\n".join(lines), round_up=total_round_up),
-        reply_markup=kb
+        text=phrases.EXPENSE_SAVED_ALL.format(
+            name=user_name, lines="\n".join(lines), round_up=total_round_up
+        ),
+        reply_markup=kb,
     )
     _track_keyboard(message.chat.id, msg.message_id)
 
 
 # ============ CATEGORY CHANGE ============
+
 
 @router.callback_query(F.data.startswith("change_cat:"))
 async def change_category(callback: CallbackQuery):
@@ -1013,21 +1108,23 @@ async def change_category(callback: CallbackQuery):
     row = []
     for i, cat in enumerate(categories):
         emoji, _ = get_category_display(cat.name)
-        row.append(InlineKeyboardButton(
-            text=f"{emoji} {cat.name}",
-            callback_data=f"set_cat:{expense_id}:{cat.id}",
-        ))
+        row.append(
+            InlineKeyboardButton(
+                text=f"{emoji} {cat.name}",
+                callback_data=f"set_cat:{expense_id}:{cat.id}",
+            )
+        )
         if len(row) == 2:
             buttons.append(row)
             row = []
     if row:
         buttons.append(row)
-    buttons.append([InlineKeyboardButton(
-        text=phrases.BTN_NEW_CATEGORY, callback_data=f"new_cat:{expense_id}"
-    )])
-    buttons.append([InlineKeyboardButton(
-        text=phrases.BTN_BACK, callback_data=f"exp_back_cat:{expense_id}"
-    )])
+    buttons.append(
+        [InlineKeyboardButton(text=phrases.BTN_NEW_CATEGORY, callback_data=f"new_cat:{expense_id}")]
+    )
+    buttons.append(
+        [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data=f"exp_back_cat:{expense_id}")]
+    )
 
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     await callback.message.edit_text(
@@ -1091,12 +1188,19 @@ async def set_category(callback: CallbackQuery):
         await session.commit()
 
     await add_keyword_to_category(
-        callback.from_user.id, category_id, expense.description or "",
+        callback.from_user.id,
+        category_id,
+        expense.description or "",
     )
 
     emoji, cat_name = get_category_display(cat.name)
     await callback.message.edit_text(
-        text=phrases.CATEGORY_CHANGED.format(amount=f"{expense.amount:,.0f}", desc=safe(expense.description or cat_name), emoji=emoji, cat=cat_name),
+        text=phrases.CATEGORY_CHANGED.format(
+            amount=f"{expense.amount:,.0f}",
+            desc=safe(expense.description or cat_name),
+            emoji=emoji,
+            cat=cat_name,
+        ),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
 
@@ -1126,9 +1230,11 @@ async def new_category_prompt(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CustomCategory.waiting_for_name)
     await callback.message.edit_text(
         text=phrases.NEW_CATEGORY_PROMPT,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-        ]),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
+            ]
+        ),
     )
 
 
@@ -1173,13 +1279,16 @@ async def save_new_category(message: Message, state: FSMContext):
     await state.clear()
     await _cleanup_keyboard(message.bot, message.chat.id)
     msg = await message.answer(
-        text=phrases.CATEGORY_CREATED.format(name=name, user_name=user_name, desc=expense.description),
+        text=phrases.CATEGORY_CREATED.format(
+            name=name, user_name=user_name, desc=expense.description
+        ),
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     _track_keyboard(message.chat.id, msg.message_id)
 
 
 # ============ OVERDRAFT / MORNING HANDLERS ============
+
 
 @router.callback_query(F.data.startswith("fix_overdraft:"))
 async def handle_fix_overdraft(callback: CallbackQuery):
@@ -1222,10 +1331,14 @@ async def handle_fix_overdraft(callback: CallbackQuery):
                 deduction = min(overdraft, goal.current_amount)
                 goal.current_amount -= deduction
                 await session.commit()
-                text = phrases.COVERED_FROM_WISHLIST.format(amount=int(deduction), remain=int(goal.current_amount))
+                text = phrases.COVERED_FROM_WISHLIST.format(
+                    amount=int(deduction), remain=int(goal.current_amount)
+                )
             else:
                 text = phrases.ERR_WISHLIST_EMPTY
-        await callback.message.edit_text(text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id))
+        await callback.message.edit_text(
+            text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+        )
 
     elif action == "cubyshka":
         budget = await get_budget_or_none(callback.from_user.id)
@@ -1235,7 +1348,9 @@ async def handle_fix_overdraft(callback: CallbackQuery):
             text = phrases.TAKEN_FROM_SAVINGS.format(amount=int(new_fund))
         else:
             text = phrases.ERR_SAVINGS_EMPTY
-        await callback.message.edit_text(text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id))
+        await callback.message.edit_text(
+            text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+        )
 
 
 @router.callback_query(F.data == "trigger_critical_reset")
@@ -1244,9 +1359,11 @@ async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CriticalReset.waiting_for_real_balance)
     msg = await callback.message.answer(
         text=phrases.FRESH_START_PROMPT,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-        ]),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
+            ]
+        ),
     )
     _track_keyboard(callback.message.chat.id, msg.message_id)
 
@@ -1272,7 +1389,13 @@ async def save_real_balance(message: Message, state: FSMContext):
         cubyshka_note = phrases.CUBYSHKA_NOTE.format(amount=int(cubyshka)) if cubyshka > 0 else ""
         await state.clear()
         msg = await message.answer(
-            text=phrases.FRESH_START_GREEN.format(name=user_name, limit=int(new_limit), days=days_left, money=int(money_for_life), note=cubyshka_note),
+            text=phrases.FRESH_START_GREEN.format(
+                name=user_name,
+                limit=int(new_limit),
+                days=days_left,
+                money=int(money_for_life),
+                note=cubyshka_note,
+            ),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         _track_keyboard(message.chat.id, msg.message_id)
@@ -1283,11 +1406,27 @@ async def save_real_balance(message: Message, state: FSMContext):
         await apply_reconciliation(message.from_user.id, money_for_life)
         await state.clear()
         msg = await message.answer(
-            text=phrases.FRESH_START_YELLOW.format(name=user_name, cubyshka=int(cubyshka), mandatory=int(mandatory), money=int(money_for_life), limit=int(new_limit)),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_ACCEPT_CHALLENGE, callback_data="menu_back")],
-                [InlineKeyboardButton(text=phrases.BTN_TAKE_FROM_SAVINGS, callback_data="edit_black_day")],
-            ]),
+            text=phrases.FRESH_START_YELLOW.format(
+                name=user_name,
+                cubyshka=int(cubyshka),
+                mandatory=int(mandatory),
+                money=int(money_for_life),
+                limit=int(new_limit),
+            ),
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=phrases.BTN_ACCEPT_CHALLENGE, callback_data="menu_back"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=phrases.BTN_TAKE_FROM_SAVINGS, callback_data="edit_black_day"
+                        )
+                    ],
+                ]
+            ),
         )
         _track_keyboard(message.chat.id, msg.message_id)
         return
@@ -1296,15 +1435,22 @@ async def save_real_balance(message: Message, state: FSMContext):
     await state.set_state(FreshStart.waiting_for_mandatory)
     msg = await message.answer(
         text=phrases.FRESH_START_RED,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_RESET_ALL, callback_data="fresh_start_begin")],
-            [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-        ]),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_RESET_ALL, callback_data="fresh_start_begin"
+                    )
+                ],
+                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
+            ]
+        ),
     )
     _track_keyboard(message.chat.id, msg.message_id)
 
 
 # ============ FRESH START (RE-ONBOARDING) ============
+
 
 @router.callback_query(F.data == "fresh_start_begin")
 async def fresh_start_step1(callback: CallbackQuery, state: FSMContext):
@@ -1312,13 +1458,15 @@ async def fresh_start_step1(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FreshStart.waiting_for_mandatory)
     await callback.message.edit_text(
         text="📌 <b>Шаг 1.</b> Давай пересчитаем твои обязательные платежи "
-             "(аренда, кредиты, подписки) с сегодняшнего дня и до конца периода.\n\n"
-             "Сколько тебе <b>ЕЩЁ</b> предстоит обязательно заплатить "
-             "в этом месяце?\n"
-             "Если всё уже оплачено, просто напиши <b>0</b>.",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-        ]),
+        "(аренда, кредиты, подписки) с сегодняшнего дня и до конца периода.\n\n"
+        "Сколько тебе <b>ЕЩЁ</b> предстоит обязательно заплатить "
+        "в этом месяце?\n"
+        "Если всё уже оплачено, просто напиши <b>0</b>.",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
+            ]
+        ),
     )
 
 
@@ -1333,13 +1481,15 @@ async def fresh_start_save_mandatory(message: Message, state: FSMContext):
     await state.set_state(FreshStart.waiting_for_black_day)
     await message.answer(
         text="🏦 <b>Шаг 2.</b> Что делаем с Кубышкой?\n\n"
-             "Сколько денег ты РЕАЛЬНО готова откладывать "
-             "и неприкосновенно хранить прямо сейчас?\n"
-             "Если пока нечего — напиши <b>0</b>, "
-             "это нормально, сначала выберемся из кризиса.",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-        ]),
+        "Сколько денег ты РЕАЛЬНО готова откладывать "
+        "и неприкосновенно хранить прямо сейчас?\n"
+        "Если пока нечего — напиши <b>0</b>, "
+        "это нормально, сначала выберемся из кризиса.",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
+            ]
+        ),
     )
 
 
@@ -1354,11 +1504,13 @@ async def fresh_start_save_black_day(message: Message, state: FSMContext):
     await state.set_state(FreshStart.waiting_for_balance)
     await message.answer(
         text="💰 <b>Шаг 3.</b> И финальный шаг.\n\n"
-             "Какая <b>ОБЩАЯ</b> сумма прямо сейчас лежит "
-             "на твоей карте? (Какую видишь в приложении банка).",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-        ]),
+        "Какая <b>ОБЩАЯ</b> сумма прямо сейчас лежит "
+        "на твоей карте? (Какую видишь в приложении банка).",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
+            ]
+        ),
     )
 
 
@@ -1400,18 +1552,19 @@ async def fresh_start_save_balance(message: Message, state: FSMContext):
 
     msg = await message.answer(
         text=f"Идеально, {user_name}! Новые настройки применились.\n\n"
-             f"📌 {int(new_mandatory)} ₽ — забронировал на оставшиеся обязательные платежи.\n"
-             f"🏦 {int(new_cubyshka)} ₽ — упаковал обратно в твою Кубышку.\n"
-             f"📊 На жизнь осталось: <b>{int(money_for_life)} ₽</b>.\n"
-             f"💰 Твой новый честный лимит на сегодня: <b>{int(new_limit)} ₽</b>."
-             f"{zone_note}\n\n"
-             f"Держимся, Бро! В этот раз мы справимся! ✊",
+        f"📌 {int(new_mandatory)} ₽ — забронировал на оставшиеся обязательные платежи.\n"
+        f"🏦 {int(new_cubyshka)} ₽ — упаковал обратно в твою Кубышку.\n"
+        f"📊 На жизнь осталось: <b>{int(money_for_life)} ₽</b>.\n"
+        f"💰 Твой новый честный лимит на сегодня: <b>{int(new_limit)} ₽</b>."
+        f"{zone_note}\n\n"
+        f"Держимся, Бро! В этот раз мы справимся! ✊",
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     _track_keyboard(message.chat.id, msg.message_id)
 
 
 # ============ SETTINGS ============
+
 
 @router.callback_query(F.data == "menu_settings")
 async def menu_settings(callback: CallbackQuery, state: FSMContext):
@@ -1422,7 +1575,7 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
     if not budget:
         await callback.message.edit_text(
             text=phrases.NO_BUDGET_SETTINGS.format(name=user_name),
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
 
@@ -1433,21 +1586,25 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
             select(UserSettings).where(UserSettings.telegram_id == callback.from_user.id)
         )
         user_settings = settings_result.scalar_one_or_none()
-        rounding_label = f"{user_settings.rounding_mode} ₽" if (user_settings and user_settings.rounding_mode > 0) else "выкл"
+        rounding_label = (
+            f"{user_settings.rounding_mode} ₽"
+            if (user_settings and user_settings.rounding_mode > 0)
+            else "выкл"
+        )
     if budget.free_money > 0:
         money_line = f"• Свободных: {budget.free_money:,.0f}₽"
     else:
         money_line = f"• Всего доход: {budget.total_income:,.0f}₽"
     await callback.message.edit_text(
         text=f"⚙️ {user_name}, что меняем?\n\n"
-             f"📊 Текущий бюджет:\n"
-             f"{money_line}\n"
-             f"• Обязательные: {budget.mandatory_payments:,.0f}₽\n"
-             f"• Кубышка: {budget.black_day_fund:,.0f}₽\n"
-             f"• {safe(budget.wishlist_name or phrases.DEFAULT_WISHLIST_NAME)}: {budget.wishlist_target:,.0f}₽\n"
-             f"• Округление: {rounding_label}\n"
-             f"{period_info}",
-        reply_markup=get_settings_keyboard()
+        f"📊 Текущий бюджет:\n"
+        f"{money_line}\n"
+        f"• Обязательные: {budget.mandatory_payments:,.0f}₽\n"
+        f"• Кубышка: {budget.black_day_fund:,.0f}₽\n"
+        f"• {safe(budget.wishlist_name or phrases.DEFAULT_WISHLIST_NAME)}: {budget.wishlist_target:,.0f}₽\n"
+        f"• Округление: {rounding_label}\n"
+        f"{period_info}",
+        reply_markup=get_settings_keyboard(),
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -1457,8 +1614,7 @@ async def edit_income(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(EditBudget.waiting_for_income)
     await callback.message.edit_text(
-        text=phrases.INCOME_EDIT_PROMPT,
-        reply_markup=get_cancel_keyboard()
+        text=phrases.INCOME_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -1468,8 +1624,7 @@ async def add_income(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(EditBudget.waiting_for_add_income)
     await callback.message.edit_text(
-        text=phrases.INCOME_ADD_PROMPT,
-        reply_markup=get_cancel_keyboard()
+        text=phrases.INCOME_ADD_PROMPT, reply_markup=get_cancel_keyboard()
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -1479,8 +1634,7 @@ async def edit_mandatory(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(EditBudget.waiting_for_mandatory)
     await callback.message.edit_text(
-        text=phrases.MANDATORY_EDIT_PROMPT,
-        reply_markup=get_cancel_keyboard()
+        text=phrases.MANDATORY_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -1490,8 +1644,7 @@ async def edit_black_day(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(EditBudget.waiting_for_black_day)
     await callback.message.edit_text(
-        text=phrases.SAVINGS_EDIT_PROMPT,
-        reply_markup=get_cancel_keyboard()
+        text=phrases.SAVINGS_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -1501,8 +1654,7 @@ async def edit_wishlist(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(EditBudget.waiting_for_wishlist)
     await callback.message.edit_text(
-        text=phrases.WISHLIST_EDIT_PROMPT,
-        reply_markup=get_cancel_keyboard()
+        text=phrases.WISHLIST_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -1512,8 +1664,7 @@ async def edit_period_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(EditBudget.waiting_for_period_start)
     await callback.message.edit_text(
-        text=phrases.PERIOD_EDIT_PROMPT,
-        reply_markup=get_period_start_keyboard()
+        text=phrases.PERIOD_EDIT_PROMPT, reply_markup=get_period_start_keyboard()
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
@@ -1530,8 +1681,7 @@ async def save_income(message: Message, state: FSMContext):
 
         await _cleanup_keyboard(message.bot, message.chat.id)
         sent = await message.answer(
-            text=phrases.INCOME_UPDATED,
-            reply_markup=get_period_start_keyboard()
+            text=phrases.INCOME_UPDATED, reply_markup=get_period_start_keyboard()
         )
         _track_keyboard(message.chat.id, sent.message_id)
         await state.set_state(EditBudget.waiting_for_period_start)
@@ -1542,6 +1692,7 @@ async def save_income(message: Message, state: FSMContext):
 @router.message(EditBudget.waiting_for_period_start)
 async def save_edit_period_start(message: Message, state: FSMContext):
     import calendar
+
     today = datetime.now()
     try:
         day = int(message.text.strip())
@@ -1564,7 +1715,7 @@ async def save_edit_period_start(message: Message, state: FSMContext):
     await _cleanup_keyboard(message.bot, message.chat.id)
     msg = await message.answer(
         text=phrases.PERIOD_UPDATED.format(name=user_name, day=day),
-        reply_markup=await get_main_menu_keyboard(message.from_user.id)
+        reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     _track_keyboard(message.chat.id, msg.message_id)
     await state.clear()
@@ -1589,8 +1740,10 @@ async def save_add_income(message: Message, state: FSMContext):
 
         await _cleanup_keyboard(message.bot, message.chat.id)
         msg = await message.answer(
-            text=phrases.INCOME_ADDED.format(name=user_name, amount=f"{amount:,.0f}", total=f"{new_total:,.0f}"),
-            reply_markup=await get_main_menu_keyboard(message.from_user.id)
+            text=phrases.INCOME_ADDED.format(
+                name=user_name, amount=f"{amount:,.0f}", total=f"{new_total:,.0f}"
+            ),
+            reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
@@ -1608,7 +1761,7 @@ async def save_mandatory(message: Message, state: FSMContext):
         await _cleanup_keyboard(message.bot, message.chat.id)
         msg = await message.answer(
             text=phrases.MANDATORY_UPDATED.format(name=user_name, amount=f"{amount:,.0f}"),
-            reply_markup=await get_main_menu_keyboard(message.from_user.id)
+            reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
@@ -1626,7 +1779,7 @@ async def save_black_day(message: Message, state: FSMContext):
         await _cleanup_keyboard(message.bot, message.chat.id)
         msg = await message.answer(
             text=phrases.SAVINGS_UPDATED.format(name=user_name, amount=f"{amount:,.0f}"),
-            reply_markup=await get_main_menu_keyboard(message.from_user.id)
+            reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
@@ -1647,13 +1800,14 @@ async def save_wishlist(message: Message, state: FSMContext):
     await _cleanup_keyboard(message.bot, message.chat.id)
     msg = await message.answer(
         text=f"✅ Готово, {user_name}! Хотелка: {name} — {price:,.0f}₽",
-        reply_markup=await get_main_menu_keyboard(message.from_user.id)
+        reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     _track_keyboard(message.chat.id, msg.message_id)
     await state.clear()
 
 
 # ============ ROUNDING MODE SETTINGS ============
+
 
 @router.callback_query(F.data == "edit_rounding")
 async def edit_rounding(callback: CallbackQuery, state: FSMContext):
@@ -1675,6 +1829,7 @@ async def edit_rounding(callback: CallbackQuery, state: FSMContext):
 
 # ============ CANCEL / BACK ============
 
+
 @router.callback_query(F.data == "cancel")
 async def cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -1682,8 +1837,7 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
 
     if current_state and (
-        current_state.startswith("CriticalReset.") or
-        current_state.startswith("FreshStart.")
+        current_state.startswith("CriticalReset.") or current_state.startswith("FreshStart.")
     ):
         await callback.message.delete()
         return
@@ -1691,34 +1845,32 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
         text=phrases.BACK_NAV.format(name=user_name),
-        reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+        reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 # ============ UNSUPPORTED CONTENT ============
 
+
 @router.message(F.voice)
 async def handle_voice(message: Message):
-    await message.answer(
-        phrases.ERR_VOICE
-    )
+    await message.answer(phrases.ERR_VOICE)
 
 
 @router.message(F.photo | F.video | F.document | F.sticker | F.animation)
 async def handle_media(message: Message):
-    await message.answer(
-        phrases.ERR_MEDIA
-    )
+    await message.answer(phrases.ERR_MEDIA)
 
 
 # ============ TEXT INPUT (free form) ============
+
 
 @router.message()
 async def handle_text(message: Message, state: FSMContext):
     text = message.text.strip()
 
-    if text.startswith('/'):
+    if text.startswith("/"):
         return
 
     menu_keywords = phrases.MENU_KEYWORDS
@@ -1727,7 +1879,7 @@ async def handle_text(message: Message, state: FSMContext):
         await _cleanup_keyboard(message.bot, message.chat.id)
         msg = await message.answer(
             text=phrases.UNRECOGNIZED.format(name=user_name),
-            reply_markup=await get_main_menu_keyboard(message.from_user.id)
+            reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         _track_keyboard(message.chat.id, msg.message_id)
         return
@@ -1737,7 +1889,7 @@ async def handle_text(message: Message, state: FSMContext):
         await get_or_create_user(
             telegram_id=message.from_user.id,
             first_name=message.from_user.first_name,
-            username=message.from_user.username
+            username=message.from_user.username,
         )
 
         lines = []
@@ -1768,7 +1920,7 @@ async def handle_text(message: Message, state: FSMContext):
                         amount=amount,
                         description=description or cat_name,
                         category_id=cat_id,
-                        date=datetime.now(UTC).replace(tzinfo=None)
+                        date=datetime.now(UTC).replace(tzinfo=None),
                     )
                     session.add(expense)
                     await session.commit()
@@ -1781,7 +1933,11 @@ async def handle_text(message: Message, state: FSMContext):
                     logging.error("Caused by: %s: %s", type(cause).__name__, cause)
                 continue
 
-        lines.append(phrases.EXPENSE_SAVED_LINE.format(amount=f"{amount:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name))
+        lines.append(
+            phrases.EXPENSE_SAVED_LINE.format(
+                amount=f"{amount:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
+            )
+        )
 
     if not lines:
         await message.answer(phrases.ERR_EXPENSE_SAVE)
@@ -1798,18 +1954,28 @@ async def handle_text(message: Message, state: FSMContext):
     await _cleanup_keyboard(message.bot, message.chat.id)
 
     if len(lines) == 1:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_CHANGE_CATEGORY, callback_data=f"change_cat:{first_id}")],
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-        ])
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_CHANGE_CATEGORY, callback_data=f"change_cat:{first_id}"
+                    )
+                ],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
     else:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-        ])
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
 
     msg = await message.answer(
-        text=phrases.EXPENSE_SAVED_ALL.format(name=user_name, lines="\n".join(lines), round_up=total_round_up),
-        reply_markup=kb
+        text=phrases.EXPENSE_SAVED_ALL.format(
+            name=user_name, lines="\n".join(lines), round_up=total_round_up
+        ),
+        reply_markup=kb,
     )
     _track_keyboard(message.chat.id, msg.message_id)
     return
@@ -1819,6 +1985,6 @@ async def handle_text(message: Message, state: FSMContext):
     await _cleanup_keyboard(message.bot, message.chat.id)
     msg = await message.answer(
         text=phrases.UNRECOGNIZED_TEXT.format(name=user_name),
-        reply_markup=await get_main_menu_keyboard(message.from_user.id)
+        reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     _track_keyboard(message.chat.id, msg.message_id)

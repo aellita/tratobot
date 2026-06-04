@@ -59,8 +59,12 @@ class TestGetActiveBudget:
         last_month_str = f"{last_year:04d}-{last_month_num:02d}"
 
         db_session.add(User(telegram_id=1001))
-        db_session.add(Budget(telegram_id=1001, month=last_month_str, total_income=30000.0, period_start_day=1))
-        db_session.add(Budget(telegram_id=1001, month=this_month, total_income=50000.0, period_start_day=1))
+        db_session.add(
+            Budget(telegram_id=1001, month=last_month_str, total_income=30000.0, period_start_day=1)
+        )
+        db_session.add(
+            Budget(telegram_id=1001, month=this_month, total_income=50000.0, period_start_day=1)
+        )
         await db_session.commit()
 
         result = await get_active_budget(1001)
@@ -71,7 +75,14 @@ class TestGetActiveBudget:
         today = datetime.now()
         db_session.add(User(telegram_id=1001))
         db_session.add(User(telegram_id=1002))
-        db_session.add(Budget(telegram_id=1002, month=today.strftime("%Y-%m"), total_income=99999.0, period_start_day=1))
+        db_session.add(
+            Budget(
+                telegram_id=1002,
+                month=today.strftime("%Y-%m"),
+                total_income=99999.0,
+                period_start_day=1,
+            )
+        )
         await db_session.commit()
 
         result = await get_active_budget(1001)
@@ -118,9 +129,13 @@ class TestReconcileBudgetWithReality:
         db_session.add(budget)
         await db_session.commit()
 
-        daily_limit, days_left, money_for_life, mandatory, black_day = (
-            await reconcile_budget_with_reality(1001, 80000.0)
-        )
+        (
+            daily_limit,
+            days_left,
+            money_for_life,
+            mandatory,
+            black_day,
+        ) = await reconcile_budget_with_reality(1001, 80000.0)
 
         assert money_for_life == 40000.0
         assert mandatory == 30000.0
@@ -146,9 +161,13 @@ class TestReconcileBudgetWithReality:
         db_session.add(budget)
         await db_session.commit()
 
-        daily_limit, days_left, money_for_life, mandatory, black_day = (
-            await reconcile_budget_with_reality(1001, 50000.0)
-        )
+        (
+            daily_limit,
+            days_left,
+            money_for_life,
+            mandatory,
+            black_day,
+        ) = await reconcile_budget_with_reality(1001, 50000.0)
 
         assert money_for_life == 0.0
         assert daily_limit == 0.0
@@ -168,8 +187,8 @@ class TestReconcileBudgetWithReality:
         db_session.add(budget)
         await db_session.commit()
 
-        daily_limit, days_left, money_for_life, _, _ = (
-            await reconcile_budget_with_reality(1001, 50000.0)
+        daily_limit, days_left, money_for_life, _, _ = await reconcile_budget_with_reality(
+            1001, 50000.0
         )
 
         assert days_left >= 1
@@ -206,8 +225,8 @@ class TestReconcileBudgetWithReality:
         db_session.add(budget)
         await db_session.commit()
 
-        daily_limit, _, money_for_life, _, _ = (
-            await reconcile_budget_with_reality(1001, 500_000_000.0)
+        daily_limit, _, money_for_life, _, _ = await reconcile_budget_with_reality(
+            1001, 500_000_000.0
         )
 
         assert money_for_life == 500_000_000.0

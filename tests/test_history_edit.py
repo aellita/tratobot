@@ -9,6 +9,7 @@ from src.bot.handlers.history import (
 # Вспомогательные моки
 # =============================================================================
 
+
 def _make_message(text: str, user_id: int = 99999, first_name: str = "Test") -> MagicMock:
     msg = MagicMock()
     msg.text = text
@@ -51,14 +52,17 @@ def _make_state(**initial_data) -> AsyncMock:
 # save_edit_expense (EditExpense.waiting_for_amount)
 # =============================================================================
 
+
 class TestSaveEditExpense:
     async def test_valid_amount_updates_expense(self):
         msg = _make_message("1500")
         state = _make_state(edit_expense_id=42)
 
         with (
-            patch("src.bot.handlers.history.update_expense_amount",
-                  AsyncMock(return_value=MagicMock(amount=1500.0, description="кофе"))),
+            patch(
+                "src.bot.handlers.history.update_expense_amount",
+                AsyncMock(return_value=MagicMock(amount=1500.0, description="кофе")),
+            ),
             patch("src.bot.handlers.history.get_main_menu_keyboard", AsyncMock()),
         ):
             await save_edit_expense(msg, state)
@@ -90,8 +94,7 @@ class TestSaveEditExpense:
         state = _make_state(edit_expense_id=42)
 
         with (
-            patch("src.bot.handlers.history.update_expense_amount",
-                  AsyncMock(return_value=None)),
+            patch("src.bot.handlers.history.update_expense_amount", AsyncMock(return_value=None)),
         ):
             await save_edit_expense(msg, state)
 
@@ -120,8 +123,10 @@ class TestSaveEditExpense:
         state = _make_state(edit_expense_id=42)
 
         with (
-            patch("src.bot.handlers.history.update_expense_amount",
-                  AsyncMock(return_value=MagicMock(amount=1500.5, description="трата"))),
+            patch(
+                "src.bot.handlers.history.update_expense_amount",
+                AsyncMock(return_value=MagicMock(amount=1500.5, description="трата")),
+            ),
             patch("src.bot.handlers.history.get_main_menu_keyboard", AsyncMock()),
         ):
             await save_edit_expense(msg, state)
@@ -133,6 +138,7 @@ class TestSaveEditExpense:
 # start_edit_expense (callback)
 # =============================================================================
 
+
 class TestStartEditExpense:
     async def test_valid_expense_id_sets_state(self):
         cb = _make_callback("exp_edit:42")
@@ -140,9 +146,13 @@ class TestStartEditExpense:
 
         mock_session = AsyncMock()
         mock_session.__aenter__.return_value = mock_session
-        mock_session.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=MagicMock(id=42, amount=500.0, description="кофе")),
-        ))
+        mock_session.execute = AsyncMock(
+            return_value=MagicMock(
+                scalar_one_or_none=MagicMock(
+                    return_value=MagicMock(id=42, amount=500.0, description="кофе")
+                ),
+            )
+        )
         mock_maker = MagicMock(return_value=mock_session)
         cb.message.edit_text.return_value = None
 
@@ -167,9 +177,11 @@ class TestStartEditExpense:
 
         mock_session = AsyncMock()
         mock_session.__aenter__.return_value = mock_session
-        mock_session.execute = AsyncMock(return_value=MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None),
-        ))
+        mock_session.execute = AsyncMock(
+            return_value=MagicMock(
+                scalar_one_or_none=MagicMock(return_value=None),
+            )
+        )
         mock_maker = MagicMock(return_value=mock_session)
 
         with (

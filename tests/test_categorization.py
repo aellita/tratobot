@@ -71,13 +71,13 @@ class TestParseKeywords:
         assert _parse_keywords('["кофе", "чай"]') == ["кофе", "чай"]
 
     def test_empty_json(self):
-        assert _parse_keywords('[]') == []
+        assert _parse_keywords("[]") == []
 
     def test_empty_string(self):
-        assert _parse_keywords('') == []
+        assert _parse_keywords("") == []
 
     def test_invalid_json(self):
-        assert _parse_keywords('{invalid}') == []
+        assert _parse_keywords("{invalid}") == []
 
     def test_none(self):
         assert _parse_keywords(None) == []
@@ -88,6 +88,7 @@ class TestParseKeywords:
     def test_very_long_json(self):
         long = ["word"] * 1000
         import json
+
         result = _parse_keywords(json.dumps(long))
         assert len(result) == 1000
 
@@ -101,7 +102,7 @@ class TestDumpKeywords:
         assert result == '["кофе", "чай"]'
 
     def test_empty_list(self):
-        assert _dump_keywords([]) == '[]'
+        assert _dump_keywords([]) == "[]"
 
     def test_with_emoji(self):
         result = _dump_keywords(["🍔", "еда"])

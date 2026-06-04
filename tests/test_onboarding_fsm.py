@@ -18,6 +18,7 @@ from src.bot.handlers.menu import (
 # _parse_wishlist — чистая функция
 # =============================================================================
 
+
 class TestParseWishlist:
     def test_name_and_price(self):
         name, price = _parse_wishlist("Ноутбук 50000")
@@ -66,6 +67,7 @@ class TestParseWishlist:
 # Вспомогательные моки
 # =============================================================================
 
+
 def _make_message(text: str, user_id: int = 99999, first_name: str = "Test") -> MagicMock:
     msg = MagicMock()
     msg.text = text
@@ -108,6 +110,7 @@ def _make_state(**initial_data) -> AsyncMock:
 # FSM: process_income (BudgetSetup.waiting_for_income)
 # =============================================================================
 
+
 class TestProcessIncome:
     async def test_valid_income_sets_state(self):
         msg = _make_message("50000")
@@ -149,6 +152,7 @@ class TestProcessIncome:
 # =============================================================================
 # FSM: process_period_start (BudgetSetup.waiting_for_period_start)
 # =============================================================================
+
 
 class TestProcessPeriodStart:
     async def test_valid_day_sets_state(self):
@@ -199,6 +203,7 @@ class TestProcessPeriodStart:
 # FSM: process_mandatory (BudgetSetup.waiting_for_mandatory)
 # =============================================================================
 
+
 class TestProcessMandatory:
     async def test_valid_mandatory_sets_state(self):
         msg = _make_message("15000")
@@ -229,6 +234,7 @@ class TestProcessMandatory:
 # =============================================================================
 # FSM: process_black_day (BudgetSetup.waiting_for_black_day)
 # =============================================================================
+
 
 class TestProcessBlackDay:
     async def test_valid_amount_sets_state(self):
@@ -261,6 +267,7 @@ class TestProcessBlackDay:
 # FSM: process_wishlist_name (BudgetSetup.waiting_for_wishlist_name)
 # =============================================================================
 
+
 class TestProcessWishlistName:
     async def test_name_and_price_sets_state(self):
         msg = _make_message("PS5 45000")
@@ -282,6 +289,7 @@ class TestProcessWishlistName:
 # =============================================================================
 # FSM: skip_step
 # =============================================================================
+
 
 class TestSkipStep:
     async def test_skip_income(self):
@@ -338,6 +346,7 @@ class TestSkipStep:
 # FSM: handle_rounding_choice
 # =============================================================================
 
+
 class TestHandleRoundingChoice:
     async def test_rounding_off_saves_zero(self):
         cb = _make_callback("rounding_off")
@@ -370,6 +379,7 @@ class TestHandleRoundingChoice:
 # =============================================================================
 # FSM: handle_period_start_choice (callback)
 # =============================================================================
+
 
 class TestHandlePeriodStartChoice:
     async def test_period_today(self):

@@ -44,9 +44,7 @@ async def seed_user_categories(telegram_id: int):
         return []
 
     async with async_session_maker() as session:
-        result = await session.execute(
-            select(Category).where(Category.telegram_id == telegram_id)
-        )
+        result = await session.execute(select(Category).where(Category.telegram_id == telegram_id))
         existing = list(result.scalars().all())
 
         if existing:
@@ -84,9 +82,7 @@ async def seed_user_categories(telegram_id: int):
 
 async def get_user_categories(telegram_id: int) -> list[Category]:
     async with async_session_maker() as session:
-        result = await session.execute(
-            select(Category).where(Category.telegram_id == telegram_id)
-        )
+        result = await session.execute(select(Category).where(Category.telegram_id == telegram_id))
         return list(result.scalars().all())
 
 

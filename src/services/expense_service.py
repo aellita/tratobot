@@ -28,6 +28,7 @@ async def try_apply_round_up(telegram_id: int, amount: float) -> str | None:
             return None
 
     from .goal_service import add_spare_change_to_goal
+
     new_total, goal_name = await add_spare_change_to_goal(telegram_id, spare)
 
     return phrases.ROUND_UP.format(amount=int(spare), goal=goal_name, total=int(new_total))
@@ -35,16 +36,18 @@ async def try_apply_round_up(telegram_id: int, amount: float) -> str | None:
 
 def clean_description(text: str) -> str:
     import re
-    pattern = r'\b(' + '|'.join(re.escape(w) for w in IGNORE_WORDS) + r')\b'
-    text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bр\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'[\s\+]+', ' ', text).strip()
+
+    pattern = r"\b(" + "|".join(re.escape(w) for w in IGNORE_WORDS) + r")\b"
+    text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bр\b", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"[\s\+]+", " ", text).strip()
     return text[:500]
 
 
 def parse_expense_text(text: str) -> tuple[float, str] | None:
     import re
-    numbers = re.findall(r'\d+(?:[,\.]\d+)?', text)
+
+    numbers = re.findall(r"\d+(?:[,\.]\d+)?", text)
     total = 0.0
     first_num = None
     for num_str in numbers:
@@ -86,18 +89,14 @@ async def get_expense_page(telegram_id: int, page: int = 0) -> tuple[list[Expens
     async with async_session_maker() as session:
         total_q = await session.execute(
             select(func.count(Expense.id)).where(
-                Expense.telegram_id == telegram_id,
-                Expense.is_deleted == False
+                Expense.telegram_id == telegram_id, Expense.is_deleted == False
             )
         )
         total = total_q.scalar() or 0
 
         result = await session.execute(
             select(Expense)
-            .where(
-                Expense.telegram_id == telegram_id,
-                Expense.is_deleted == False
-            )
+            .where(Expense.telegram_id == telegram_id, Expense.is_deleted == False)
             .order_by(Expense.date.desc())
             .limit(PAGE_SIZE)
             .offset(page * PAGE_SIZE)
@@ -112,7 +111,7 @@ async def soft_delete_expense(telegram_id: int, expense_id: int) -> Expense | No
             select(Expense).where(
                 Expense.id == expense_id,
                 Expense.telegram_id == telegram_id,
-                Expense.is_deleted == False
+                Expense.is_deleted == False,
             )
         )
         expense = result.scalar_one_or_none()
@@ -130,7 +129,7 @@ async def restore_expense(telegram_id: int, expense_id: int) -> Expense | None:
             select(Expense).where(
                 Expense.id == expense_id,
                 Expense.telegram_id == telegram_id,
-                Expense.is_deleted == True
+                Expense.is_deleted == True,
             )
         )
         expense = result.scalar_one_or_none()
@@ -142,13 +141,15 @@ async def restore_expense(telegram_id: int, expense_id: int) -> Expense | None:
         return expense
 
 
-async def update_expense_amount(telegram_id: int, expense_id: int, new_amount: float) -> Expense | None:
+async def update_expense_amount(
+    telegram_id: int, expense_id: int, new_amount: float
+) -> Expense | None:
     async with async_session_maker() as session:
         result = await session.execute(
             select(Expense).where(
                 Expense.id == expense_id,
                 Expense.telegram_id == telegram_id,
-                Expense.is_deleted == False
+                Expense.is_deleted == False,
             )
         )
         expense = result.scalar_one_or_none()
@@ -178,6 +179,7 @@ async def get_today_expenses_sum(telegram_id: int) -> float:
 
 async def get_today_daily_limit(telegram_id: int) -> float:
     from .budget_service import get_active_budget
+
     budget = await get_active_budget(telegram_id)
     if not budget:
         return 0.0
@@ -225,6 +227,7 @@ async def get_current_period_expenses_sum(telegram_id: int) -> float:
 
 async def get_yesterday_expenses_sum(telegram_id: int) -> float:
     from datetime import timedelta
+
     yesterday = date.today() - timedelta(days=1)
     day_start = datetime.combine(yesterday, time.min)
     day_end = datetime.combine(yesterday, time.max)

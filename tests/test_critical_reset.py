@@ -14,6 +14,7 @@ from src.bot.handlers.menu import (
 # Вспомогательные моки
 # =============================================================================
 
+
 def _make_message(text: str, user_id: int = 99999, first_name: str = "Test") -> MagicMock:
     msg = MagicMock()
     msg.text = text
@@ -56,6 +57,7 @@ def _make_state(**initial_data) -> AsyncMock:
 # trigger_critical_reset
 # =============================================================================
 
+
 class TestTriggerCriticalReset:
     async def test_sets_state_and_prompts(self):
         cb = _make_callback("trigger_critical_reset")
@@ -71,18 +73,19 @@ class TestTriggerCriticalReset:
 # save_real_balance — 3 зоны
 # =============================================================================
 
+
 class TestSaveRealBalanceGreen:
     async def test_green_zone_limit_above_500(self):
         msg = _make_message("100000")
         state = _make_state()
 
         with (
-            patch("src.bot.handlers.menu.reconcile_budget_with_reality",
-                  AsyncMock(return_value=(1500.0, 20, 30000.0, 50000.0, 20000.0))),
-            patch("src.bot.handlers.menu.apply_reconciliation",
-                  AsyncMock()),
-            patch("src.bot.handlers.menu.get_main_menu_keyboard",
-                  AsyncMock()),
+            patch(
+                "src.bot.handlers.menu.reconcile_budget_with_reality",
+                AsyncMock(return_value=(1500.0, 20, 30000.0, 50000.0, 20000.0)),
+            ),
+            patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()),
+            patch("src.bot.handlers.menu.get_main_menu_keyboard", AsyncMock()),
         ):
             await save_real_balance(msg, state)
 
@@ -96,10 +99,11 @@ class TestSaveRealBalanceYellow:
         state = _make_state()
 
         with (
-            patch("src.bot.handlers.menu.reconcile_budget_with_reality",
-                  AsyncMock(return_value=(300.0, 20, 6000.0, 50000.0, 44000.0))),
-            patch("src.bot.handlers.menu.apply_reconciliation",
-                  AsyncMock()),
+            patch(
+                "src.bot.handlers.menu.reconcile_budget_with_reality",
+                AsyncMock(return_value=(300.0, 20, 6000.0, 50000.0, 44000.0)),
+            ),
+            patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()),
         ):
             await save_real_balance(msg, state)
 
@@ -113,8 +117,10 @@ class TestSaveRealBalanceRed:
         state = _make_state()
 
         with (
-            patch("src.bot.handlers.menu.reconcile_budget_with_reality",
-                  AsyncMock(return_value=(50.0, 20, 1000.0, 30000.0, 19000.0))),
+            patch(
+                "src.bot.handlers.menu.reconcile_budget_with_reality",
+                AsyncMock(return_value=(50.0, 20, 1000.0, 30000.0, 19000.0)),
+            ),
             patch("src.bot.handlers.menu.apply_reconciliation"),
         ):
             await save_real_balance(msg, state)
@@ -122,14 +128,15 @@ class TestSaveRealBalanceRed:
         state.set_state.assert_awaited_with(FreshStart.waiting_for_mandatory)
         msg.answer.assert_awaited()
 
-
     async def test_red_zone_zero_limit(self):
         msg = _make_message("10000")
         state = _make_state()
 
         with (
-            patch("src.bot.handlers.menu.reconcile_budget_with_reality",
-                  AsyncMock(return_value=(0.0, 20, 0.0, 8000.0, 2000.0))),
+            patch(
+                "src.bot.handlers.menu.reconcile_budget_with_reality",
+                AsyncMock(return_value=(0.0, 20, 0.0, 8000.0, 2000.0)),
+            ),
             patch("src.bot.handlers.menu.apply_reconciliation"),
         ):
             await save_real_balance(msg, state)
@@ -151,8 +158,10 @@ class TestSaveRealBalanceRed:
         state = _make_state()
 
         with (
-            patch("src.bot.handlers.menu.reconcile_budget_with_reality",
-                  AsyncMock(return_value=(0.0, 1, 0.0, 0.0, 0.0))),
+            patch(
+                "src.bot.handlers.menu.reconcile_budget_with_reality",
+                AsyncMock(return_value=(0.0, 1, 0.0, 0.0, 0.0)),
+            ),
             patch("src.bot.handlers.menu.apply_reconciliation"),
         ):
             await save_real_balance(msg, state)
@@ -161,6 +170,7 @@ class TestSaveRealBalanceRed:
 # =============================================================================
 # FreshStart FSM
 # =============================================================================
+
 
 class TestFreshStartSaveMandatory:
     async def test_valid_mandatory_sets_state(self):
@@ -222,12 +232,12 @@ class TestFreshStartSaveBalance:
         state = _make_state(fresh_mandatory=15000.0, fresh_black_day=5000.0)
 
         with (
-            patch("src.bot.handlers.menu.get_budget_or_none",
-                  AsyncMock(return_value=MagicMock(days_remaining=15))),
-            patch("src.bot.handlers.menu.apply_reconciliation",
-                  AsyncMock()),
-            patch("src.bot.handlers.menu.get_main_menu_keyboard",
-                  AsyncMock()),
+            patch(
+                "src.bot.handlers.menu.get_budget_or_none",
+                AsyncMock(return_value=MagicMock(days_remaining=15)),
+            ),
+            patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()),
+            patch("src.bot.handlers.menu.get_main_menu_keyboard", AsyncMock()),
         ):
             await fresh_start_save_balance(msg, state)
 
@@ -248,12 +258,9 @@ class TestFreshStartSaveBalance:
         state = _make_state(fresh_mandatory=10000.0, fresh_black_day=5000.0)
 
         with (
-            patch("src.bot.handlers.menu.get_budget_or_none",
-                  AsyncMock(return_value=None)),
-            patch("src.bot.handlers.menu.apply_reconciliation",
-                  AsyncMock()),
-            patch("src.bot.handlers.menu.get_main_menu_keyboard",
-                  AsyncMock()),
+            patch("src.bot.handlers.menu.get_budget_or_none", AsyncMock(return_value=None)),
+            patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()),
+            patch("src.bot.handlers.menu.get_main_menu_keyboard", AsyncMock()),
         ):
             await fresh_start_save_balance(msg, state)
 

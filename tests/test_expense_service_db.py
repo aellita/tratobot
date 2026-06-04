@@ -105,7 +105,9 @@ class TestGetCurrentPeriodExpensesSum:
 
     async def test_excludes_soft_deleted_expenses(self, db_session, test_budget):
         now = datetime.now(UTC)
-        db_session.add(Expense(telegram_id=99999, amount=500.0, description="кофе", date=now, is_deleted=True))
+        db_session.add(
+            Expense(telegram_id=99999, amount=500.0, description="кофе", date=now, is_deleted=True)
+        )
         db_session.add(Expense(telegram_id=99999, amount=300.0, description="обед", date=now))
         await db_session.commit()
 
@@ -115,7 +117,9 @@ class TestGetCurrentPeriodExpensesSum:
     async def test_excludes_other_users_expenses(self, db_session, test_budget):
         now = datetime.now(UTC)
         db_session.add(User(telegram_id=88888))
-        db_session.add(Expense(telegram_id=88888, amount=9999.0, description="чужая трата", date=now))
+        db_session.add(
+            Expense(telegram_id=88888, amount=9999.0, description="чужая трата", date=now)
+        )
         db_session.add(Expense(telegram_id=99999, amount=500.0, description="своя трата", date=now))
         await db_session.commit()
 
@@ -129,7 +133,11 @@ class TestGetCurrentPeriodExpensesSum:
     async def test_with_many_expenses(self, db_session, test_budget):
         now = datetime.now(UTC)
         for i in range(10):
-            db_session.add(Expense(telegram_id=99999, amount=100.0 * (i + 1), description=f"expense {i}", date=now))
+            db_session.add(
+                Expense(
+                    telegram_id=99999, amount=100.0 * (i + 1), description=f"expense {i}", date=now
+                )
+            )
         await db_session.commit()
 
         total = await get_current_period_expenses_sum(99999)
@@ -139,7 +147,9 @@ class TestGetCurrentPeriodExpensesSum:
         now = datetime.now(UTC)
         far_future = now.replace(year=now.year + 5)
         db_session.add(Expense(telegram_id=99999, amount=500.0, description="current", date=now))
-        db_session.add(Expense(telegram_id=99999, amount=9999.0, description="future", date=far_future))
+        db_session.add(
+            Expense(telegram_id=99999, amount=9999.0, description="future", date=far_future)
+        )
         await db_session.commit()
 
         total = await get_current_period_expenses_sum(99999)
@@ -156,7 +166,9 @@ class TestGetCurrentPeriodExpensesSum:
 
     async def test_very_large_expense(self, db_session, test_budget):
         now = datetime.now(UTC)
-        db_session.add(Expense(telegram_id=99999, amount=999_999_999.0, description="large", date=now))
+        db_session.add(
+            Expense(telegram_id=99999, amount=999_999_999.0, description="large", date=now)
+        )
         await db_session.commit()
 
         total = await get_current_period_expenses_sum(99999)
@@ -209,8 +221,7 @@ class TestRestoreExpense:
     async def test_restore_clears_flag(self, db_session):
         from src.services.expense_service import restore_expense
 
-        exp = Expense(telegram_id=99999, amount=500.0, description="тест",
-                       is_deleted=True)
+        exp = Expense(telegram_id=99999, amount=500.0, description="тест", is_deleted=True)
         db_session.add(exp)
         await db_session.commit()
         exp_id = exp.id
@@ -234,8 +245,7 @@ class TestRestoreExpense:
     async def test_restore_wrong_user(self, db_session):
         from src.services.expense_service import restore_expense
 
-        exp = Expense(telegram_id=99999, amount=500.0, description="тест",
-                       is_deleted=True)
+        exp = Expense(telegram_id=99999, amount=500.0, description="тест", is_deleted=True)
         db_session.add(exp)
         await db_session.commit()
 
@@ -276,8 +286,7 @@ class TestUpdateExpenseAmount:
     async def test_update_deleted_expense_fails(self, db_session):
         from src.services.expense_service import update_expense_amount
 
-        exp = Expense(telegram_id=99999, amount=500.0, description="тест",
-                       is_deleted=True)
+        exp = Expense(telegram_id=99999, amount=500.0, description="тест", is_deleted=True)
         db_session.add(exp)
         await db_session.commit()
 

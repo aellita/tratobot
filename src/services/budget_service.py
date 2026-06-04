@@ -32,13 +32,19 @@ async def get_active_budget(telegram_id: int) -> Budget | None:
     return None
 
 
-async def save_budget(telegram_id: int, month: str, income: float, mandatory: float, black_day: float, wishlist_name: str = None, wishlist_price: float = 0, period_start_day: int = 1):
+async def save_budget(
+    telegram_id: int,
+    month: str,
+    income: float,
+    mandatory: float,
+    black_day: float,
+    wishlist_name: str = None,
+    wishlist_price: float = 0,
+    period_start_day: int = 1,
+):
     async with async_session_maker() as session:
         result = await session.execute(
-            select(Budget).where(
-                Budget.telegram_id == telegram_id,
-                Budget.month == month
-            )
+            select(Budget).where(Budget.telegram_id == telegram_id, Budget.month == month)
         )
         budget = result.scalar_one_or_none()
 
@@ -58,7 +64,7 @@ async def save_budget(telegram_id: int, month: str, income: float, mandatory: fl
                 black_day_fund=black_day,
                 wishlist_name=wishlist_name or "Хотелка",
                 wishlist_target=wishlist_price,
-                period_start_day=period_start_day
+                period_start_day=period_start_day,
             )
             session.add(budget)
 
@@ -66,8 +72,12 @@ async def save_budget(telegram_id: int, month: str, income: float, mandatory: fl
 
 
 ALLOWED_FIELDS = {
-    "total_income", "mandatory_payments", "black_day_fund",
-    "free_money", "wishlist_name", "wishlist_target",
+    "total_income",
+    "mandatory_payments",
+    "black_day_fund",
+    "free_money",
+    "wishlist_name",
+    "wishlist_target",
     "period_start_day",
 }
 
@@ -78,10 +88,7 @@ async def update_budget_field(telegram_id: int, field: str, value):
     month = datetime.now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
-            select(Budget).where(
-                Budget.telegram_id == telegram_id,
-                Budget.month == month
-            )
+            select(Budget).where(Budget.telegram_id == telegram_id, Budget.month == month)
         )
         budget = result.scalar_one_or_none()
         if budget:
@@ -93,10 +100,7 @@ async def delete_current_budget(telegram_id: int):
     month = datetime.now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
-            select(Budget).where(
-                Budget.telegram_id == telegram_id,
-                Budget.month == month
-            )
+            select(Budget).where(Budget.telegram_id == telegram_id, Budget.month == month)
         )
         budget = result.scalar_one_or_none()
         if budget:
@@ -140,14 +144,23 @@ async def reconcile_budget_with_reality(
             days_left = 1
 
         new_daily_limit = max(money_for_life / days_left, 0)
-        return new_daily_limit, days_left, money_for_life, budget.mandatory_payments, budget.black_day_fund
+        return (
+            new_daily_limit,
+            days_left,
+            money_for_life,
+            budget.mandatory_payments,
+            budget.black_day_fund,
+        )
 
 
 async def apply_reconciliation(
-    telegram_id: int, free_money: float,
-    new_mandatory: float | None = None, new_black_day: float | None = None,
+    telegram_id: int,
+    free_money: float,
+    new_mandatory: float | None = None,
+    new_black_day: float | None = None,
 ) -> None:
     from datetime import datetime
+
     month = datetime.now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(

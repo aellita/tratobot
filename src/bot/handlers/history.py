@@ -46,7 +46,9 @@ async def _expense_line(idx: int, exp: Expense) -> str:
     emoji, cat_name = await _get_category_info(exp)
     date_str = exp.date.strftime("%d %b").lower()
     desc = safe(exp.description) or cat_name
-    return phrases.HISTORY_LINE.format(idx=idx, emoji=emoji, amount=f"{exp.amount:,.0f}", desc=desc, date=date_str)
+    return phrases.HISTORY_LINE.format(
+        idx=idx, emoji=emoji, amount=f"{exp.amount:,.0f}", desc=desc, date=date_str
+    )
 
 
 def _build_list_keyboard(expenses: list[Expense], page: int, total_pages: int):
@@ -54,18 +56,23 @@ def _build_list_keyboard(expenses: list[Expense], page: int, total_pages: int):
     row = []
     offset = page * PAGE_SIZE
     for i, exp in enumerate(expenses):
-        row.append(InlineKeyboardButton(
-            text=str(i + 1 + offset),
-            callback_data=f"exp_sel:{exp.id}"
-        ))
+        row.append(
+            InlineKeyboardButton(text=str(i + 1 + offset), callback_data=f"exp_sel:{exp.id}")
+        )
     if row:
         buttons.append(row)
 
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton(text=phrases.BTN_HISTORY_BACK, callback_data=f"exp_page:{page - 1}"))
+        nav.append(
+            InlineKeyboardButton(
+                text=phrases.BTN_HISTORY_BACK, callback_data=f"exp_page:{page - 1}"
+            )
+        )
     if page < total_pages - 1:
-        nav.append(InlineKeyboardButton(text=phrases.BTN_HISTORY_FWD, callback_data=f"exp_page:{page + 1}"))
+        nav.append(
+            InlineKeyboardButton(text=phrases.BTN_HISTORY_FWD, callback_data=f"exp_page:{page + 1}")
+        )
 
     if page > 0 or page < total_pages - 1:
         buttons.append(nav)
@@ -75,24 +82,41 @@ def _build_list_keyboard(expenses: list[Expense], page: int, total_pages: int):
 
 
 def _build_detail_keyboard(expense_id: int):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text=phrases.BTN_EDIT_AMOUNT, callback_data=f"exp_edit:{expense_id}"),
-            InlineKeyboardButton(text=phrases.BTN_DELETE, callback_data=f"exp_del:{expense_id}"),
-        ],
-        [InlineKeyboardButton(text=phrases.BTN_CHANGE_CATEGORY, callback_data=f"change_cat:{expense_id}")],
-        [InlineKeyboardButton(text=phrases.BTN_BACK_TO_LIST, callback_data="exp_back")],
-    ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_EDIT_AMOUNT, callback_data=f"exp_edit:{expense_id}"
+                ),
+                InlineKeyboardButton(
+                    text=phrases.BTN_DELETE, callback_data=f"exp_del:{expense_id}"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_CHANGE_CATEGORY, callback_data=f"change_cat:{expense_id}"
+                )
+            ],
+            [InlineKeyboardButton(text=phrases.BTN_BACK_TO_LIST, callback_data="exp_back")],
+        ]
+    )
 
 
 def _build_deleted_keyboard(expense_id: int):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=phrases.BTN_RESTORE, callback_data=f"exp_undo:{expense_id}")],
-        [InlineKeyboardButton(text=phrases.BTN_BACK_TO_LIST, callback_data="exp_back")],
-    ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_RESTORE, callback_data=f"exp_undo:{expense_id}"
+                )
+            ],
+            [InlineKeyboardButton(text=phrases.BTN_BACK_TO_LIST, callback_data="exp_back")],
+        ]
+    )
 
 
 # ============ HISTORY LIST ============
+
 
 @router.callback_query(F.data == "menu_history")
 async def cmd_history(callback: CallbackQuery, state: FSMContext):
@@ -104,7 +128,7 @@ async def cmd_history(callback: CallbackQuery, state: FSMContext):
     if total == 0:
         await callback.message.edit_text(
             text=phrases.HISTORY_EMPTY,
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
 
@@ -112,16 +136,15 @@ async def cmd_history(callback: CallbackQuery, state: FSMContext):
     for i, exp in enumerate(expenses):
         line = await _expense_line(i + 1, exp)
         lines.append(line)
-    text = (phrases.HISTORY_PAGE.format(page=1, total=total_pages)
-            + "\n".join(lines))
+    text = phrases.HISTORY_PAGE.format(page=1, total=total_pages) + "\n".join(lines)
 
     await callback.message.edit_text(
-        text=text,
-        reply_markup=_build_list_keyboard(expenses, 0, total_pages)
+        text=text, reply_markup=_build_list_keyboard(expenses, 0, total_pages)
     )
 
 
 # ============ PAGINATION ============
+
 
 @router.callback_query(F.data.startswith("exp_page:"))
 async def history_page(callback: CallbackQuery):
@@ -141,16 +164,15 @@ async def history_page(callback: CallbackQuery):
     for i, exp in enumerate(expenses):
         line = await _expense_line(i + 1 + page * PAGE_SIZE, exp)
         lines.append(line)
-    text = (phrases.HISTORY_PAGE.format(page=page + 1, total=total_pages)
-            + "\n".join(lines))
+    text = phrases.HISTORY_PAGE.format(page=page + 1, total=total_pages) + "\n".join(lines)
 
     await callback.message.edit_text(
-        text=text,
-        reply_markup=_build_list_keyboard(expenses, page, total_pages)
+        text=text, reply_markup=_build_list_keyboard(expenses, page, total_pages)
     )
 
 
 # ============ EXPENSE DETAIL ============
+
 
 @router.callback_query(F.data.startswith("exp_sel:"))
 async def expense_detail(callback: CallbackQuery):
@@ -169,7 +191,7 @@ async def expense_detail(callback: CallbackQuery):
             select(Expense).where(
                 Expense.id == expense_id,
                 Expense.telegram_id == callback.from_user.id,
-                Expense.is_deleted == False
+                Expense.is_deleted == False,
             )
         )
         expense = result.scalar_one_or_none()
@@ -177,23 +199,27 @@ async def expense_detail(callback: CallbackQuery):
     if not expense:
         await callback.message.edit_text(
             text=phrases.ERR_EXPENSE_NOT_FOUND_DELETED,
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
 
     emoji, cat_name = await _get_category_info(expense)
     date_str = expense.date.strftime("%d %B %Y").lower()
 
-    desc = safe(expense.description) or '—'
-    text = phrases.EXPENSE_DETAIL.format(emoji=emoji, cat=cat_name.capitalize(), amount=f"{expense.amount:,.0f}", desc=desc, date=date_str)
-
-    await callback.message.edit_text(
-        text=text,
-        reply_markup=_build_detail_keyboard(expense.id)
+    desc = safe(expense.description) or "—"
+    text = phrases.EXPENSE_DETAIL.format(
+        emoji=emoji,
+        cat=cat_name.capitalize(),
+        amount=f"{expense.amount:,.0f}",
+        desc=desc,
+        date=date_str,
     )
+
+    await callback.message.edit_text(text=text, reply_markup=_build_detail_keyboard(expense.id))
 
 
 # ============ DELETE ============
+
 
 @router.callback_query(F.data.startswith("exp_del:"))
 async def delete_expense(callback: CallbackQuery):
@@ -212,17 +238,20 @@ async def delete_expense(callback: CallbackQuery):
     if not expense:
         await callback.message.edit_text(
             text=phrases.ERR_DELETE_FAILED,
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
 
     await callback.message.edit_text(
-        text=phrases.DELETE_CONFIRM.format(amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC),
-        reply_markup=_build_deleted_keyboard(expense.id)
+        text=phrases.DELETE_CONFIRM.format(
+            amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC
+        ),
+        reply_markup=_build_deleted_keyboard(expense.id),
     )
 
 
 # ============ UNDO DELETE ============
+
 
 @router.callback_query(F.data.startswith("exp_undo:"))
 async def undo_delete(callback: CallbackQuery):
@@ -241,17 +270,20 @@ async def undo_delete(callback: CallbackQuery):
     if not expense:
         await callback.message.edit_text(
             text=phrases.ERR_RESTORE_FAILED,
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
 
     await callback.message.edit_text(
-        text=phrases.RESTORE_CONFIRM.format(amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC),
-        reply_markup=_build_detail_keyboard(expense.id)
+        text=phrases.RESTORE_CONFIRM.format(
+            amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC
+        ),
+        reply_markup=_build_detail_keyboard(expense.id),
     )
 
 
 # ============ EDIT AMOUNT (FSM) ============
+
 
 @router.callback_query(F.data.startswith("exp_edit:"))
 async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
@@ -270,7 +302,7 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
             select(Expense).where(
                 Expense.id == expense_id,
                 Expense.telegram_id == callback.from_user.id,
-                Expense.is_deleted == False
+                Expense.is_deleted == False,
             )
         )
         expense = result.scalar_one_or_none()
@@ -278,25 +310,21 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
     if not expense:
         await callback.message.edit_text(
             text=phrases.ERR_EXPENSE_NOT_FOUND,
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
 
     await state.update_data(edit_expense_id=expense.id)
     await state.set_state(EditExpense.waiting_for_amount)
 
-    prompt = phrases.EDIT_AMOUNT_PROMPT.format(amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC)
+    prompt = phrases.EDIT_AMOUNT_PROMPT.format(
+        amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC
+    )
     try:
-        await callback.message.edit_text(
-            text=prompt,
-            reply_markup=get_cancel_keyboard()
-        )
+        await callback.message.edit_text(text=prompt, reply_markup=get_cancel_keyboard())
     except TelegramBadRequest:
         await callback.message.delete()
-        await callback.message.answer(
-            text=prompt,
-            reply_markup=get_cancel_keyboard()
-        )
+        await callback.message.answer(text=prompt, reply_markup=get_cancel_keyboard())
 
 
 @router.message(EditExpense.waiting_for_amount)
@@ -334,12 +362,15 @@ async def save_edit_expense(message: Message, state: FSMContext):
     await state.clear()
 
     await message.answer(
-        text=phrases.AMOUNT_UPDATED.format(amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC),
-        reply_markup=await get_main_menu_keyboard(message.from_user.id)
+        text=phrases.AMOUNT_UPDATED.format(
+            amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC
+        ),
+        reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
 
 
 # ============ BACK TO LIST ============
+
 
 @router.callback_query(F.data == "exp_back")
 async def back_to_list(callback: CallbackQuery, state: FSMContext):
@@ -351,7 +382,7 @@ async def back_to_list(callback: CallbackQuery, state: FSMContext):
     if total == 0:
         await callback.message.edit_text(
             text=phrases.HISTORY_EMPTY_BACK,
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
 
@@ -359,10 +390,8 @@ async def back_to_list(callback: CallbackQuery, state: FSMContext):
     for i, exp in enumerate(expenses):
         line = await _expense_line(i + 1, exp)
         lines.append(line)
-    text = (phrases.HISTORY_PAGE.format(page=1, total=total_pages)
-            + "\n".join(lines))
+    text = phrases.HISTORY_PAGE.format(page=1, total=total_pages) + "\n".join(lines)
 
     await callback.message.edit_text(
-        text=text,
-        reply_markup=_build_list_keyboard(expenses, 0, total_pages)
+        text=text, reply_markup=_build_list_keyboard(expenses, 0, total_pages)
     )

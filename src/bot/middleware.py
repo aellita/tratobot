@@ -22,10 +22,7 @@ class RateLimitMiddleware(BaseMiddleware):
         now = time.monotonic()
 
         window_start = now - BURST_WINDOW
-        self._burst_counts[user_id] = [
-            t for t in self._burst_counts[user_id]
-            if t > window_start
-        ]
+        self._burst_counts[user_id] = [t for t in self._burst_counts[user_id] if t > window_start]
         if len(self._burst_counts[user_id]) >= BURST_LIMIT:
             if isinstance(event, Message):
                 await event.answer("⏳ Слишком быстро. Сбавь темп.")

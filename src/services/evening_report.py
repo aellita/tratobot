@@ -22,9 +22,15 @@ class EveningState(StatesGroup):
     filling = State()
 
 
-EVENING_KB = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text=phrases.BTN_SHOW_REPORT, callback_data="show_final_evening_report")],
-])
+EVENING_KB = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text=phrases.BTN_SHOW_REPORT, callback_data="show_final_evening_report"
+            )
+        ],
+    ]
+)
 
 INITIAL_TEXT = phrases.EVENING_INITIAL
 
@@ -36,7 +42,9 @@ def _build_container_text(session_expenses: list[str]) -> str:
     return phrases.EVENING_CONTAINER.format(expenses=expenses_text)
 
 
-def get_evening_message(limit: float, spent: float, available_cash: float, days_left: int, wishlist_name: str) -> str:
+def get_evening_message(
+    limit: float, spent: float, available_cash: float, days_left: int, wishlist_name: str
+) -> str:
     if spent <= limit:
         saved = limit - spent
         if int(spent) == 0:
@@ -47,7 +55,9 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
             ]
         else:
             green_phrases = [
-                phrases.EVENING_GREEN_1.format(limit=int(limit), spent=int(spent), saved=int(saved)),
+                phrases.EVENING_GREEN_1.format(
+                    limit=int(limit), spent=int(spent), saved=int(saved)
+                ),
                 phrases.EVENING_GREEN_2.format(limit=int(limit), spent=int(spent)),
                 phrases.EVENING_GREEN_3.format(limit=int(limit), spent=int(spent)),
                 phrases.EVENING_GREEN_4.format(spent=int(spent), saved=int(saved)),
@@ -61,9 +71,9 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
 
     evening_phrases = [
         phrases.EVENING_OVER_1.format(over=int(overdraft), days=days_to_grease),
-
-        phrases.EVENING_OVER_2.format(over=int(overdraft), wishlist=safe(wishlist_name), delay=wishlist_delay),
-
+        phrases.EVENING_OVER_2.format(
+            over=int(overdraft), wishlist=safe(wishlist_name), delay=wishlist_delay
+        ),
         phrases.EVENING_OVER_3.format(over=int(overdraft), days=min(5, days_left)),
     ]
     return random.choice(evening_phrases)
@@ -87,6 +97,7 @@ async def send_evening_teaser(bot: Bot, storage: BaseStorage):
                     continue
 
             from .budget_service import get_active_budget
+
             budget = await get_active_budget(tg_id)
             if not budget or budget.daily_limit <= 0:
                 continue
@@ -137,9 +148,15 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
             await bot.send_message(
                 tg_id,
                 phrases.AUTO_CLOSE.format(total=f"{int(total):,}"),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
-                ]),
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=phrases.BTN_BACK_MAIN, callback_data="open_menu"
+                            )
+                        ],
+                    ]
+                ),
             )
 
             await state.clear()
