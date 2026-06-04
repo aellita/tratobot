@@ -180,8 +180,9 @@
   - `expense_service.py` — round-up сообщение
   - `categorization.py` — GREETINGS + DEFAULT_CATEGORIES
 - **Не извлечены** (требуют рефакторинга random.choice): статусные footer'ы (11 групп), menu_daily блок, fresh-start step-тексты, YELLOW_SIM_*/RED_* зоны в morning_report
-- **E501:** 117→144 (часть замен добавила длинные `.format(...)`; финальная чистка позже)
-- **Все 269 тестов проходят**, ruff — только известные E501/E712 (безопасные)
+- **E501:** 117→144→135 (добавила `per-file-ignores` для тестов)
+- **ruff format:** 20 файлов отформатировано для CI compliance
+- **Все 269 тестов проходят**, ruff — только известные E501 (135) + E712 (20, безопасные для SQLAlchemy)
 
 ---
 
