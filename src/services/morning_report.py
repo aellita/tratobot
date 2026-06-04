@@ -1,15 +1,14 @@
-import random
-import logging
 import asyncio
-from datetime import datetime
+import logging
+import random
 
 from aiogram import Bot
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
-from ..db.models.models import User, UserSettings, Budget
-from .expense_service import get_yesterday_expenses_sum, get_current_period_expenses_sum
+from ..db.models.models import User, UserSettings
+from .expense_service import get_current_period_expenses_sum, get_yesterday_expenses_sum
 
 logger = logging.getLogger(__name__)
 

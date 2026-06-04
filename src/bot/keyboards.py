@@ -1,10 +1,10 @@
 from datetime import datetime
 
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from ..db.database import async_session_maker
-from ..db.models.models import Budget, Expense
+from ..db.models.models import Budget
 
 
 async def get_main_menu_keyboard(telegram_id: int = None):

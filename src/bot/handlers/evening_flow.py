@@ -1,19 +1,27 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from sqlalchemy import select
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from ...db.database import async_session_maker
 from ...db.models.models import Expense
-from ...utils.helpers import safe
-from ...services.expense_service import parse_expense_text, get_today_expenses_sum, get_today_daily_limit
-from ...services.evening_report import EveningState, EVENING_KB, _build_container_text, get_evening_message
 from ...services.budget_service import get_active_budget
-from ...services.expense_service import get_current_period_expenses_sum
+from ...services.evening_report import (
+    EVENING_KB,
+    EveningState,
+    _build_container_text,
+    get_evening_message,
+)
+from ...services.expense_service import (
+    get_current_period_expenses_sum,
+    get_today_daily_limit,
+    get_today_expenses_sum,
+    parse_expense_text,
+)
+from ...utils.helpers import safe
 from ..keyboards import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
@@ -47,7 +55,7 @@ async def handle_evening_expense(message: Message, state: FSMContext):
             telegram_id=user_id,
             amount=amount,
             description=description,
-            date=datetime.now(timezone.utc),
+            date=datetime.now(UTC),
         )
         session.add(expense)
         await session.commit()

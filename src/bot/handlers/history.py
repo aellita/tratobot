@@ -1,22 +1,21 @@
-from datetime import datetime
 
-from aiogram import Router, F
+from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 
 from ...db.database import async_session_maker
-from ...db.models.models import Expense, Category
-from ...utils.helpers import parse_amount, safe
+from ...db.models.models import Category, Expense
+from ...services.categorization import get_category_display
 from ...services.expense_service import (
     get_expense_page,
-    soft_delete_expense,
     restore_expense,
+    soft_delete_expense,
     update_expense_amount,
 )
-from ...services.categorization import get_category_display
+from ...utils.helpers import parse_amount, safe
 from ..keyboards import get_cancel_keyboard, get_main_menu_keyboard
 
 router = Router()

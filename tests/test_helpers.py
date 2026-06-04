@@ -1,5 +1,6 @@
 import pytest
-from src.utils.helpers import parse_amount, safe, parse_callback, extract_callback_id
+
+from src.utils.helpers import extract_callback_id, parse_amount, parse_callback, safe
 
 
 class TestParseAmount:

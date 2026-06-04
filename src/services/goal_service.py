@@ -1,8 +1,9 @@
 from datetime import datetime
+
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
-from ..db.models.models import Wishlist, Budget
+from ..db.models.models import Budget, Wishlist
 
 
 async def get_active_goal(telegram_id: int) -> Wishlist | None:

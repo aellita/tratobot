@@ -1,10 +1,9 @@
-from aiogram import Router
+from aiogram import Bot, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
-from aiogram import Bot
 
-from ...services.evening_report import send_evening_teaser, EveningState, EVENING_KB, INITIAL_TEXT
+from ...services.evening_report import EVENING_KB, INITIAL_TEXT, EveningState, send_evening_teaser
 from ...services.morning_report import send_morning_reports
 
 router = Router()

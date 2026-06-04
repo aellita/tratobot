@@ -1,5 +1,8 @@
-import pytest
-from src.services.expense_service import parse_expense_text, parse_multi_expense_text, clean_description
+from src.services.expense_service import (
+    clean_description,
+    parse_expense_text,
+    parse_multi_expense_text,
+)
 
 
 class TestParseExpenseText:

@@ -1,14 +1,16 @@
-from datetime import datetime, timezone
-from sqlalchemy import String, Integer, Float, DateTime, Boolean, ForeignKey, Text, Enum as SQLEnum
+from datetime import UTC, datetime
+from enum import StrEnum
+
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from enum import Enum
 
 
 class Base(DeclarativeBase):
     pass
 
 
-class CategoryType(str, Enum):
+class CategoryType(StrEnum):
     FOOD = "food"
     TRANSPORT = "transport"
     ENTERTAINMENT = "entertainment"
@@ -19,20 +21,20 @@ class CategoryType(str, Enum):
 
 class User(Base):
     __tablename__ = "users"
-    
+
     telegram_id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class Budget(Base):
     __tablename__ = "budgets"
-    
+
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     month: Mapped[str] = mapped_column(String(7))
-    
+
     total_income: Mapped[float] = mapped_column(Float, default=0)
     mandatory_payments: Mapped[float] = mapped_column(Float, default=0)
     black_day_fund: Mapped[float] = mapped_column(Float, default=0)
@@ -40,10 +42,10 @@ class Budget(Base):
     wishlist_target: Mapped[float] = mapped_column(Float, default=0)
     period_start_day: Mapped[int] = mapped_column(Integer, default=1)
     free_money: Mapped[float] = mapped_column(Float, default=0)
-    
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
     @property
     def _clamped_start(self) -> int:
         import calendar
@@ -87,7 +89,7 @@ class Budget(Base):
 
 class Category(Base):
     __tablename__ = "categories"
-    
+
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int | None] = mapped_column(ForeignKey("users.telegram_id"), nullable=True)
     name: Mapped[str] = mapped_column(String(100))
@@ -97,13 +99,13 @@ class Category(Base):
 
 class Expense(Base):
     __tablename__ = "expenses"
-    
+
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     amount: Mapped[float] = mapped_column(Float)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    date: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    date: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     is_emergency: Mapped[bool] = mapped_column(Boolean, default=False)
     is_from_wishlist: Mapped[bool] = mapped_column(Boolean, default=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -111,19 +113,19 @@ class Expense(Base):
 
 class Wishlist(Base):
     __tablename__ = "wishlists"
-    
+
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     name: Mapped[str] = mapped_column(String(255))
     target_amount: Mapped[float] = mapped_column(Float)
     current_amount: Mapped[float] = mapped_column(Float, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class BlackDayFund(Base):
     __tablename__ = "black_day_funds"
-    
+
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
     month: Mapped[str] = mapped_column(String(7))
@@ -133,7 +135,7 @@ class BlackDayFund(Base):
 
 class UserSettings(Base):
     __tablename__ = "user_settings"
-    
+
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"), unique=True)
     morning_report_time: Mapped[str] = mapped_column(String(5), default="08:00")

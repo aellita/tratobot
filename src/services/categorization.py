@@ -1,5 +1,6 @@
 import difflib
 import json
+
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
@@ -196,5 +197,5 @@ async def detect_category_db(text: str, telegram_id: int) -> tuple[Category | No
     Returns (category, matched_keyword).
     Seeds / migrates categories for the user if needed.
     """
-    user_cats = await seed_user_categories(telegram_id)
+    await seed_user_categories(telegram_id)
     return await find_closest_category(text, telegram_id)

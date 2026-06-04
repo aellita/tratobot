@@ -2,8 +2,7 @@ import time
 from collections import defaultdict
 
 from aiogram import BaseMiddleware
-from aiogram.types import Message, CallbackQuery
-
+from aiogram.types import CallbackQuery, Message
 
 RATE_LIMIT = 0.7
 BURST_LIMIT = 5

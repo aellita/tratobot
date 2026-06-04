@@ -1,6 +1,4 @@
-import pytest
-from datetime import datetime
-from src.db.models.models import User, Budget, Wishlist
+from src.db.models.models import Wishlist
 from src.services.goal_service import add_spare_change_to_goal, deduct_from_goal, get_active_goal
 
 

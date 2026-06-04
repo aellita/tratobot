@@ -1,21 +1,38 @@
 import logging
 import random
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from aiogram import Router, F, Bot
+from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from cachetools import TTLCache
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
 from ...db.database import async_session_maker
-from ...db.models.models import User, Budget, Expense, Category, Wishlist, UserSettings
-from ...services.budget_service import save_budget, update_budget_field, reconcile_budget_with_reality, apply_reconciliation
-from ...services.categorization import GREETINGS, detect_category_db, get_category_display, add_keyword_to_category, get_user_categories, seed_user_categories, clean_and_normalize, _dump_keywords
-from ...services.expense_service import parse_expense_text, parse_multi_expense_text, try_apply_round_up
+from ...db.models.models import Budget, Category, Expense, User, UserSettings, Wishlist
+from ...services.budget_service import (
+    apply_reconciliation,
+    delete_current_budget,
+    reconcile_budget_with_reality,
+    save_budget,
+    update_budget_field,
+)
+from ...services.categorization import (
+    GREETINGS,
+    _dump_keywords,
+    add_keyword_to_category,
+    clean_and_normalize,
+    detect_category_db,
+    get_category_display,
+    seed_user_categories,
+)
+from ...services.expense_service import (
+    parse_multi_expense_text,
+    try_apply_round_up,
+)
 from ...services.user_service import get_or_create_user
 from ...utils.helpers import parse_amount, safe
 from ..keyboards import (
@@ -23,11 +40,10 @@ from ..keyboards import (
     get_main_menu_keyboard,
     get_onboarding_keyboard,
     get_period_start_keyboard,
+    get_rounding_mode_keyboard,
     get_settings_keyboard,
     get_start_choice_keyboard,
-    get_rounding_mode_keyboard,
 )
-from ...services.budget_service import delete_current_budget
 
 router = Router()
 
@@ -286,7 +302,7 @@ async def menu_status(callback: CallbackQuery):
     if remaining_today > 0:
         today_line = f"🟢 <b>Осталось на сегодня:</b> {int(remaining_today)} ₽"
     else:
-        today_line = f"🛑 <b>Осталось на сегодня:</b> 0 ₽ (Траты на сегодня стоп!)"
+        today_line = "🛑 <b>Осталось на сегодня:</b> 0 ₽ (Траты на сегодня стоп!)"
 
     spent_line = f"📉 <b>Потрачено сегодня:</b> {int(spent_today):,} ₽"
     if spent_today > dl_base:
@@ -297,7 +313,7 @@ async def menu_status(callback: CallbackQuery):
     elif remaining_period > 0:
         period_left_line = f"💵 <b>Остаток на жизнь:</b> {int(remaining_period):,} ₽"
     else:
-        period_left_line = f"💵 <b>Остаток на жизнь:</b> 0 ₽ 💸"
+        period_left_line = "💵 <b>Остаток на жизнь:</b> 0 ₽ 💸"
 
     text = (
         f"📊 <b>ФИНАНСОВЫЙ СТАТУС</b>\n\n"
@@ -965,7 +981,7 @@ async def process_expense(message: Message, state: FSMContext):
                     amount=amount,
                     description=description or cat_name,
                     category_id=cat_id,
-                    date=datetime.now(timezone.utc)
+                    date=datetime.now(UTC)
                 )
                 session.add(expense)
                 await session.commit()
@@ -1335,13 +1351,13 @@ async def save_real_balance(message: Message, state: FSMContext):
     # 🔴 Зона 3: Тотальный фреш-старт (лимит < 100₽ или в минусе)
     await state.set_state(FreshStart.waiting_for_mandatory)
     msg = await message.answer(
-        text=f"🚨 <b>Бро, это системный сбой!</b>\n\n"
-             f"На твоей карте осталось меньше, чем мы отложили "
-             f"на Обязательные платежи и Кубышку.\n"
-             f"Математика больше не работает. Твой лимит на жизнь: <b>0 ₽</b>.\n\n"
-             f"Нам нужен <b>Тотальный Фреш-Старт</b>. Мы обнулим все старые "
-             f"планы и ты введёшь новые, честные цифры.\n\n"
-             f"Готова пересобрать бюджет за 1 минуту?",
+        text="🚨 <b>Бро, это системный сбой!</b>\n\n"
+             "На твоей карте осталось меньше, чем мы отложили "
+             "на Обязательные платежи и Кубышку.\n"
+             "Математика больше не работает. Твой лимит на жизнь: <b>0 ₽</b>.\n\n"
+             "Нам нужен <b>Тотальный Фреш-Старт</b>. Мы обнулим все старые "
+             "планы и ты введёшь новые, честные цифры.\n\n"
+             "Готова пересобрать бюджет за 1 минуту?",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⚙️ Сбросить всё и начать заново", callback_data="fresh_start_begin")],
             [InlineKeyboardButton(text="⬅️ Отмена", callback_data="cancel")],
@@ -1822,7 +1838,7 @@ async def handle_text(message: Message, state: FSMContext):
                         amount=amount,
                         description=description or cat_name,
                         category_id=cat_id,
-                        date=datetime.now(timezone.utc)
+                        date=datetime.now(UTC)
                     )
                     session.add(expense)
                     await session.commit()

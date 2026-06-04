@@ -1,6 +1,8 @@
-import pytest
 from datetime import datetime
-from src.db.models.models import User, Budget
+
+import pytest
+
+from src.db.models.models import Budget, User
 from src.services.budget_service import (
     get_active_budget,
     reconcile_budget_with_reality,

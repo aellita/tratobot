@@ -1,7 +1,6 @@
 import html
 import math
 
-
 MAX_RETRIES = 3
 
 
@@ -15,7 +14,7 @@ def parse_amount(text: str, *, allow_zero: bool = False) -> float:
     if amount >= 1e12:
         raise ValueError(f"Amount too large: {amount}")
     if not allow_zero and amount == 0:
-        raise ValueError(f"Zero amount not allowed")
+        raise ValueError("Zero amount not allowed")
     return amount
 
 

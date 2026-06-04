@@ -5,13 +5,13 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from .handlers.menu import router as menu_router
-from .handlers.history import router as history_router
-from .handlers.test_commands import router as test_router
-from .handlers.evening_flow import router as evening_router
-from .middleware import RateLimitMiddleware
 from ..core.config import settings
-from ..db.database import init_db, close_db, engine, migrate_schema
+from ..db.database import close_db, init_db, migrate_schema
+from .handlers.evening_flow import router as evening_router
+from .handlers.history import router as history_router
+from .handlers.menu import router as menu_router
+from .handlers.test_commands import router as test_router
+from .middleware import RateLimitMiddleware
 from .scheduler import setup_scheduler, stop_scheduler
 
 logging.basicConfig(level=logging.INFO)

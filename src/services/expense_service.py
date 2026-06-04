@@ -1,8 +1,9 @@
-from datetime import datetime, date, time
-from sqlalchemy import select, func
+from datetime import date, datetime, time
+
+from sqlalchemy import func, select
 
 from ..db.database import async_session_maker
-from ..db.models.models import Expense, Budget, UserSettings
+from ..db.models.models import Expense, UserSettings
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
@@ -188,6 +189,7 @@ async def get_today_daily_limit(telegram_id: int) -> float:
 async def get_current_period_expenses_sum(telegram_id: int) -> float:
     import calendar
     from datetime import timedelta
+
     from .budget_service import get_active_budget
 
     budget = await get_active_budget(telegram_id)

@@ -1,19 +1,18 @@
-import random
-import logging
 import asyncio
-from datetime import datetime
+import logging
+import random
 
 from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.base import StorageKey, BaseStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.storage.base import BaseStorage, StorageKey
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
 from ..db.models.models import User, UserSettings
 from ..utils.helpers import safe
-from .expense_service import get_today_expenses_sum, get_today_daily_limit
+from .expense_service import get_today_expenses_sum
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +52,11 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
                 f"🔋 <b>Вечерний итог:</b>\nБро, сегодня трат не было! Лимит {int(limit)}₽ — целёхонек. "
                 f"Если сегодня всё-таки были расходы и ты забыл(а) их записать, допиши прямо сейчас — я пересчитаю! 📝",
 
-                f"🌟 <b>День без трат?</b>\nХм, интересно. Либо ты сегодня непривычно frugal, либо забыл что-то внести. "
-                f"Напоминаю: траты можно дописывать в любой момент обычным сообщением.",
+                "🌟 <b>День без трат?</b>\nХм, интересно. Либо ты сегодня непривычно frugal, либо забыл что-то внести. "
+                "Напоминаю: траты можно дописывать в любой момент обычным сообщением.",
 
-                f"💎 <b>Финансовый отчёт:</b>\nЗа день потрачено 0₽. Если это ошибка и ты что-то упустил(а) — "
-                f"просто напиши мне сумму, я обновлю отчёт и пересчитаю прогноз!",
+                "💎 <b>Финансовый отчёт:</b>\nЗа день потрачено 0₽. Если это ошибка и ты что-то упустил(а) — "
+                "просто напиши мне сумму, я обновлю отчёт и пересчитаю прогноз!",
             ]
         else:
             green_phrases = [

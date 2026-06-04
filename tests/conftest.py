@@ -1,18 +1,19 @@
-from datetime import datetime, timezone
-from unittest.mock import patch
-
 import asyncio
+from datetime import UTC, datetime
+
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.db.models.models import Base, User, Budget, Wishlist, Expense, UserSettings
-
+import src.bot.handlers.evening_flow as _eve_h
+import src.bot.handlers.history as _hist_h
+import src.bot.handlers.menu as _menu_h
+import src.bot.keyboards as _kb
 import src.db.database as _db
 import src.services.budget_service as _bs
-import src.services.goal_service as _gs
 import src.services.expense_service as _es
-
+import src.services.goal_service as _gs
+from src.db.models.models import Base, Budget, Expense, User, UserSettings, Wishlist
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -40,7 +41,7 @@ async def session_maker(engine):
 
 @pytest_asyncio.fixture(autouse=True)
 async def _patch_session_maker(session_maker, monkeypatch):
-    for module in [_db, _bs, _gs, _es]:
+    for module in [_db, _kb, _bs, _gs, _es, _menu_h, _hist_h, _eve_h]:
         monkeypatch.setattr(module, "async_session_maker", session_maker)
 
 
@@ -96,7 +97,7 @@ async def test_expense(db_session, test_budget):
         telegram_id=99999,
         amount=500.0,
         description="кофе",
-        date=datetime.now(timezone.utc),
+        date=datetime.now(UTC),
     )
     db_session.add(expense)
     await db_session.commit()

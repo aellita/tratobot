@@ -1,12 +1,11 @@
 import logging
 
+from aiogram import Bot
+from aiogram.fsm.storage.base import BaseStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from aiogram.fsm.storage.base import BaseStorage
 
-from aiogram import Bot
-
-from ..services.evening_report import send_evening_teaser, send_auto_close_reports
+from ..services.evening_report import send_auto_close_reports, send_evening_teaser
 from ..services.morning_report import send_morning_reports
 
 logger = logging.getLogger(__name__)

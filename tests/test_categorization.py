@@ -1,7 +1,8 @@
-import pytest
 from src.services.categorization import (
-    clean_and_normalize, get_category_display,
-    _parse_keywords, _dump_keywords
+    _dump_keywords,
+    _parse_keywords,
+    clean_and_normalize,
+    get_category_display,
 )
 
 
