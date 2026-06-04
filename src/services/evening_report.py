@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from ..db.database import async_session_maker
 from ..db.models.models import User, UserSettings
+from ..utils import phrases
 from ..utils.helpers import safe
 from .expense_service import get_today_expenses_sum
 
@@ -22,26 +23,17 @@ class EveningState(StatesGroup):
 
 
 EVENING_KB = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="🏁 Показать отчет", callback_data="show_final_evening_report")],
+    [InlineKeyboardButton(text=phrases.BTN_SHOW_REPORT, callback_data="show_final_evening_report")],
 ])
 
-INITIAL_TEXT = (
-    "👁 День подошел к концу, время зафиксировать добычу.\n\n"
-    "Если забыла внести какие-то расходы (аптеку, такси или тот самый кофе), "
-    "просто напиши их сюда обычным сообщением. Я добавлю их к сегодняшнему дню.\n\n"
-    "Если всё учтено — отсекаем лишнее и смотрим итог."
-)
+INITIAL_TEXT = phrases.EVENING_INITIAL
 
 
 def _build_container_text(session_expenses: list[str]) -> str:
     if not session_expenses:
         return INITIAL_TEXT
     expenses_text = "\n".join(session_expenses)
-    return (
-        f"👁 Оп, поймал. Докидываю в общую кучу, вот что пока вспомнили:\n\n"
-        f"{expenses_text}\n\n"
-        f"Что-то еще выпало из кармана? Пиши, не стесняйся. Или сворачиваемся."
-    )
+    return phrases.EVENING_CONTAINER.format(expenses=expenses_text)
 
 
 def get_evening_message(limit: float, spent: float, available_cash: float, days_left: int, wishlist_name: str) -> str:
@@ -49,21 +41,16 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
         saved = limit - spent
         if int(spent) == 0:
             green_phrases = [
-                f"🔋 <b>Вечерний итог:</b>\nБро, сегодня трат не было! Лимит {int(limit)}₽ — целёхонек. "
-                f"Если сегодня всё-таки были расходы и ты забыл(а) их записать, допиши прямо сейчас — я пересчитаю! 📝",
-
-                "🌟 <b>День без трат?</b>\nХм, интересно. Либо ты сегодня непривычно frugal, либо забыл что-то внести. "
-                "Напоминаю: траты можно дописывать в любой момент обычным сообщением.",
-
-                "💎 <b>Финансовый отчёт:</b>\nЗа день потрачено 0₽. Если это ошибка и ты что-то упустил(а) — "
-                "просто напиши мне сумму, я обновлю отчёт и пересчитаю прогноз!",
+                phrases.EVENING_ZERO_1.format(limit=int(limit)),
+                phrases.EVENING_ZERO_2,
+                phrases.EVENING_ZERO_3,
             ]
         else:
             green_phrases = [
-                f"🔋 <b>Вечерний итог:</b>\nБро, ты сегодня просто машина! Твой лимит был {int(limit)}₽, а потратил ты всего {int(spent)}₽. Сэкономленные <b>{int(saved)}₽</b> я мысленно откладываю в счет твоей Хотелки. Спи спокойно, день закрыт в плюс! 🥳",
-                f"🌟 <b>Управленческий триумф!</b>\nПотрачено всего {int(spent)}₽ из {int(limit)}₽. Ты удержал баланс, а это значит, что мы на один шаг ближе к твоим целям. Горжусь тобой, иди отдыхай! 🤜🤛",
-                f"💎 <b>Финансовый флекс:</b>\nСегодня мы не спустили деньги на ветер. Лимит: {int(limit)}₽, факт: {int(spent)}₽. Кубышка довольно урчит, а Хотелка становится ближе. Ложись спать с чистой совестью! 💤",
-                f"🧘 <b>Дзен в кошельке:</b>\n{int(spent)}₽ потрачено, {int(saved)}₽ спасено. Ты контролируешь свои деньги, а не они тебя. Отличный день, бро. Завтра продолжим в том же духе!",
+                phrases.EVENING_GREEN_1.format(limit=int(limit), spent=int(spent), saved=int(saved)),
+                phrases.EVENING_GREEN_2.format(limit=int(limit), spent=int(spent)),
+                phrases.EVENING_GREEN_3.format(limit=int(limit), spent=int(spent)),
+                phrases.EVENING_GREEN_4.format(spent=int(spent), saved=int(saved)),
             ]
         return random.choice(green_phrases)
 
@@ -73,11 +60,11 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
     wishlist_delay = max(1, int(overdraft / limit)) if limit > 0 else 1
 
     evening_phrases = [
-        f"👀 <b>Ночной аудит:</b>\nСегодня мы перебрали на <b>{int(overdraft)} ₽</b>. Математика штука упрямая: если продолжим в том же духе, перейдём на гречку и воду уже через <b>{days_to_grease} дн.</b> Отдыхай, завтра придумаем, как вырулить! 🔧",
+        phrases.EVENING_OVER_1.format(over=int(overdraft), days=days_to_grease),
 
-        f"🔋 <b>Вечерний аудит:</b>\nСегодня мы шиканули на лишние <b>{int(overdraft)} ₽</b>. Это не катастрофа, но «{safe(wishlist_name)}» отодвинулась примерно на <b>{wishlist_delay} дн.</b> назад в будущее. 🗺 Убираю калькулятор, ложись спать, утро вечера мудренее.",
+        phrases.EVENING_OVER_2.format(over=int(overdraft), wishlist=safe(wishlist_name), delay=wishlist_delay),
 
-        f"📊 <b>Фиксирую дневной овердрафт:</b>\nМы вышли за край на <b>{int(overdraft)} ₽</b>. Если не сбавим обороты, последние <b>{min(5, days_left)} дн.</b> до зарплаты придётся провести в режиме супер-эконома. Закрывай банковские приложения, на сегодня финансовые игры окончены. Спокойной ночи! 🌙",
+        phrases.EVENING_OVER_3.format(over=int(overdraft), days=min(5, days_left)),
     ]
     return random.choice(evening_phrases)
 
@@ -149,11 +136,9 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
 
             await bot.send_message(
                 tg_id,
-                f"🌙 <b>23:30 — Время вышло, подводим итоги автоматически.</b>\n\n"
-                f"Твой фундамент на сегодня: <b>{int(total):,} ₽</b>.\n"
-                f"Состояние сброшено.",
+                phrases.AUTO_CLOSE.format(total=f"{int(total):,}"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="open_menu")],
+                    [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
                 ]),
             )
 

@@ -1,10 +1,11 @@
-
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
+
+from src.utils import phrases
 
 from ...db.database import async_session_maker
 from ...db.models.models import Category, Expense
@@ -38,14 +39,14 @@ async def _get_category_info(expense: Expense) -> tuple[str, str]:
             cat = result.scalar_one_or_none()
             if cat:
                 return get_category_display(cat.name)
-    return "📦", "прочее"
+    return phrases.DEFAULT_CATEGORY
 
 
 async def _expense_line(idx: int, exp: Expense) -> str:
     emoji, cat_name = await _get_category_info(exp)
     date_str = exp.date.strftime("%d %b").lower()
     desc = safe(exp.description) or cat_name
-    return f"{idx}. {emoji} {exp.amount:,.0f}₽ — {desc} ({date_str})"
+    return phrases.HISTORY_LINE.format(idx=idx, emoji=emoji, amount=f"{exp.amount:,.0f}", desc=desc, date=date_str)
 
 
 def _build_list_keyboard(expenses: list[Expense], page: int, total_pages: int):
@@ -62,32 +63,32 @@ def _build_list_keyboard(expenses: list[Expense], page: int, total_pages: int):
 
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton(text="◀️ Назад", callback_data=f"exp_page:{page - 1}"))
+        nav.append(InlineKeyboardButton(text=phrases.BTN_HISTORY_BACK, callback_data=f"exp_page:{page - 1}"))
     if page < total_pages - 1:
-        nav.append(InlineKeyboardButton(text="Вперед ▶️", callback_data=f"exp_page:{page + 1}"))
+        nav.append(InlineKeyboardButton(text=phrases.BTN_HISTORY_FWD, callback_data=f"exp_page:{page + 1}"))
 
     if page > 0 or page < total_pages - 1:
         buttons.append(nav)
 
-    buttons.append([InlineKeyboardButton(text="⬅️ В меню", callback_data="menu_back")])
+    buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK_TO_MENU, callback_data="menu_back")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def _build_detail_keyboard(expense_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✏️ Изменить сумму", callback_data=f"exp_edit:{expense_id}"),
-            InlineKeyboardButton(text="🗑️ Удалить", callback_data=f"exp_del:{expense_id}"),
+            InlineKeyboardButton(text=phrases.BTN_EDIT_AMOUNT, callback_data=f"exp_edit:{expense_id}"),
+            InlineKeyboardButton(text=phrases.BTN_DELETE, callback_data=f"exp_del:{expense_id}"),
         ],
-        [InlineKeyboardButton(text="✏️ Сменить категорию", callback_data=f"change_cat:{expense_id}")],
-        [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="exp_back")],
+        [InlineKeyboardButton(text=phrases.BTN_CHANGE_CATEGORY, callback_data=f"change_cat:{expense_id}")],
+        [InlineKeyboardButton(text=phrases.BTN_BACK_TO_LIST, callback_data="exp_back")],
     ])
 
 
 def _build_deleted_keyboard(expense_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="↩️ Восстановить", callback_data=f"exp_undo:{expense_id}")],
-        [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="exp_back")],
+        [InlineKeyboardButton(text=phrases.BTN_RESTORE, callback_data=f"exp_undo:{expense_id}")],
+        [InlineKeyboardButton(text=phrases.BTN_BACK_TO_LIST, callback_data="exp_back")],
     ])
 
 
@@ -102,9 +103,7 @@ async def cmd_history(callback: CallbackQuery, state: FSMContext):
 
     if total == 0:
         await callback.message.edit_text(
-            text="📜 <b>История трат</b>\n\n"
-                 "У тебя пока нет записанных трат.\n"
-                 "Нажми «💸 Добавить трату», чтобы начать!",
+            text=phrases.HISTORY_EMPTY,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
@@ -113,7 +112,7 @@ async def cmd_history(callback: CallbackQuery, state: FSMContext):
     for i, exp in enumerate(expenses):
         line = await _expense_line(i + 1, exp)
         lines.append(line)
-    text = (f"📜 <b>История трат (стр. {1}/{total_pages}):</b>\n\n"
+    text = (phrases.HISTORY_PAGE.format(page=1, total=total_pages)
             + "\n".join(lines))
 
     await callback.message.edit_text(
@@ -131,7 +130,7 @@ async def history_page(callback: CallbackQuery):
         page = int(callback.data.split(":")[1])
     except (IndexError, ValueError, TypeError):
         await callback.message.edit_text(
-            text="❌ Ошибка в данных.",
+            text=phrases.ERR_INVALID_DATA,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
@@ -142,7 +141,7 @@ async def history_page(callback: CallbackQuery):
     for i, exp in enumerate(expenses):
         line = await _expense_line(i + 1 + page * PAGE_SIZE, exp)
         lines.append(line)
-    text = (f"📜 <b>История трат (стр. {page + 1}/{total_pages}):</b>\n\n"
+    text = (phrases.HISTORY_PAGE.format(page=page + 1, total=total_pages)
             + "\n".join(lines))
 
     await callback.message.edit_text(
@@ -160,7 +159,7 @@ async def expense_detail(callback: CallbackQuery):
         expense_id = int(callback.data.split(":")[1])
     except (IndexError, ValueError, TypeError):
         await callback.message.edit_text(
-            text="❌ Ошибка в данных.",
+            text=phrases.ERR_INVALID_DATA,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
@@ -177,7 +176,7 @@ async def expense_detail(callback: CallbackQuery):
 
     if not expense:
         await callback.message.edit_text(
-            text="❌ Трата не найдена или уже удалена.",
+            text=phrases.ERR_EXPENSE_NOT_FOUND_DELETED,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
@@ -185,11 +184,8 @@ async def expense_detail(callback: CallbackQuery):
     emoji, cat_name = await _get_category_info(expense)
     date_str = expense.date.strftime("%d %B %Y").lower()
 
-    text = (f"⚙️ <b>Управление транзакцией:</b>\n\n"
-            f"{emoji} <b>{cat_name.capitalize()}</b>\n"
-            f"💰 <b>Сумма:</b> {expense.amount:,.0f}₽\n"
-            f"📝 <b>Описание:</b> {safe(expense.description) or '—'}\n"
-            f"📅 <b>Дата:</b> {date_str}")
+    desc = safe(expense.description) or '—'
+    text = phrases.EXPENSE_DETAIL.format(emoji=emoji, cat=cat_name.capitalize(), amount=f"{expense.amount:,.0f}", desc=desc, date=date_str)
 
     await callback.message.edit_text(
         text=text,
@@ -206,7 +202,7 @@ async def delete_expense(callback: CallbackQuery):
         expense_id = int(callback.data.split(":")[1])
     except (IndexError, ValueError, TypeError):
         await callback.message.edit_text(
-            text="❌ Ошибка в данных.",
+            text=phrases.ERR_INVALID_DATA,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
@@ -215,15 +211,13 @@ async def delete_expense(callback: CallbackQuery):
 
     if not expense:
         await callback.message.edit_text(
-            text="❌ Не удалось удалить трату. Она уже удалена или не найдена.",
+            text=phrases.ERR_DELETE_FAILED,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
 
     await callback.message.edit_text(
-        text=f"🗑️ <b>Трата удалена</b>\n\n"
-             f"💰 {expense.amount:,.0f}₽ — {safe(expense.description) or 'трата'}\n\n"
-             f"Если ошиблись — нажмите «Восстановить»",
+        text=phrases.DELETE_CONFIRM.format(amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC),
         reply_markup=_build_deleted_keyboard(expense.id)
     )
 
@@ -237,7 +231,7 @@ async def undo_delete(callback: CallbackQuery):
         expense_id = int(callback.data.split(":")[1])
     except (IndexError, ValueError, TypeError):
         await callback.message.edit_text(
-            text="❌ Ошибка в данных.",
+            text=phrases.ERR_INVALID_DATA,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
@@ -246,14 +240,13 @@ async def undo_delete(callback: CallbackQuery):
 
     if not expense:
         await callback.message.edit_text(
-            text="❌ Не удалось восстановить трату.",
+            text=phrases.ERR_RESTORE_FAILED,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
 
     await callback.message.edit_text(
-        text=f"✅ <b>Трата восстановлена!</b>\n\n"
-             f"💰 {expense.amount:,.0f}₽ — {safe(expense.description) or 'трата'}",
+        text=phrases.RESTORE_CONFIRM.format(amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC),
         reply_markup=_build_detail_keyboard(expense.id)
     )
 
@@ -267,7 +260,7 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
         expense_id = int(callback.data.split(":")[1])
     except (IndexError, ValueError, TypeError):
         await callback.message.edit_text(
-            text="❌ Ошибка в данных.",
+            text=phrases.ERR_INVALID_DATA,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
@@ -284,7 +277,7 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
 
     if not expense:
         await callback.message.edit_text(
-            text="❌ Трата не найдена.",
+            text=phrases.ERR_EXPENSE_NOT_FOUND,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
@@ -292,19 +285,16 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
     await state.update_data(edit_expense_id=expense.id)
     await state.set_state(EditExpense.waiting_for_amount)
 
+    prompt = phrases.EDIT_AMOUNT_PROMPT.format(amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC)
     try:
         await callback.message.edit_text(
-            text=f"✏️ Введи новую сумму для траты:\n\n"
-                 f"💰 Текущая сумма: {expense.amount:,.0f}₽\n"
-                 f"📝 {safe(expense.description) or 'трата'}",
+            text=prompt,
             reply_markup=get_cancel_keyboard()
         )
     except TelegramBadRequest:
         await callback.message.delete()
         await callback.message.answer(
-            text=f"✏️ Введи новую сумму для траты:\n\n"
-                 f"💰 Текущая сумма: {expense.amount:,.0f}₽\n"
-                 f"📝 {safe(expense.description) or 'трата'}",
+            text=prompt,
             reply_markup=get_cancel_keyboard()
         )
 
@@ -327,26 +317,24 @@ async def save_edit_expense(message: Message, state: FSMContext):
         if retries >= 3:
             await state.clear()
             await message.answer(
-                "🙅 Слишком много неудачных попыток. Возвращаю в меню.",
+                phrases.ERR_TOO_MANY_RETRIES,
                 reply_markup=await get_main_menu_keyboard(message.from_user.id),
             )
             return
-        await message.answer("❌ Введи число. Например: 500")
+        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="500"))
         return
 
     expense = await update_expense_amount(message.from_user.id, expense_id, amount)
 
     if not expense:
-        await message.answer("❌ Трата не найдена.")
+        await message.answer(phrases.ERR_EXPENSE_NOT_FOUND)
         await state.clear()
         return
 
     await state.clear()
 
     await message.answer(
-        text=f"✅ <b>Сумма обновлена!</b>\n\n"
-             f"💰 Новая сумма: {expense.amount:,.0f}₽\n"
-             f"📝 {safe(expense.description) or 'трата'}",
+        text=phrases.AMOUNT_UPDATED.format(amount=f"{expense.amount:,.0f}", desc=safe(expense.description) or phrases.FALLBACK_DESC),
         reply_markup=await get_main_menu_keyboard(message.from_user.id)
     )
 
@@ -362,8 +350,7 @@ async def back_to_list(callback: CallbackQuery, state: FSMContext):
 
     if total == 0:
         await callback.message.edit_text(
-            text="📜 <b>История трат</b>\n\n"
-                 "Список пуст.",
+            text=phrases.HISTORY_EMPTY_BACK,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
         return
@@ -372,7 +359,7 @@ async def back_to_list(callback: CallbackQuery, state: FSMContext):
     for i, exp in enumerate(expenses):
         line = await _expense_line(i + 1, exp)
         lines.append(line)
-    text = (f"📜 <b>История трат (стр. {1}/{total_pages}):</b>\n\n"
+    text = (phrases.HISTORY_PAGE.format(page=1, total=total_pages)
             + "\n".join(lines))
 
     await callback.message.edit_text(

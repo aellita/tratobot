@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from ..db.database import async_session_maker
 from ..db.models.models import User, UserSettings
+from ..utils import phrases
 from .expense_service import get_current_period_expenses_sum, get_yesterday_expenses_sum
 
 logger = logging.getLogger(__name__)
@@ -16,43 +17,43 @@ logger = logging.getLogger(__name__)
 def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
     if btn_type == "REGULAR":
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
         ])
     if btn_type == "FRESH_START":
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Начать с чистого листа", callback_data="trigger_critical_reset")],
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+            [InlineKeyboardButton(text=phrases.BTN_FRESH_START, callback_data="trigger_critical_reset")],
+            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
         ])
     if btn_type == "FROM_YELLOW_TO_GREEN":
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🍏 Вернуть комфорт из Кубышки", callback_data="use_savings")],
-            [InlineKeyboardButton(text="💪 Буду экономить", callback_data="menu_back")],
+            [InlineKeyboardButton(text=phrases.BTN_USE_SAVINGS_COMFORT, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
         ])
     if btn_type == "FROM_YELLOW_TO_BLUE":
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🟩 Поднять лимит из Кубышки", callback_data="use_savings")],
-            [InlineKeyboardButton(text="💪 Буду экономить", callback_data="menu_back")],
+            [InlineKeyboardButton(text=phrases.BTN_RAISE_LIMIT_SAVINGS, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
         ])
     if btn_type == "FROM_RED_TO_GREEN":
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Вернуть Зеленую зону из Кубышки", callback_data="use_savings")],
-            [InlineKeyboardButton(text="🔄 С чистого листа", callback_data="trigger_critical_reset")],
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+            [InlineKeyboardButton(text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset")],
+            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
         ])
     if btn_type == "FROM_RED_TO_BLUE":
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Выйти из кризиса в Зеленую зону", callback_data="use_savings")],
-            [InlineKeyboardButton(text="🔄 С чистого листа", callback_data="trigger_critical_reset")],
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+            [InlineKeyboardButton(text=phrases.BTN_EXIT_CRISIS_GREEN, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset")],
+            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
         ])
     if btn_type == "FROM_RED_TO_YELLOW":
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚨 Спасти бюджет из Кубышки", callback_data="use_savings")],
-            [InlineKeyboardButton(text="🔄 С чистого листа", callback_data="trigger_critical_reset")],
-            [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+            [InlineKeyboardButton(text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset")],
+            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
         ])
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu_back")],
+        [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
     ])
 
 
@@ -100,13 +101,12 @@ async def send_morning_reports(bot: Bot):
 
             overdraft = max(yesterday_spent - dl_base, 0)
             if yesterday_spent <= dl_base:
-                yesterday_line = (
-                    f"📅 <b>Вчера:</b> потрачено {int(yesterday_spent):,} ₽ из {int(dl_base):,} ₽ ✅"
+                yesterday_line = phrases.YESTERDAY_OK.format(
+                    spent=int(yesterday_spent), limit=int(dl_base)
                 )
             else:
-                yesterday_line = (
-                    f"📅 <b>Вчера:</b> потрачено {int(yesterday_spent):,} ₽ "
-                    f"из {int(dl_base):,} ₽ — перерасход <b>{int(overdraft):,} ₽</b> 🚨"
+                yesterday_line = phrases.YESTERDAY_OVER.format(
+                    spent=int(yesterday_spent), limit=int(dl_base), over=int(overdraft)
                 )
 
             if end_of_period:
@@ -148,25 +148,26 @@ async def send_morning_reports(bot: Bot):
 
             if zone == "END_EMPTY":
                 zone_text = random.choice([
-                    f"Финишная прямая, но деньги на нуле. 🏁 Осталось {days_left} дн. Держимся на морально-волевых!",
-                    f"До конца периода {days_left} дн., кэш закончился. 💪 Терпим, бро, финиш уже виден!",
+                    phrases.ZONE_END_EMPTY_1.format(days_left=days_left),
+                    phrases.ZONE_END_EMPTY_2.format(days_left=days_left),
                 ])
             elif zone == "END_OK":
                 zone_text = random.choice([
-                    f"Осталось {days_left} дн. до конца периода, а у нас ещё {int(money_for_life):,} ₽! 🥳 Отличный финиш!",
-                    f"Финишная прямая с деньгами в кармане! 🥳 До конца периода {days_left} дн., остаток {int(money_for_life):,} ₽.",
+                    phrases.ZONE_END_OK_1.format(days_left=days_left, money=int(money_for_life)),
+                    phrases.ZONE_END_OK_2.format(days_left=days_left, money=int(money_for_life)),
                 ])
             elif zone == "GREEN":
                 zone_text = random.choice([
-                    f"🟩 Всё по плану! Прогнозный лимит: {int(dl_pred):,} ₽/день. Продолжаем в том же духе!",
-                    f"🟩 Идём идеально по графику. Прогноз: {int(dl_pred):,} ₽/день.",
+                    phrases.ZONE_GREEN_1.format(limit=int(dl_pred)),
+                    phrases.ZONE_GREEN_2.format(limit=int(dl_pred)),
                 ])
             elif zone == "YELLOW_LIGHT":
                 zone_text = random.choice([
-                    f"📉 Мы потихоньку отстаём от графика. Прогноз: {int(dl_pred):,} ₽/день. Давай чуть притормозим?",
-                    f"📉 Прогнозный лимит снизился до {int(dl_pred):,} ₽/день. Включаем осознанность!",
+                    phrases.ZONE_YELLOW_LIGHT_1.format(limit=int(dl_pred)),
+                    phrases.ZONE_YELLOW_LIGHT_2.format(limit=int(dl_pred)),
                 ])
             elif zone == "YELLOW_SIM_GREEN":
+                # TODO: extract to phrases.py
                 zone_text = random.choice([
                     f"🟨 Режим турбо-экономии! Прогноз: {int(dl_pred):,} ₽/день.\n"
                     f"💡 Кубышка ({int(savings):,} ₽) вернёт нас в зелёную зону — лимит будет {int(dl_simulated):,} ₽/день!",
@@ -174,6 +175,7 @@ async def send_morning_reports(bot: Bot):
                     f"💡 Вскрываем Кубышку? Это подбросит лимит до {int(dl_simulated):,} ₽/день!",
                 ])
             elif zone == "YELLOW_SIM_BLUE":
+                # TODO: extract to phrases.py
                 zone_text = random.choice([
                     f"🟨 Режим турбо-экономии! Прогноз: {int(dl_pred):,} ₽/день.\n"
                     f"💡 Кубышка поднимет лимит до <b>{int(dl_simulated):,} ₽</b>/день.",
@@ -181,11 +183,13 @@ async def send_morning_reports(bot: Bot):
                     f"💡 Кубышка готова помочь — поднимем планку до {int(dl_simulated):,} ₽/день!",
                 ])
             elif zone == "YELLOW_SIM_NONE":
+                # TODO: extract to phrases.py
                 zone_text = random.choice([
                     f"🟨 Режим турбо-экономии. Прогноз: {int(dl_pred):,} ₽/день. Держимся!",
                     f"🟨 Включаю режим супер-экономии. Прогноз {int(dl_pred):,} ₽/день.",
                 ])
             elif zone == "RED_SIM_GREEN":
+                # TODO: extract to phrases.py
                 zone_text = random.choice([
                     f"🔴 Мы на дне! Прогноз: {int(dl_pred):,} ₽/день.\n"
                     f"💡 Кубышка ({int(savings):,} ₽) моментом вытащит нас! Лимит взлетит до <b>{int(dl_simulated):,} ₽</b>/день!",
@@ -193,6 +197,7 @@ async def send_morning_reports(bot: Bot):
                     f"💡 Секретное оружие — Кубышка! Лимит станет {int(dl_simulated):,} ₽/день!",
                 ])
             elif zone == "RED_SIM_BLUE":
+                # TODO: extract to phrases.py
                 zone_text = random.choice([
                     f"🔴 Глубокое пике. Прогноз: {int(dl_pred):,} ₽/день.\n"
                     f"💡 Кубышка вытащит нас в стабильную зону: {int(dl_simulated):,} ₽/день!",
@@ -200,6 +205,7 @@ async def send_morning_reports(bot: Bot):
                     f"💡 Время вскрывать резервы! Кубышка поднимет лимит до {int(dl_simulated):,} ₽/день!",
                 ])
             elif zone == "RED_SIM_YELLOW":
+                # TODO: extract to phrases.py
                 zone_text = random.choice([
                     f"🔴 Мы на дне. Прогноз: {int(dl_pred):,} ₽/день.\n"
                     f"💡 Кубышка ({int(savings):,} ₽) подрастит лимит до {int(dl_simulated):,} ₽/день.",
@@ -207,16 +213,13 @@ async def send_morning_reports(bot: Bot):
                     f"💡 Кубышка смягчит падение: лимит будет {int(dl_simulated):,} ₽/день.",
                 ])
             else:
+                # TODO: extract to phrases.py
                 zone_text = random.choice([
                     "🔴 Мы пробили дно. Денег нет. 🚀 Нужен фреш-старт.",
                     "🔴 Катастрофа! Бюджет исчерпан. Пора начинать с чистого листа.",
                 ])
 
-            full_text = (
-                f"☀️ Доброе утро, бро!\n\n"
-                f"{yesterday_line}\n\n"
-                f"{zone_text}"
-            )
+            full_text = phrases.MORNING_GREETING + yesterday_line + "\n\n" + zone_text
 
             kb = _build_morning_keyboard(btn_type)
             await bot.send_message(tg_id, full_text, reply_markup=kb)

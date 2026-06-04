@@ -28,10 +28,9 @@ Telegram-бот для учёта личных финансов. Ироничн�
 - [x] **pre-commit hooks:** ruff (lint+format), mypy, pytest, базовые хуки (`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`)
 - [x] **GitHub Actions CI:** автоматический прогон ruff (check + format), mypy, pytest при push/PR на main
 - [x] **Юнит-тесты:** 269 тестов — чистые функции (133), DB-mocked сервисы (59), FSM/integration (77)
+- [x] **phrases.py:** все пользовательские строки вынесены в `src/utils/phrases.py` (8 файлов, ~180 замен)
 
 ### Remaining
-
-- [ ] **phrases.py:** вынести все пользовательские строки из хендлеров в единый файл
 - [ ] **Голосовые сообщения:** парсинг через ASR + AI (заглушка готова)
 - [ ] **Умные итоги месяца:** AI-генерация сводки с инсайтами
 - [ ] **Режим отпуска:** смена валюты, отключение ворчания на рестораны
@@ -70,10 +69,10 @@ tratobot/
 │   ├── db/
 │   │   ├── models/
 │   │   └── database.py
-│   ├── utils/           # helpers.py
+│   ├── utils/           # helpers.py, phrases.py
 │   └── core/
 │       └── config.py
-├── tests/               # 269 тестов
+├── tests/               # 269 тестов (+ phrases.py regression check)
 │   ├── conftest.py
 │   ├── test_budget_service.py
 │   ├── test_categorization.py

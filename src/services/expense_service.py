@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Expense, UserSettings
+from ..utils import phrases
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
@@ -29,10 +30,7 @@ async def try_apply_round_up(telegram_id: int, amount: float) -> str | None:
     from .goal_service import add_spare_change_to_goal
     new_total, goal_name = await add_spare_change_to_goal(telegram_id, spare)
 
-    return (
-        f"\n\n🐖 Я округлил(а) чек и закинул(а) <b>{int(spare)}₽</b>"
-        f" в «{goal_name}». Там уже <b>{int(new_total)}₽</b>! 🚀"
-    )
+    return phrases.ROUND_UP.format(amount=int(spare), goal=goal_name, total=int(new_total))
 
 
 def clean_description(text: str) -> str:

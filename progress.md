@@ -156,6 +156,35 @@
 
 ---
 
+### 2026-06-04 — Queue 4: phrases.py + production datetime bugfix
+
+**Production bugfix (datetime timezone):**
+- Все `DateTime` колонки (PostgreSQL `TIMESTAMP WITHOUT TIME ZONE`) использовали offset-aware `datetime.now(UTC)`, что вызывало `asyncpg.exceptions.DataError` при вставке.
+- **Фикс:** добавила `_utcnow()` в `models.py` (возвращает naive UTC), заменила все 5 column defaults и 3 явных `date=datetime.now(UTC)` в хендлерах на `.replace(tzinfo=None)`.
+- Запушила в main — Railway авто-деплоит.
+
+**phrases.py — вынос строк:**
+- Создан `src/utils/phrases.py` — единый модуль со всеми пользовательскими строками:
+  - ~60 button labels (`BTN_*`)
+  - ~25 error messages (`ERR_*`)
+  - ~50 info/success/prompt messages
+  - ~20 evening/morning report messages
+  - GREETINGS, DEFAULT_CATEGORIES, MENU_KEYWORDS, fallback values
+- Заменены inline-строки на `phrases.*` в 8 файлах:
+  - `menu.py` — 500 строк изменено (~180 замен)
+  - `history.py` — 27 замен
+  - `evening_flow.py` — 6 замен
+  - `keyboards.py` — 23 замены
+  - `morning_report.py` — базовые зоны, приветствие, yesterday_line
+  - `evening_report.py` — все варианты отчётов (zero/green/overdraft/autoclose)
+  - `expense_service.py` — round-up сообщение
+  - `categorization.py` — GREETINGS + DEFAULT_CATEGORIES
+- **Не извлечены** (требуют рефакторинга random.choice): статусные footer'ы (11 групп), menu_daily блок, fresh-start step-тексты, YELLOW_SIM_*/RED_* зоны в morning_report
+- **E501:** 117→144 (часть замен добавила длинные `.format(...)`; финальная чистка позже)
+- **Все 269 тестов проходят**, ruff — только известные E501/E712 (безопасные)
+
+---
+
 ## Шпаргалка для агента
 
 После каждой сессии (или по запросу пользователя) агент проверяет: было ли что-то из списка «Когда писать». Если да — добавляет запись в этот файл перед завершением работы.

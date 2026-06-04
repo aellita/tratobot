@@ -3,24 +3,26 @@ from datetime import datetime
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 
+from src.utils import phrases
+
 from ..db.database import async_session_maker
 from ..db.models.models import Budget
 
 
 async def get_main_menu_keyboard(telegram_id: int = None):
-    button_text = "💰 Дневной лимит"
+    button_text = phrases.BTN_DAILY_LIMIT
     if telegram_id:
         text = await _get_daily_limit_text(telegram_id)
         if text:
             button_text = text
 
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💸 Добавить трату", callback_data="menu_add")],
+        [InlineKeyboardButton(text=phrases.BTN_ADD_EXPENSE, callback_data="menu_add")],
         [InlineKeyboardButton(text=button_text, callback_data="menu_daily")],
-        [InlineKeyboardButton(text="📊 Статус", callback_data="menu_status")],
-        [InlineKeyboardButton(text="📜 История", callback_data="menu_history")],
-        [InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu_settings")],
-        [InlineKeyboardButton(text="📋 Помощь", callback_data="menu_help")],
+        [InlineKeyboardButton(text=phrases.BTN_STATUS, callback_data="menu_status")],
+        [InlineKeyboardButton(text=phrases.BTN_HISTORY, callback_data="menu_history")],
+        [InlineKeyboardButton(text=phrases.BTN_SETTINGS, callback_data="menu_settings")],
+        [InlineKeyboardButton(text=phrases.BTN_HELP, callback_data="menu_help")],
     ])
 
 
@@ -37,7 +39,7 @@ async def _get_daily_limit_text(telegram_id: int) -> str | None:
         if not budget or budget.daily_limit <= 0:
             return None
 
-    text = f"💰 Дневной лимит: {budget.daily_limit:,.0f}₽"
+    text = f"{phrases.BTN_DAILY_LIMIT}: {budget.daily_limit:,.0f}₽"
     if len(text) > 64:
         return None
     return text
@@ -45,50 +47,50 @@ async def _get_daily_limit_text(telegram_id: int) -> str | None:
 
 def get_settings_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💰 Обновить доход", callback_data="edit_income")],
-        [InlineKeyboardButton(text="➕ Добавить доход", callback_data="add_income")],
-        [InlineKeyboardButton(text="📌 Обязательные", callback_data="edit_mandatory")],
-        [InlineKeyboardButton(text="🏦 Кубышка", callback_data="edit_black_day")],
-        [InlineKeyboardButton(text="🎯 Хотелка", callback_data="edit_wishlist")],
-        [InlineKeyboardButton(text="📅 День старта", callback_data="edit_period_start")],
-        [InlineKeyboardButton(text="🐖 Округление", callback_data="edit_rounding")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu_back")],
+        [InlineKeyboardButton(text=phrases.BTN_UPDATE_INCOME, callback_data="edit_income")],
+        [InlineKeyboardButton(text=phrases.BTN_ADD_INCOME, callback_data="add_income")],
+        [InlineKeyboardButton(text=phrases.BTN_MANDATORY, callback_data="edit_mandatory")],
+        [InlineKeyboardButton(text=phrases.BTN_SAVINGS, callback_data="edit_black_day")],
+        [InlineKeyboardButton(text=phrases.BTN_WISHLIST, callback_data="edit_wishlist")],
+        [InlineKeyboardButton(text=phrases.BTN_PERIOD_START, callback_data="edit_period_start")],
+        [InlineKeyboardButton(text=phrases.BTN_ROUNDING, callback_data="edit_rounding")],
+        [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")],
     ])
 
 
 def get_period_start_keyboard():
     today = datetime.now()
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"📅 Сегодня ({today.day}-е)", callback_data="period_today")],
-        [InlineKeyboardButton(text="1-е число", callback_data="period_first")],
-        [InlineKeyboardButton(text="✏️ Другое число", callback_data="period_other")],
+        [InlineKeyboardButton(text=phrases.BTN_TODAY.format(day=today.day), callback_data="period_today")],
+        [InlineKeyboardButton(text=phrases.BTN_FIRST_DAY, callback_data="period_first")],
+        [InlineKeyboardButton(text=phrases.BTN_OTHER_DATE, callback_data="period_other")],
     ])
 
 
 def get_cancel_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="cancel")],
+        [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="cancel")],
     ])
 
 
 def get_onboarding_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="skip_step")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="cancel")],
+        [InlineKeyboardButton(text=phrases.BTN_SKIP, callback_data="skip_step")],
+        [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="cancel")],
     ])
 
 
 def get_rounding_mode_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Не надо", callback_data="rounding_off")],
-        [InlineKeyboardButton(text="10 ₽", callback_data="rounding_10")],
-        [InlineKeyboardButton(text="100 ₽", callback_data="rounding_100")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="cancel")],
+        [InlineKeyboardButton(text=phrases.BTN_ROUNDING_OFF, callback_data="rounding_off")],
+        [InlineKeyboardButton(text=phrases.BTN_ROUNDING_10, callback_data="rounding_10")],
+        [InlineKeyboardButton(text=phrases.BTN_ROUNDING_100, callback_data="rounding_100")],
+        [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="cancel")],
     ])
 
 
 def get_start_choice_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➡️ В главное меню", callback_data="open_menu")],
-        [InlineKeyboardButton(text="🔄 Перезапустить бюджет", callback_data="reset_budget")],
+        [InlineKeyboardButton(text=phrases.BTN_TO_MAIN, callback_data="open_menu")],
+        [InlineKeyboardButton(text=phrases.BTN_RESTART_BUDGET, callback_data="reset_budget")],
     ])

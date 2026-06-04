@@ -6,6 +6,8 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from src.utils import phrases
+
 from ...db.database import async_session_maker
 from ...db.models.models import Expense
 from ...services.budget_service import get_active_budget
@@ -36,14 +38,14 @@ async def handle_evening_expense(message: Message, state: FSMContext):
     await message.delete()
 
     if not message.text or not message.text.strip():
-        temp = await message.answer("❓ Напиши трату текстом, например: «500 такси»")
+        temp = await message.answer(phrases.ERR_EMPTY_EXPENSE)
         await asyncio.sleep(3)
         await temp.delete()
         return
 
     parsed = parse_expense_text(message.text)
     if not parsed:
-        temp = await message.answer("❌ Не понял сумму. Напиши числом, например: «500 такси»")
+        temp = await message.answer(phrases.ERR_PARSE_EXPENSE)
         await asyncio.sleep(3)
         await temp.delete()
         return
@@ -64,7 +66,7 @@ async def handle_evening_expense(message: Message, state: FSMContext):
     container_id = data.get("container_id")
     session_expenses = data.get("session_expenses", [])
 
-    line = f"  💰 {amount:,.0f}₽ — {safe(description)}" if description else f"  💰 {amount:,.0f}₽"
+    line = phrases.EVENING_LINE_DESC.format(amount=f"{amount:,.0f}", desc=safe(description)) if description else phrases.EVENING_LINE.format(amount=f"{amount:,.0f}")
     session_expenses.append(line)
     await state.update_data(session_expenses=session_expenses)
 
@@ -110,8 +112,7 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
 
     if limit <= 0:
         await callback.message.answer(
-            "❌ Не удалось сформировать отчёт. Возможно, у тебя ещё нет бюджета на этот месяц.\n"
-            "Нажми /start, чтобы настроить!",
+            phrases.ERR_REPORT_FAILED,
             reply_markup=get_main_menu_keyboard(user_id),
         )
         await state.clear()
@@ -126,7 +127,7 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
     )
 
     main_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="open_menu")],
+        [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
     ])
     await callback.message.answer(text, reply_markup=main_kb)
 
