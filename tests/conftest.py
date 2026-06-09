@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 import src.bot.handlers.evening_flow as _eve_h
 import src.bot.handlers.history as _hist_h
 import src.bot.handlers.menu as _menu_h
-import src.bot.keyboards as _kb
 import src.db.database as _db
 import src.services.budget_service as _bs
 import src.services.expense_service as _es
@@ -41,7 +40,7 @@ async def session_maker(engine):
 
 @pytest_asyncio.fixture(autouse=True)
 async def _patch_session_maker(session_maker, monkeypatch):
-    for module in [_db, _kb, _bs, _gs, _es, _menu_h, _hist_h, _eve_h]:
+    for module in [_db, _bs, _gs, _es, _menu_h, _hist_h, _eve_h]:
         monkeypatch.setattr(module, "async_session_maker", session_maker)
 
 

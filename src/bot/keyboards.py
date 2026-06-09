@@ -1,26 +1,23 @@
 from datetime import datetime
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import select
 
 from src.utils import phrases
 
-from ..db.database import async_session_maker
-from ..db.models.models import Budget
+from ..services.budget_service import get_active_budget
 
 
 async def get_main_menu_keyboard(telegram_id: int = None):
-    button_text = phrases.BTN_DAILY_LIMIT
+    status_label = phrases.BTN_DAILY_LIMIT
     if telegram_id:
-        text = await _get_daily_limit_text(telegram_id)
-        if text:
-            button_text = text
+        label = await _get_daily_limit_label(telegram_id)
+        if label:
+            status_label = label
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=phrases.BTN_ADD_EXPENSE, callback_data="menu_add")],
-            [InlineKeyboardButton(text=button_text, callback_data="menu_daily")],
-            [InlineKeyboardButton(text=phrases.BTN_STATUS, callback_data="menu_status")],
+            [InlineKeyboardButton(text=status_label, callback_data="menu_status")],
             [InlineKeyboardButton(text=phrases.BTN_HISTORY, callback_data="menu_history")],
             [InlineKeyboardButton(text=phrases.BTN_SETTINGS, callback_data="menu_settings")],
             [InlineKeyboardButton(text=phrases.BTN_HELP, callback_data="menu_help")],
@@ -28,17 +25,12 @@ async def get_main_menu_keyboard(telegram_id: int = None):
     )
 
 
-async def _get_daily_limit_text(telegram_id: int) -> str | None:
-    async with async_session_maker() as session:
-        month = datetime.now().strftime("%Y-%m")
-        result = await session.execute(
-            select(Budget).where(Budget.telegram_id == telegram_id, Budget.month == month)
-        )
-        budget = result.scalar_one_or_none()
-        if not budget or budget.daily_limit <= 0:
-            return None
-
-    text = f"{phrases.BTN_DAILY_LIMIT}: {budget.daily_limit:,.0f}₽"
+async def _get_daily_limit_label(telegram_id: int) -> str | None:
+    budget = await get_active_budget(telegram_id)
+    if not budget:
+        return None
+    amount = max(int(budget.daily_limit), 0)
+    text = f"{phrases.BTN_DAILY_LIMIT}: {amount:,}₽"
     if len(text) > 64:
         return None
     return text

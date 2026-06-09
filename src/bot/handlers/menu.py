@@ -33,6 +33,7 @@ from ...services.expense_service import (
     parse_multi_expense_text,
     try_apply_round_up,
 )
+from ...services.goal_service import get_goal_current_amount
 from ...services.user_service import get_or_create_user
 from ...utils import phrases
 from ...utils.helpers import parse_amount, safe
@@ -261,12 +262,10 @@ async def menu_status(callback: CallbackQuery):
 
     if budget.free_money > 0:
         money_for_life = budget.free_money - spent_period
-        total_budget = budget.free_money
     else:
         money_for_life = (
             budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period
         )
-        total_budget = budget.total_income
 
     dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
     dl_simulated = max((money_for_life + savings) / max(days_left, 1), 0)
@@ -283,151 +282,114 @@ async def menu_status(callback: CallbackQuery):
     )  # Wait, the comment says "менее 3 дней", so <= 2 probably. Let me use the user's definition: Осталось <= 3 дней
     # Actually user says "Осталось <= 3 дней" in section 4, meaning days_left <= 3 for the special mode. Actually, 3 days means "до 3 дней" = up to 3 days = 1, 2, or 3.
 
-    is_critical = money_for_life <= 0 or pct_pred <= 25
+    # Zone label
+    if end_of_period and money_for_life <= 0:
+        zone_emoji = "🔴"
+        zone_label = "Атас"
+    elif end_of_period:
+        zone_emoji = "🟢"
+        zone_label = "Финиш"
+    elif pct_pred > 80:
+        zone_emoji = "🟢"
+        zone_label = "В лимите"
+    elif pct_pred >= 51:
+        zone_emoji = "🔵"
+        zone_label = "Можно больше"
+    elif pct_pred >= 26:
+        zone_emoji = "🟡"
+        zone_label = "На грани"
+    else:
+        zone_emoji = "🔴"
+        zone_label = "Критично"
 
-    # Build status header
+    wishlist_amount = await get_goal_current_amount(tg_id)
+
     if remaining_today > 0:
-        today_line = phrases.STATUS_REMAINING_OK.format(amount=int(remaining_today))
+        today_line = f"Свободно {int(remaining_today):,} ₽"
     else:
-        today_line = phrases.STATUS_REMAINING_STOP
+        today_line = "Свободно 0 ₽ ⛔"
 
-    spent_line = phrases.STATUS_SPENT_TODAY.format(amount=f"{int(spent_today):,}")
+    spent_line = f"Потрачено {int(spent_today):,} ₽"
     if spent_today > dl_base:
-        spent_line += phrases.STATUS_BIG_SPEND
-
-    if remaining_period < 0:
-        period_left_line = phrases.STATUS_PERIOD_NEGATIVE.format(
-            amount=f"{int(remaining_period):,}"
-        )
-    elif remaining_period > 0:
-        period_left_line = phrases.STATUS_PERIOD_POSITIVE.format(
-            amount=f"{int(remaining_period):,}"
-        )
-    else:
-        period_left_line = phrases.STATUS_PERIOD_ZERO
+        spent_line += " ⚠️"
 
     text = (
-        f"📊 <b>ФИНАНСОВЫЙ СТАТУС</b>\n\n"
-        f"📍 <b>На сегодня:</b>\n"
-        f"{today_line}\n"
-        f"{spent_line}\n\n"
-        f"📅 <b>На период до {period_end_str} (осталось {days_left} дн.)</b>\n"
-        f"{period_left_line}\n"
-        f"💰 <b>Базовый дневной лимит:</b> {int(dl_base):,} ₽\n"
-        f"📥 <b>Всего было (твой бюджет):</b> {int(total_budget):,} ₽\n\n"
-        f"🛡️ <b>Твои фонды (под охраной):</b>\n"
-        f"📌 <b>Обязательные платежи:</b> {int(budget.mandatory_payments):,} ₽\n"
-        f"🏦 <b>Кубышка:</b> {int(budget.black_day_fund):,} ₽\n"
-        f"🎯 <b>Хотелка:</b> {int(budget.wishlist_target):,} ₽"
+        f"<b>БАЛАНС</b> · {zone_emoji} {zone_label}\n\n"
+        f"<b>Сегодня</b>\n"
+        f"{today_line} · {spent_line}\n\n"
+        f"<b>Период (до {period_end_str} · {days_left} дн.)</b>\n"
+        f"Остаток {int(remaining_period):,} ₽ · Лимит {int(dl_base):,} ₽/день\n\n"
+        f"<b>Резервы под охраной</b>\n"
+        f"Обязательные {int(budget.mandatory_payments):,} · "
+        f"Кубышка {int(savings):,} · "
+        f"Хотелка {int(wishlist_amount):,}"
     )
 
-    # Footer zone logic
+    footer = ""
     if end_of_period:
         if money_for_life <= 0:
-            footer = random.choice(
-                [
-                    "Финишная прямая! До конца периода осталось всего ничего. 🏁 Включаем режим супергероя и дотягиваем без новых долгов!",
-                    "До обнуления периода осталось всего пару дней, но наш кошелек пуст. 🏁 Держимся на морально-волевых, финиш уже виден!",
-                    "Последние метры дистанции, Бро! Деньги на нуле, но мы обязаны доползти до даты отсечки без новых кредитов. Терпим!",
-                ]
-            )
+            footer = random.choice([
+                "Финишная прямая! Кошелёк пуст. 🏁 Держимся на морально-волевых, без новых долгов!",
+                "До конца периода пара дней, а мы на нуле. 🏁 Терпим, финиш уже виден!",
+                "Последние метры, денег нет. Но мы доползём без кредитов!",
+            ])
             btns = "FRESH_START"
         else:
-            footer = random.choice(
-                [
-                    "Осталось всего пару дней до конца периода, а у нас еще есть кэш! 🥳 Бро, мы досрочно победили этот месяц, ты супер-менеджер!",
-                    "Финишная прямая, а в кармане еще шуршат купюры! 🥳 Горжусь твоей дисциплиной!",
-                    "Период почти закрыт, а бюджет не пробит! 🥳 Бро, это абсолютная финансовая победа!",
-                ]
-            )
+            footer = random.choice([
+                "Осталось пару дней, а у нас ещё есть кэш! 🥳 Досрочная победа!",
+                "Финишная прямая, в кармане шуршат купюры! 🥳 Горжусь дисциплиной!",
+                "Период почти закрыт, бюджет не пробит! 🥳 Абсолютная победа!",
+            ])
             btns = "REGULAR"
     elif pct_pred > 80:
-        footer = random.choice(
-            [
-                f"Идем идеально по графику, Бро! 🟩 Твой прогнозный лимит: {int(dl_pred):,} ₽ на день. Твоя внутренняя жаба спокойна!",
-                "Бюджет улыбается тебе. 🟩 Все фонды целы, лимит комфортный. Продолжай в том же духе, ты супер-менеджер своей жизни!",
-                "Твоя финансовая карма в идеальном порядке. 🟩 Мы четко вписываемся в график, так что сегодня можно позволить себе чуточку больше!",
-            ]
-        )
+        footer = random.choice([
+            f"Идём идеально по графику! Прогнозный лимит: {int(dl_pred):,} ₽/день. Жаба спокойна!",
+            "Всё пучком. 🟩 Лимит комфортный. Продолжай в том же духе!",
+            "Финансовая карма в порядке. 🟩 Можно позволить себе чуточку больше!",
+        ])
         btns = "REGULAR"
     elif pct_pred >= 51:
-        footer = random.choice(
-            [
-                f"Заметил, что мы немного ускорились. 📉 Если продолжим тратить в том же темпе, к концу периода твой дневной лимит сожмется до {int(dl_pred):,} ₽. Давай чуть притормозим, чтобы оставаться в зеленой зоне?",
-                f"Бро, мы потихоньку съезжаем с идеального курса. 📉 Прогноз упал до {int(dl_pred):,} ₽ в день. Ситуация полностью под контролем, но давай включим осознанность.",
-                f"График трат пополз вниз, Бро. 📉 Прогноз {int(dl_pred):,} ₽ на день — давай удержим эту планку?",
-            ]
-        )
+        footer = random.choice([
+            f"Заметил, мы ускорились. 📉 Лимит сожмётся до {int(dl_pred):,} ₽. Притормози?",
+            f"Съезжаем с курса. 📉 Прогноз {int(dl_pred):,} ₽/день. Включи осознанность.",
+            f"График пополз вниз. 📉 Прогноз {int(dl_pred):,} ₽/день — удержим планку?",
+        ])
         btns = "REGULAR"
     elif pct_pred >= 26:
         if pct_sim > 80:
-            footer = random.choice(
-                [
-                    f"Уф, Бро, мы катимся вниз. 🎢 Прогноз: лимит сожмется до {int(dl_pred):,} ₽ в день. Включен режим ТУРБО-ЭКОНОМИИ.\n\n💡 Мы можем вернуть всё как было! Если добавим деньги из Кубышки, восстановим лимит до <b>{int(dl_simulated):,} ₽</b> на день и вернемся в зеленую зону!",
-                    f"Ситуация накаляется. 📉 Лимит упал до {int(dl_pred):,} ₽. Пора затягивать пояса...\n\n💡 Твоя Кубышка может полностью перекрыть этот кризис! Вскрываем заначку? Это подбросит лимит до <b>{int(dl_simulated):,} ₽</b>!",
-                    f"Мы официально проедаем бюджет быстрее плана. 🎢 Текущий прогноз: {int(dl_pred):,} ₽ на день.\n\n💡 Спасаем положение? Кубышка может поднять лимит до <b>{int(dl_simulated):,} ₽</b>!",
-                ]
-            )
+            footer = f"💡 Кубышка ({int(savings):,}₽) вернёт в зелень — {int(dl_simulated):,}₽/день"
             btns = "FROM_YELLOW_TO_GREEN"
         elif pct_sim >= 51:
-            footer = random.choice(
-                [
-                    f"Уф, Бро, лимит сожмется до {int(dl_pred):,} ₽ в день. 🎢 Включен режим ТУРБО-ЭКОНОМИИ.\n\n💡 Но есть хорошая новость! Твоя Кубышка ({int(savings):,} ₽) может поднять лимит до <b>{int(dl_simulated):,} ₽</b> в день. Вернемся в зеленую зону!",
-                    f"Мы на грани, лимит зажат до {int(dl_pred):,} ₽. 🎢\n\n💡 План перехвата: Кубышка вытащит нас в безопасную зону. Лимит станет <b>{int(dl_simulated):,} ₽</b> в день!",
-                    f"Бюджет трещит по швам, лимит {int(dl_pred):,} ₽. 📉\n\n💡 Кубышка готова прийти на помощь! Поднимем планку до <b>{int(dl_simulated):,} ₽</b>!",
-                ]
-            )
+            footer = f"💡 Кубышка подстрахует — {int(dl_simulated):,}₽/день"
             btns = "FROM_YELLOW_TO_BLUE"
         else:
-            footer = random.choice(
-                [
-                    f"Уф, Бро, лимит сожмется до {int(dl_pred):,} ₽ в день. 🎢 Включен режим ТУРБО-ЭКОНОМИИ.",
-                    f"Включаю режим супер-экономии. 🟨 Прогноз — {int(dl_pred):,} ₽ в день. Постарайся сегодня ничего не покупать!",
-                    f"До конца периода придется посидеть на гречке. 🟨 Лимит {int(dl_pred):,} ₽ в день. Держимся!",
-                ]
-            )
+            footer = random.choice([
+                f"Лимит сожмётся до {int(dl_pred):,} ₽/день. 🎢 Режим супер-экономии.",
+                f"Прогноз {int(dl_pred):,} ₽/день. 🟨 Постарайся сегодня ничего не покупать!",
+                f"До конца периода — гречка. 🟨 Лимит {int(dl_pred):,} ₽/день. Держимся!",
+            ])
             btns = "REGULAR"
     else:
         if pct_sim > 80:
-            footer = random.choice(
-                [
-                    f"Бро, мы пробили дно бюджета! 🚨 Прогноз — {int(dl_pred):,} ₽ в день. Это катастрофа.\n\n💡 <b>Но у нас есть супер-план!</b> Кубышка ({int(savings):,} ₽) моментом вытащит нас из ада! Лимит взлетит до <b>{int(dl_simulated):,} ₽</b>!",
-                    f"Бюджет объявил дефолт. 🟥 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>Секретное оружие!</b> Кубышка полностью решает проблему. Лимит станет <b>{int(dl_simulated):,} ₽</b>!",
-                    f"Потратили всё. 🚨 На жизнь {int(dl_pred):,} ₽ в день.\n\n💡 <b>Кубышка спасает!</b> Накопления вернут нас в зеленую зону с лимитом <b>{int(dl_simulated):,} ₽</b>!",
-                ]
-            )
+            footer = f"💡 Кубышка ({int(savings):,}₽) вернёт в зелень — {int(dl_simulated):,}₽/день"
             btns = "FROM_RED_TO_GREEN"
         elif pct_sim >= 51:
-            footer = random.choice(
-                [
-                    f"Бро, мы пробили дно! 🚨 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>План спасения!</b> Кубышка ({int(savings):,} ₽) поднимет лимит до <b>{int(dl_simulated):,} ₽</b>! Выходим из кризиса в зеленую зону!",
-                    f"Глубокое финансовое пике. 🟥 Прогноз {int(dl_pred):,} ₽.\n\n💡 <b>Подушка безопасности!</b> Кубышка вытащит нас в стабильную зону с лимитом <b>{int(dl_simulated):,} ₽</b>!",
-                    f"Критический перерасход! 🚨 Прогноз — {int(dl_pred):,} ₽ в день.\n\n💡 <b>Время вскрывать резервы!</b> Кубышка поднимет дневную норму до <b>{int(dl_simulated):,} ₽</b>!",
-                ]
-            )
+            footer = f"💡 Кубышка смягчит до {int(dl_simulated):,}₽/день"
             btns = "FROM_RED_TO_BLUE"
         elif pct_sim >= 26:
-            footer = random.choice(
-                [
-                    f"Бро, мы пробили дно! 🚨 Прогноз {int(dl_pred):,} ₽ в день.\n\n💡 <b>План спасения!</b> Кубышка ({int(savings):,} ₽) поднимет лимит до <b>{int(dl_simulated):,} ₽</b>. Выберемся из кризиса в режим экономии.",
-                    f"Бюджет нажал кнопку катапультирования. 💣 На жизнь {int(dl_pred):,} ₽.\n\n💡 <b>План эвакуации:</b> Кубышка подрастит лимит до <b>{int(dl_simulated):,} ₽</b>. Спасемся от голодовки!",
-                    f"Мы на самом дне, лимит {int(dl_pred):,} ₽. 🚨\n\n💡 <b>Частичное спасение:</b> Кубышка поднимет лимит до <b>{int(dl_simulated):,} ₽</b>. Лучше, чем ничего!",
-                ]
-            )
+            footer = f"💡 Кубышка поднимет до {int(dl_simulated):,}₽/день"
             btns = "FROM_RED_TO_YELLOW"
         else:
-            footer = random.choice(
-                [
-                    "Бро, мы пробили дно бюджета! 🚨 Это катастрофа.\n\nНам нужен Тотальный Фреш-Старт, старые цифры больше не работают.",
-                    "Оу... Дальше ехать некуда. 🟥 Деньги закончились. Давай начнем с чистого листа?",
-                    "Математика бота больше не бьется с картой. 🚨 Хватит мучить бюджет, давай обнулим этот месяц!",
-                ]
-            )
+            footer = random.choice([
+                "Пробили дно! 🚨 Деньги кончились. Пора пересобрать бюджет.",
+                "Дальше ехать некуда. 🟥 Давай начнём с чистого листа?",
+                "Математика не бьётся с картой. 🚨 Пора обнулить месяц!",
+            ])
             btns = "FRESH_START"
 
     kb = _build_status_keyboard(btns, tg_id)
     await callback.message.edit_text(
-        text=text + "\n\n" + footer,
+        text=text + "\n\n" + footer if footer else text,
         reply_markup=kb,
     )
 
@@ -549,66 +511,7 @@ async def handle_use_savings(callback: CallbackQuery):
     await menu_status(callback)
 
 
-@router.callback_query(F.data == "menu_daily")
-async def menu_daily(callback: CallbackQuery):
-    await callback.answer()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
 
-    user = await get_user_or_none(callback.from_user.id)
-    if not user:
-        await callback.message.edit_text(
-            text=phrases.NO_BUDGET_SHORT.format(name=user_name),
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
-        )
-        return
-
-    async with async_session_maker() as session:
-        month = datetime.now().strftime("%Y-%m")
-        result = await session.execute(
-            select(Budget).where(Budget.telegram_id == callback.from_user.id, Budget.month == month)
-        )
-        budget = result.scalar_one_or_none()
-        if not budget:
-            await callback.message.edit_text(
-                text=phrases.NO_BUDGET_MONTH.format(name=user_name),
-                reply_markup=await get_main_menu_keyboard(callback.from_user.id),
-            )
-            return
-
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        result = await session.execute(
-            select(func.sum(Expense.amount)).where(
-                Expense.telegram_id == callback.from_user.id,
-                Expense.is_deleted == False,
-                Expense.date >= today_start,
-            )
-        )
-        spent_today = result.scalar() or 0
-
-    daily = budget.daily_limit
-    remaining = max(daily - spent_today, 0)
-    days_left = budget.days_remaining
-
-    if budget.free_money > 0:
-        total_line = f"📊 <b>Бюджет на период:</b> {budget.free_money:,.0f}₽"
-    else:
-        total_line = f"📊 <b>Всего:</b> {budget.total_income:,.0f}₽"
-
-    text = (
-        f"💰 <b>Дневной лимит:</b> {daily:,.0f}₽\n"
-        f"📉 <b>Потрачено сегодня:</b> {spent_today:,.0f}₽\n"
-        f"✅ <b>Осталось на сегодня:</b> {remaining:,.0f}₽\n\n"
-        f"📅 <b>Осталось дней:</b> {days_left}\n"
-        f"{total_line}\n"
-        f"📌 <b>Обязательные:</b> {budget.mandatory_payments:,.0f}₽\n"
-        f"🏦 <b>Кубышка:</b> {budget.black_day_fund:,.0f}₽\n"
-        f"🎯 <b>Хотелка:</b> {budget.wishlist_target:,.0f}₽"
-    )
-
-    await callback.message.edit_text(
-        text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id)
-    )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 # ============ ONBOARDING / SKIP ============
