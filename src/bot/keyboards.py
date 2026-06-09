@@ -32,7 +32,7 @@ async def _get_daily_limit_label(telegram_id: int) -> str | None:
     if not budget:
         return None
     spent = await get_today_expenses_sum(telegram_id)
-    remaining = max(int(budget.daily_limit) - spent, 0)
+    remaining = max(int(budget.daily_limit) - int(spent), 0)
     text = f"{phrases.BTN_DAILY_LIMIT}: {remaining:,}₽"
     if len(text) > 64:
         return None
