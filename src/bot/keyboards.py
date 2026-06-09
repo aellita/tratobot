@@ -26,11 +26,14 @@ async def get_main_menu_keyboard(telegram_id: int = None):
 
 
 async def _get_daily_limit_label(telegram_id: int) -> str | None:
+    from ..services.expense_service import get_today_expenses_sum
+
     budget = await get_active_budget(telegram_id)
     if not budget:
         return None
-    amount = max(int(budget.daily_limit), 0)
-    text = f"{phrases.BTN_DAILY_LIMIT}: {amount:,}₽"
+    spent = await get_today_expenses_sum(telegram_id)
+    remaining = max(int(budget.daily_limit) - spent, 0)
+    text = f"{phrases.BTN_DAILY_LIMIT}: {remaining:,}₽"
     if len(text) > 64:
         return None
     return text
