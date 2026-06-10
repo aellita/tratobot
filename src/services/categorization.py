@@ -134,7 +134,11 @@ async def seed_user_categories(telegram_id: int):
 
 async def get_user_categories(telegram_id: int) -> list[Category]:
     async with async_session_maker() as session:
-        result = await session.execute(select(Category).where(Category.telegram_id == telegram_id))
+        result = await session.execute(
+            select(Category)
+            .where(Category.telegram_id == telegram_id)
+            .order_by(Category.id)
+        )
         return list(result.scalars().all())
 
 
@@ -249,10 +253,6 @@ async def detect_category_db(
     telegram_id: int,
     current_amount: float = 0,
 ) -> tuple[Category | None, str]:
-    """
-    Detect category from text using DB-backed categories.
-    Returns (category, matched_keyword).
-    Seeds / migrates categories for the user if needed.
-    """
-    await seed_user_categories(telegram_id)
+    """Detect category from text using DB-backed categories.
+    Returns (category, matched_keyword)."""
     return await find_closest_category(text, telegram_id, current_amount)

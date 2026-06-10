@@ -26,6 +26,7 @@ from ...services.categorization import (
     clean_and_normalize,
     detect_category_db,
     get_category_display,
+    get_user_categories,
     seed_user_categories,
 )
 from ...services.expense_service import (
@@ -172,6 +173,7 @@ async def cmd_start(message: Message, state: FSMContext):
             first_name=message.from_user.first_name,
             username=message.from_user.username,
         )
+        await seed_user_categories(telegram_id)
         greeting = random.choice(GREETINGS)
         await message.answer(text=greeting)
 
@@ -209,6 +211,7 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
         first_name=callback.from_user.first_name,
         username=callback.from_user.username,
     )
+    await seed_user_categories(callback.from_user.id)
 
     await delete_current_budget(callback.from_user.id)
 
@@ -1008,7 +1011,7 @@ async def change_category(callback: CallbackQuery):
         )
         return
 
-    categories = await seed_user_categories(callback.from_user.id)
+    categories = await get_user_categories(callback.from_user.id)
 
     buttons = []
     row = []
