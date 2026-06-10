@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Budget, Wishlist
+from ..utils.helpers import get_msk_now
 
 
 async def get_active_goal(telegram_id: int) -> Wishlist | None:
@@ -39,7 +38,7 @@ async def add_spare_change_to_goal(telegram_id: int, spare_change: float) -> tup
         goal = result.scalar_one_or_none()
 
         if not goal:
-            month = datetime.now().strftime("%Y-%m")
+            month = get_msk_now().strftime("%Y-%m")
             budget_result = await session.execute(
                 select(Budget).where(
                     Budget.telegram_id == telegram_id,

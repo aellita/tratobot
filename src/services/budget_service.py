@@ -1,13 +1,14 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Budget
+from ..utils.helpers import get_msk_now
 
 
 async def get_active_budget(telegram_id: int) -> Budget | None:
-    today = datetime.now()
+    today = get_msk_now()
     this_month = today.strftime("%Y-%m")
     last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
 
@@ -85,7 +86,7 @@ ALLOWED_FIELDS = {
 async def update_budget_field(telegram_id: int, field: str, value):
     if field not in ALLOWED_FIELDS:
         raise ValueError(f"Invalid budget field: {field}")
-    month = datetime.now().strftime("%Y-%m")
+    month = get_msk_now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
             select(Budget).where(Budget.telegram_id == telegram_id, Budget.month == month)
@@ -97,7 +98,7 @@ async def update_budget_field(telegram_id: int, field: str, value):
 
 
 async def delete_current_budget(telegram_id: int):
-    month = datetime.now().strftime("%Y-%m")
+    month = get_msk_now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
             select(Budget).where(Budget.telegram_id == telegram_id, Budget.month == month)
@@ -109,7 +110,7 @@ async def delete_current_budget(telegram_id: int):
 
 
 async def get_days_remaining(telegram_id: int) -> int:
-    month = datetime.now().strftime("%Y-%m")
+    month = get_msk_now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
             select(Budget).where(
@@ -126,7 +127,7 @@ async def get_days_remaining(telegram_id: int) -> int:
 async def reconcile_budget_with_reality(
     telegram_id: int, total_balance: float
 ) -> tuple[float, int, float, float, float]:
-    month = datetime.now().strftime("%Y-%m")
+    month = get_msk_now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
             select(Budget).where(
@@ -159,9 +160,7 @@ async def apply_reconciliation(
     new_mandatory: float | None = None,
     new_black_day: float | None = None,
 ) -> None:
-    from datetime import datetime
-
-    month = datetime.now().strftime("%Y-%m")
+    month = get_msk_now().strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
             select(Budget).where(

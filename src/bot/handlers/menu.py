@@ -1,7 +1,6 @@
 import logging
 import random
 import re
-from datetime import UTC, datetime
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
@@ -36,7 +35,7 @@ from ...services.expense_service import (
 from ...services.goal_service import get_goal_current_amount
 from ...services.user_service import get_or_create_user
 from ...utils import phrases
-from ...utils.helpers import parse_amount, safe
+from ...utils.helpers import get_msk_now, parse_amount, safe
 from ..keyboards import (
     get_cancel_keyboard,
     get_main_menu_keyboard,
@@ -238,7 +237,7 @@ async def menu_status(callback: CallbackQuery):
         return
 
     async with async_session_maker() as session:
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = get_msk_now().replace(hour=0, minute=0, second=0, microsecond=0)
         result = await session.execute(
             select(func.sum(Expense.amount)).where(
                 Expense.telegram_id == tg_id,
@@ -494,7 +493,7 @@ async def handle_use_savings(callback: CallbackQuery):
     await callback.answer()
     tg_id = callback.from_user.id
     async with async_session_maker() as session:
-        month = datetime.now().strftime("%Y-%m")
+        month = get_msk_now().strftime("%Y-%m")
         result = await session.execute(
             select(Budget).where(Budget.telegram_id == tg_id, Budget.month == month)
         )
@@ -603,7 +602,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         await state.clear()
         return
 
-    month = datetime.now().strftime("%Y-%m")
+    month = get_msk_now().strftime("%Y-%m")
     wishlist_name = (
         data.get("wishlist_name", phrases.DEFAULT_WISHLIST_NAME) or phrases.DEFAULT_WISHLIST_NAME
     )
@@ -635,7 +634,7 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
 
     import calendar
 
-    today = datetime.now()
+    today = get_msk_now()
     available = data.get("income", 0) - data.get("mandatory", 0) - data.get("black_day", 0)
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     clamped_start = min(period_start_day, days_in_month)
@@ -696,7 +695,7 @@ async def process_income(message: Message, state: FSMContext):
 async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext):
     import calendar
 
-    today = datetime.now()
+    today = get_msk_now()
     current_state = await state.get_state()
 
     if callback.data == "period_other":
@@ -735,7 +734,7 @@ async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext)
 async def process_period_start(message: Message, state: FSMContext):
     import calendar
 
-    today = datetime.now()
+    today = get_msk_now()
     try:
         day = int(message.text.strip())
     except (ValueError, TypeError):
@@ -915,7 +914,7 @@ async def process_expense(message: Message, state: FSMContext):
             cat = None
         else:
             try:
-                cat, matched = await detect_category_db(description, message.from_user.id)
+                cat, matched = await detect_category_db(description, message.from_user.id, amount)
             except Exception as e:
                 logging.error("Category detection failed", exc_info=e)
                 cat = None
@@ -930,14 +929,18 @@ async def process_expense(message: Message, state: FSMContext):
                     amount=amount,
                     description=description or cat_name,
                     category_id=cat_id,
-                    date=datetime.now(UTC).replace(tzinfo=None),
+                    date=get_msk_now(),
                 )
                 session.add(expense)
                 await session.commit()
                 if first_id is None:
                     first_id = expense.id
         except Exception as e:
-            logging.error("Expense insert failed", exc_info=e)
+            logging.error("Expense insert failed (FSM)", exc_info=e)
+            cause = getattr(e, "__cause__", None)
+            if cause:
+                logging.error("Caused by: %s: %s", type(cause).__name__, cause)
+            expense_id_failed = True
             errors += 1
             continue
 
@@ -1596,7 +1599,7 @@ async def save_income(message: Message, state: FSMContext):
 async def save_edit_period_start(message: Message, state: FSMContext):
     import calendar
 
-    today = datetime.now()
+    today = get_msk_now()
     try:
         day = int(message.text.strip())
     except (ValueError, TypeError):
@@ -1808,7 +1811,7 @@ async def handle_text(message: Message, state: FSMContext):
                 cat = None
             else:
                 try:
-                    cat, matched = await detect_category_db(description, message.from_user.id)
+                    cat, matched = await detect_category_db(description, message.from_user.id, amount)
                 except Exception as e:
                     logging.error("Category detection failed", exc_info=e)
                     cat = None
@@ -1823,7 +1826,7 @@ async def handle_text(message: Message, state: FSMContext):
                         amount=amount,
                         description=description or cat_name,
                         category_id=cat_id,
-                        date=datetime.now(UTC).replace(tzinfo=None),
+                        date=get_msk_now(),
                     )
                     session.add(expense)
                     await session.commit()

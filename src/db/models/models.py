@@ -1,5 +1,6 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SQLEnum
@@ -10,8 +11,8 @@ class Base(DeclarativeBase):
     pass
 
 
-def _utcnow() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)
+def _msk_now() -> datetime:
+    return datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
 
 
 class CategoryType(StrEnum):
@@ -29,7 +30,7 @@ class User(Base):
     telegram_id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now)
 
 
 class Budget(Base):
@@ -47,14 +48,14 @@ class Budget(Base):
     period_start_day: Mapped[int] = mapped_column(Integer, default=1)
     free_money: Mapped[float] = mapped_column(Float, default=0)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now, onupdate=_msk_now)
 
     @property
     def _clamped_start(self) -> int:
         import calendar
 
-        today = datetime.now()
+        today = _msk_now()
         raw = self.period_start_day or 1
         return min(raw, calendar.monthrange(today.year, today.month)[1])
 
@@ -62,7 +63,7 @@ class Budget(Base):
     def days_remaining(self) -> int:
         import calendar
 
-        today = datetime.now()
+        today = _msk_now()
         start = self._clamped_start
         days_in_month = calendar.monthrange(today.year, today.month)[1]
         if start == 1:
@@ -78,7 +79,7 @@ class Budget(Base):
     def _period_total_days(self) -> int:
         import calendar
 
-        today = datetime.now()
+        today = _msk_now()
         start = self._clamped_start
         if start == 1:
             return calendar.monthrange(today.year, today.month)[1]
@@ -114,7 +115,7 @@ class Expense(Base):
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     amount: Mapped[float] = mapped_column(Float)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    date: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    date: Mapped[datetime] = mapped_column(DateTime, default=_msk_now)
     is_emergency: Mapped[bool] = mapped_column(Boolean, default=False)
     is_from_wishlist: Mapped[bool] = mapped_column(Boolean, default=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -129,7 +130,7 @@ class Wishlist(Base):
     target_amount: Mapped[float] = mapped_column(Float)
     current_amount: Mapped[float] = mapped_column(Float, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now)
 
 
 class BlackDayFund(Base):

@@ -1,7 +1,14 @@
 import html
 import math
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 MAX_RETRIES = 3
+MSK_TZ = ZoneInfo("Europe/Moscow")
+
+
+def get_msk_now() -> datetime:
+    return datetime.now(MSK_TZ).replace(tzinfo=None)
 
 
 def parse_amount(text: str, *, allow_zero: bool = False) -> float:

@@ -1,10 +1,11 @@
-from datetime import date, datetime, time
+from datetime import datetime, time
 
 from sqlalchemy import func, select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Expense, UserSettings
 from ..utils import phrases
+from ..utils.helpers import get_msk_now
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
@@ -162,8 +163,9 @@ async def update_expense_amount(
 
 
 async def get_today_expenses_sum(telegram_id: int) -> float:
-    today_start = datetime.combine(date.today(), time.min)
-    today_end = datetime.combine(date.today(), time.max)
+    today_msk = get_msk_now().date()
+    today_start = datetime.combine(today_msk, time.min)
+    today_end = datetime.combine(today_msk, time.max)
 
     async with async_session_maker() as session:
         result = await session.execute(
@@ -196,7 +198,7 @@ async def get_current_period_expenses_sum(telegram_id: int) -> float:
     if not budget:
         return 0.0
 
-    today = datetime.now()
+    today = get_msk_now()
     start_day = budget.period_start_day or 1
     clamped = min(start_day, calendar.monthrange(today.year, today.month)[1])
 
@@ -228,7 +230,7 @@ async def get_current_period_expenses_sum(telegram_id: int) -> float:
 async def get_yesterday_expenses_sum(telegram_id: int) -> float:
     from datetime import timedelta
 
-    yesterday = date.today() - timedelta(days=1)
+    yesterday = get_msk_now().date() - timedelta(days=1)
     day_start = datetime.combine(yesterday, time.min)
     day_end = datetime.combine(yesterday, time.max)
 

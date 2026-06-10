@@ -10,6 +10,7 @@ import src.bot.handlers.history as _hist_h
 import src.bot.handlers.menu as _menu_h
 import src.db.database as _db
 import src.services.budget_service as _bs
+import src.services.categorization as _cat
 import src.services.expense_service as _es
 import src.services.goal_service as _gs
 from src.db.models.models import Base, Budget, Expense, User, UserSettings, Wishlist
@@ -40,8 +41,9 @@ async def session_maker(engine):
 
 @pytest_asyncio.fixture(autouse=True)
 async def _patch_session_maker(session_maker, monkeypatch):
-    for module in [_db, _bs, _gs, _es, _menu_h, _hist_h, _eve_h]:
+    for module in [_db, _bs, _cat, _gs, _es, _menu_h, _hist_h, _eve_h]:
         monkeypatch.setattr(module, "async_session_maker", session_maker)
+    _cat._seeded_users.clear()
 
 
 @pytest_asyncio.fixture

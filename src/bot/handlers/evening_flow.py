@@ -1,12 +1,12 @@
 import asyncio
 import logging
-from datetime import UTC, datetime
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from src.utils import phrases
+from src.utils.helpers import get_msk_now
 
 from ...db.database import async_session_maker
 from ...db.models.models import Expense
@@ -57,7 +57,7 @@ async def handle_evening_expense(message: Message, state: FSMContext):
             telegram_id=user_id,
             amount=amount,
             description=description,
-            date=datetime.now(UTC).replace(tzinfo=None),
+            date=get_msk_now(),
         )
         session.add(expense)
         await session.commit()

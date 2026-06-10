@@ -1,8 +1,7 @@
-from datetime import datetime
-
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from src.utils import phrases
+from src.utils.helpers import get_msk_now
 
 from ..services.budget_service import get_active_budget
 
@@ -59,7 +58,7 @@ def get_settings_keyboard():
 
 
 def get_period_start_keyboard():
-    today = datetime.now()
+    today = get_msk_now()
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
