@@ -48,31 +48,33 @@ async def _build_list_keyboard(
     page: int, total_pages: int, page_items: list[Category], user_id: int = 0
 ) -> InlineKeyboardMarkup:
     buttons = []
-    for cat in page_items:
-        emoji, _ = get_category_display(cat.name)
-        label = f"{emoji} {cat.name}"
-        if cat.is_archived:
-            label += phrases.CATEGORY_LIST_ARCHIVED_SUFFIX
-        buttons.append(
-            [InlineKeyboardButton(text=label, callback_data=f"cat_sel:{cat.id}")]
+    row = []
+    offset = page * PAGE_SIZE
+    for i, cat in enumerate(page_items):
+        row.append(
+            InlineKeyboardButton(
+                text=str(i + 1 + offset), callback_data=f"cat_sel:{cat.id}"
+            )
         )
-    nav_row = []
+    if row:
+        buttons.append(row)
+    nav = []
     if page > 0:
-        nav_row.append(
+        nav.append(
             InlineKeyboardButton(
                 text=phrases.BTN_HISTORY_BACK,
                 callback_data=f"cat_page:{page - 1}",
             )
         )
     if page < total_pages - 1:
-        nav_row.append(
+        nav.append(
             InlineKeyboardButton(
                 text=phrases.BTN_HISTORY_FWD,
                 callback_data=f"cat_page:{page + 1}",
             )
         )
-    if nav_row:
-        buttons.append(nav_row)
+    if page > 0 or page < total_pages - 1:
+        buttons.append(nav)
     nav_buttons = []
     back_target = _get_back_target(user_id) if user_id else None
     if back_target:
