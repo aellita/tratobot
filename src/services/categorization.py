@@ -1,5 +1,6 @@
 import difflib
 import json
+import unicodedata
 
 from sqlalchemy import func, select
 
@@ -255,10 +256,20 @@ async def add_keyword_to_category(
 
 def get_category_display(category_name: str) -> tuple[str, str]:
     """Return (emoji, display_name) for a category name."""
+    if not category_name:
+        return "📦", ""
+
     key = category_name.lower().strip()
-    emoji = CATEGORY_EMOJI_MAP.get(key, "📦")
-    display = CATEGORY_NAME_MAP.get(key, category_name)
-    return emoji, display
+    emoji = CATEGORY_EMOJI_MAP.get(key)
+    display = CATEGORY_NAME_MAP.get(key)
+    if emoji and display:
+        return emoji, display
+
+    name = category_name.strip()
+    if len(name) > 1 and unicodedata.category(name[0]) == "So":
+        return name[0], name[1:].strip()
+
+    return "📦", name
 
 
 async def detect_category_db(

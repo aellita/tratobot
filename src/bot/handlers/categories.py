@@ -279,7 +279,12 @@ async def category_rename_cancel(callback: CallbackQuery, state: FSMContext):
 
 @router.message(CategoryRename.waiting_for_name)
 async def process_cat_rename(message: Message, state: FSMContext):
-    new_name = message.text.strip().capitalize()
+    raw = message.text.strip()
+    parts = raw.split(None, 1)
+    if len(parts) == 2:
+        new_name = parts[0] + " " + parts[1].capitalize()
+    else:
+        new_name = parts[0].capitalize() if parts else ""
     if not new_name or len(new_name) > 30:
         await message.answer(phrases.ERR_NAME_LENGTH)
         return
