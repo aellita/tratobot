@@ -105,6 +105,7 @@ class Category(Base):
         SQLEnum(CategoryType), nullable=True, default=None
     )
     keywords: Mapped[str] = mapped_column(Text, default="[]")
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class Expense(Base):

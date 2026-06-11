@@ -136,8 +136,21 @@ async def get_user_categories(telegram_id: int) -> list[Category]:
     async with async_session_maker() as session:
         result = await session.execute(
             select(Category)
-            .where(Category.telegram_id == telegram_id)
+            .where(
+                Category.telegram_id == telegram_id,
+                Category.is_archived == False,
+            )
             .order_by(Category.id)
+        )
+        return list(result.scalars().all())
+
+
+async def get_all_categories(telegram_id: int) -> list[Category]:
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Category)
+            .where(Category.telegram_id == telegram_id)
+            .order_by(Category.is_archived, Category.id)
         )
         return list(result.scalars().all())
 

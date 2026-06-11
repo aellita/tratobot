@@ -52,6 +52,7 @@ def get_settings_keyboard():
                 )
             ],
             [InlineKeyboardButton(text=phrases.BTN_ROUNDING, callback_data="edit_rounding")],
+            [InlineKeyboardButton(text=phrases.BTN_MANAGE_CATEGORIES, callback_data="menu_categories")],
             [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")],
         ]
     )

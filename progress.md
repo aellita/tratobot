@@ -311,6 +311,35 @@
 
 **Done:** `categorization.py` — 3 новые функции + Stage 1 модифицирован. `menu.py` — amount передан в detect_category_db. 22 новых теста (9 BigTech категорий). 292 тестов проходят, ruff — 50 pre-existing, 0 новых.
 
+### 2026-06-11 — Queue 7: Управление категориями (Б1 + рефакторинг + CRUD)
+
+**Б1 (баг — категории пустые в пикере):**
+- Причина: `seed_user_categories()` при повторном вызове возвращала `[]` из-за кеша `_seeded_users`
+- Фикс: вызов `get_user_categories()` вместо `seed_user_categories()` в `change_category`
+
+**Рефакторинг сидирования:**
+- Сидирование 11 дефолтных категорий перенесено в `/start` (новый пользователь) и `reset_budget`
+- Убрано из `detect_category_db` и `change_category`
+- `get_user_categories()` теперь фильтрует `is_archived == False`
+- Добавлена `get_all_categories()` для менеджмента (все, включая архивные)
+- Автокатегоризация не видит архивные категории
+
+**Сортировка категорий:**
+- `.order_by(Category.id)` в `get_user_categories()` и `get_all_categories()`
+- Дефолтные категории — всегда в одном порядке, новые — в конце
+
+**Проверка дубликатов при создании/переименовании:**
+- Точное совпадение после `.strip().capitalize()`
+- Ошибка + возврат в пикер / отмена rename
+
+**CRUD категорий (новый модуль):**
+- `Category.is_archived` (Boolean) — мягкое удаление
+- Миграция БД (SQLite + PostgreSQL)
+- `src/services/category_service.py` — rename, archive/unarchive, move+delete (expenses → Прочее), hard delete (expenses DELETEd)
+- `src/bot/handlers/categories.py` — пагинированный список (5/стр, активные + архивные), детали, rename (FSM), archive/unarchive, delete (4 опции + двухшаговое подтверждение)
+- Точки входа: настройки + пикер смены категории
+- Умный «⬅️ Назад» из списка → обратно в пикер (через `_cat_back_target[user_id]`)
+
 ---
 
 ## Шпаргалка для агента

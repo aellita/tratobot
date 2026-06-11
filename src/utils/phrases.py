@@ -64,6 +64,7 @@ ERR_INVALID_DATA = "❌ Ошибка в данных."
 ERR_EXPENSE_NOT_FOUND = "❌ Трата не найдена."
 ERR_EXPENSE_NOT_FOUND_DELETED = "❌ Трата не найдена или уже удалена."
 ERR_CATEGORY_NOT_FOUND = "❌ Категория не найдена."
+ERR_CATEGORY_EXISTS = "❌ Категория «{name}» уже существует."
 ERR_NAME_LENGTH = "❌ Название должно быть от 1 до 30 символов. Попробуй ещё раз:"
 ERR_DELETE_FAILED = "❌ Не удалось удалить трату. Она уже удалена или не найдена."
 ERR_RESTORE_FAILED = "❌ Не удалось восстановить трату."
@@ -422,6 +423,46 @@ DEFAULT_CATEGORIES = {
     "📱 Подписки": ["подписка", "subscription", "chatgpt", "midjourney", "spotify", "telegram"],
     "📦 Прочее": [],
 }
+
+# ── Category management ────────────────────────────────────
+BTN_MANAGE_CATEGORIES = "🗂 Категории"
+BTN_CATEGORY_RENAME = "✏️ Переименовать"
+BTN_CATEGORY_ARCHIVE = "🗄 Архивировать"
+BTN_CATEGORY_UNARCHIVE = "↩️ Вернуть из архива"
+BTN_CATEGORY_DELETE = "🗑️ Удалить категорию"
+BTN_CATEGORY_DELETE_ARCHIVE = "🗄 Архивировать (Рекомендуется)"
+BTN_CATEGORY_DELETE_MOVE = "📦 Перенести в Прочее"
+BTN_CATEGORY_DELETE_HARD = "💣 Удалить насовсем"
+BTN_CATEGORY_DELETE_CONFIRM = "✅ Да, удалить всё"
+BTN_CATEGORY_BACK_TO_LIST = "⬅️ К списку категорий"
+
+CATEGORY_MANAGEMENT_TITLE = "🗂 Настройка категорий (Страница {page} из {total})"
+CATEGORY_LIST_ACTIVE_HEADER = "\nАктивные категории (нажми для изменения):"
+CATEGORY_LIST_ARCHIVED_HEADER = "\n------- 🗄 Архивированные категории:"
+CATEGORY_LIST_ARCHIVED_SUFFIX = " (Архив)"
+CATEGORY_LIST_EMPTY = "У тебя пока нет категорий."
+
+CATEGORY_DETAIL_HEADER = "{emoji} <b>{name}</b>\n🗃 Трат в категории: {count}"
+CATEGORY_DETAIL_ARCHIVED_NOTE = "\n\n⚠️ Категория в архиве — не участвует в автокатегоризации и не показывается при выборе."
+
+CATEGORY_RENAME_PROMPT = "✏️ Напиши новое название для категории «{name}»:"
+CATEGORY_RENAMED = "✅ Категория переименована в «{name}»!"
+
+CATEGORY_ARCHIVED = "🗄 Категория «{name}» архивирована."
+CATEGORY_UNARCHIVED = "↩️ Категория «{name}» возвращена из архива."
+
+CATEGORY_DELETE_WARNING = (
+    "⚠️ <b>Вы удаляете категорию «{name}».</b>\n"
+    "В ней уже есть <b>{count} трат</b> за этот период.\n\n"
+    "Что с ними сделать?"
+)
+CATEGORY_DELETED_MOVED = "✅ Категория «{name}» удалена. Траты перенесены в «Прочее»."
+CATEGORY_DELETED_HARD = "💥 Категория «{name}» удалена насовсем. Траты обнулены."
+CATEGORY_DELETE_CONFIRM_PROMPT = (
+    "⚠️ <b>Вы уверены?</b> Это изменит твой баланс и отчёты за прошлые периоды. "
+    "Восстановить данные нельзя!"
+)
+CATEGORY_NOT_FOUND = "❌ Категория не найдена."
 
 # ── Menu keywords ──────────────────────────────────────────
 MENU_KEYWORDS = {"меню", "помощь", "настройки", "статус", "история", "назад", "отмена"}

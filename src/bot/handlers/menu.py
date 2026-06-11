@@ -1032,6 +1032,9 @@ async def change_category(callback: CallbackQuery):
         [InlineKeyboardButton(text=phrases.BTN_NEW_CATEGORY, callback_data=f"new_cat:{expense_id}")]
     )
     buttons.append(
+        [InlineKeyboardButton(text=phrases.BTN_MANAGE_CATEGORIES, callback_data=f"menu_categories:{expense_id}")]
+    )
+    buttons.append(
         [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data=f"exp_back_cat:{expense_id}")]
     )
 
@@ -1161,6 +1164,26 @@ async def save_new_category(message: Message, state: FSMContext):
         return
 
     async with async_session_maker() as session:
+        existing = await session.execute(
+            select(Category).where(
+                Category.telegram_id == message.from_user.id,
+                Category.name == name,
+            )
+        )
+        if existing.scalar_one_or_none():
+            await message.answer(
+                text=phrases.ERR_CATEGORY_EXISTS.format(name=name),
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(
+                            text=phrases.BTN_BACK,
+                            callback_data=f"change_cat:{expense_id}",
+                        )],
+                    ]
+                ),
+            )
+            return
+
         result = await session.execute(
             select(Expense).where(
                 Expense.id == expense_id,

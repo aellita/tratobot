@@ -7,6 +7,7 @@ from aiogram.enums import ParseMode
 
 from ..core.config import settings
 from ..db.database import close_db, init_db, migrate_schema
+from .handlers.categories import router as categories_router
 from .handlers.evening_flow import router as evening_router
 from .handlers.history import router as history_router
 from .handlers.menu import router as menu_router
@@ -25,6 +26,7 @@ dp = Dispatcher()
 dp.message.middleware(RateLimitMiddleware())
 dp.callback_query.middleware(RateLimitMiddleware())
 
+dp.include_router(categories_router)
 dp.include_router(test_router)
 dp.include_router(evening_router)
 dp.include_router(history_router)

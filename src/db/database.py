@@ -166,6 +166,17 @@ async def migrate_schema():
                 await conn.execute(text("ALTER TABLE budgets ADD COLUMN free_money REAL DEFAULT 0"))
             logger.info("Migrated budgets: added free_money")
 
+        if not await _has_column(conn, "categories", "is_archived"):
+            if is_postgres:
+                await conn.execute(
+                    text("ALTER TABLE categories ADD COLUMN is_archived BOOLEAN DEFAULT FALSE")
+                )
+            else:
+                await conn.execute(
+                    text("ALTER TABLE categories ADD COLUMN is_archived INTEGER DEFAULT 0")
+                )
+            logger.info("Migrated categories: added is_archived")
+
 
 async def close_db():
     await engine.dispose()
