@@ -45,9 +45,17 @@ class CategoryRename(StatesGroup):
 
 
 async def _build_list_keyboard(
-    page: int, total_pages: int, user_id: int = 0
+    page: int, total_pages: int, page_items: list[Category], user_id: int = 0
 ) -> InlineKeyboardMarkup:
     buttons = []
+    for cat in page_items:
+        emoji, _ = get_category_display(cat.name)
+        label = f"{emoji} {cat.name}"
+        if cat.is_archived:
+            label += phrases.CATEGORY_LIST_ARCHIVED_SUFFIX
+        buttons.append(
+            [InlineKeyboardButton(text=label, callback_data=f"cat_sel:{cat.id}")]
+        )
     nav_row = []
     if page > 0:
         nav_row.append(
@@ -111,7 +119,7 @@ async def _render_category_page(telegram_id: int, page: int) -> tuple[str, Inlin
         lines.append(label)
 
     text = "\n".join(lines)
-    kb = await _build_list_keyboard(page, total_pages, telegram_id)
+    kb = await _build_list_keyboard(page, total_pages, page_items, telegram_id)
     return text, kb
 
 
