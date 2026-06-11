@@ -111,7 +111,7 @@ async def _render_category_page(telegram_id: int, page: int) -> tuple[str, Inlin
         lines.append(label)
 
     text = "\n".join(lines)
-    kb = _build_list_keyboard(page, total_pages, telegram_id)
+    kb = await _build_list_keyboard(page, total_pages, telegram_id)
     return text, kb
 
 
