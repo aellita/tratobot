@@ -340,6 +340,37 @@
 - Точки входа: настройки + пикер смены категории
 - Умный «⬅️ Назад» из списка → обратно в пикер (через `_cat_back_target[user_id]`)
 
+### 2026-06-11 — Queue 8: Детект дубликатов трат (Б2)
+
+**Проблема:** При обрыве/таймауте Telegram API расход коммитился в БД, `state.clear()` сбрасывался до `message.answer()`, пользователь не видел ответа и отправлял трату снова — создавался дубликат.
+
+**Решение — DuplicateMiddleware (`src/bot/middleware.py`):**
+- In-memory `_expenses[user_id]` — список последних трат каждого пользователя (окно 15s)
+- `check()`: 0 совпадений → `'new'`, 1 → `'warn'`, 2+ → `'silent'`
+- При `'warn'`: данные в `_pending`, warning-сообщение с кнопками `[❌ Это дубль] [✅ Да, вторая трата]`
+- При `'silent'`: полная тишина — ни ответа, ни сохранения
+- Защита от Telegram-ретраев: `_last_message_id[user_id]` — при повторном `message_id` middleware пересылает последний ответ
+- Защита от утечки памяти: `_cleanup_old_users()` раз в сутки удаляет неактивных пользователей из всех словарей
+- Зарегистрирован как `dp.message.middleware(dup_middleware)`, singleton доступен хендлерам через импорт
+
+**Callback-хендлеры (menu.py):**
+- `dup_confirm` — подтверждение второй траты: забирает `_pending`, создаёт Expense, показывает `DUP_CONFIRMED` с балансом
+- `dup_del` — отмена дубля: сбрасывает `dup_count`, показывает `DUP_DELETED`
+
+**Попутно:**
+- `state.clear()` теперь выполняется после `message.answer()` (гигиена кода)
+- Фикс `lines.append` вне цикла в `handle_text` — мультилайн-траты в свободном вводе теперь показывают все строки
+- Удалён dead code после `return` в `handle_text`
+
+**Files:**
+- `src/bot/middleware.py` — DuplicateMiddleware (~100 строк)
+- `src/bot/handlers/menu.py` — duplicate check в process_expense + handle_text + callback handlers
+- `src/bot/keyboards.py` — `get_duplicate_keyboard()`
+- `src/utils/phrases.py` — 5 новых фраз (BTN_DUP_DEL, BTN_DUP_CONFIRM, DUP_WARNING, DUP_CONFIRMED, DUP_DELETED)
+- `src/bot/main.py` — регистрация middleware + cleanup task
+
+**Status:** 292 тестов проходят, ruff — 0 новых ошибок. Запушено в main.
+
 ---
 
 ## Шпаргалка для агента
