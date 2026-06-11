@@ -26,6 +26,7 @@ ALLOWED_COLUMNS = {
     "period_start_day",
     "rounding_mode",
     "free_money",
+    "is_archived",
 }
 
 
