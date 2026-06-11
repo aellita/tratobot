@@ -12,7 +12,7 @@ from .handlers.evening_flow import router as evening_router
 from .handlers.history import router as history_router
 from .handlers.menu import router as menu_router
 from .handlers.test_commands import router as test_router
-from .middleware import RateLimitMiddleware
+from .middleware import RateLimitMiddleware, dup_middleware
 from .scheduler import setup_scheduler, stop_scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +24,7 @@ bot = Bot(
 )
 dp = Dispatcher()
 dp.message.middleware(RateLimitMiddleware())
+dp.message.middleware(dup_middleware)
 dp.callback_query.middleware(RateLimitMiddleware())
 
 dp.include_router(categories_router)
@@ -39,6 +40,7 @@ async def on_startup():
     logger.info("Migrating schema...")
     await migrate_schema()
     setup_scheduler(bot, dp.storage)
+    asyncio.create_task(dup_middleware.start_cleanup())
     logger.info("Bot started!")
 
 

@@ -101,6 +101,17 @@ def get_rounding_mode_keyboard():
     )
 
 
+def get_duplicate_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=phrases.BTN_DUP_DEL, callback_data="dup_del"),
+                InlineKeyboardButton(text=phrases.BTN_DUP_CONFIRM, callback_data="dup_confirm"),
+            ],
+        ]
+    )
+
+
 def get_start_choice_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[

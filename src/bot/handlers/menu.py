@@ -15,6 +15,7 @@ from ...db.models.models import Budget, Category, Expense, User, UserSettings, W
 from ...services.budget_service import (
     apply_reconciliation,
     delete_current_budget,
+    get_active_budget,
     reconcile_budget_with_reality,
     save_budget,
     update_budget_field,
@@ -30,6 +31,7 @@ from ...services.categorization import (
     seed_user_categories,
 )
 from ...services.expense_service import (
+    get_today_expenses_sum,
     parse_multi_expense_text,
     try_apply_round_up,
 )
@@ -39,6 +41,7 @@ from ...utils import phrases
 from ...utils.helpers import get_msk_now, parse_amount, safe
 from ..keyboards import (
     get_cancel_keyboard,
+    get_duplicate_keyboard,
     get_main_menu_keyboard,
     get_onboarding_keyboard,
     get_period_start_keyboard,
@@ -46,6 +49,7 @@ from ..keyboards import (
     get_settings_keyboard,
     get_start_choice_keyboard,
 )
+from ..middleware import dup_middleware
 
 router = Router()
 
@@ -903,10 +907,40 @@ async def process_expense(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="500 кофе"))
         return
 
+    user_id = message.from_user.id
+
+    # Quick pre-check: single-line expense may be a duplicate
+    if len(parsed_list) == 1:
+        amount, description = parsed_list[0]
+        dup_status = dup_middleware.check(user_id, amount, description)
+        if dup_status != "new":
+            if dup_status == "silent":
+                await state.clear()
+                return
+            if description == phrases.FALLBACK_DESC:
+                cat = None
+            else:
+                try:
+                    cat, _ = await detect_category_db(description, user_id, amount)
+                except Exception as e:
+                    logging.error("Category detection failed", exc_info=e)
+                    cat = None
+            cat_id = cat.id if cat else None
+            emoji, cat_name = get_category_display(cat.name) if cat else phrases.DEFAULT_CATEGORY
+            dup_middleware.set_pending(user_id, amount, description, cat_id, description, emoji, cat_name)
+            await _cleanup_keyboard(message.bot, message.chat.id)
+            msg = await message.answer(
+                phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
+                reply_markup=get_duplicate_keyboard(),
+            )
+            _track_keyboard(message.chat.id, msg.message_id)
+            return
+
     lines = []
     total_amount = 0
     first_id = None
     errors = 0
+    all_silent = True
 
     for amount, description in parsed_list:
         if not description:
@@ -917,7 +951,7 @@ async def process_expense(message: Message, state: FSMContext):
             cat = None
         else:
             try:
-                cat, matched = await detect_category_db(description, message.from_user.id, amount)
+                cat, matched = await detect_category_db(description, user_id, amount)
             except Exception as e:
                 logging.error("Category detection failed", exc_info=e)
                 cat = None
@@ -925,10 +959,25 @@ async def process_expense(message: Message, state: FSMContext):
         cat_id = cat.id if cat else None
         emoji, cat_name = get_category_display(cat.name) if cat else phrases.DEFAULT_CATEGORY
 
+        dup_status = dup_middleware.check(user_id, amount, description)
+        if dup_status == "silent":
+            continue
+        if dup_status == "warn":
+            dup_middleware.set_pending(user_id, amount, description, cat_id, description, emoji, cat_name)
+            await _cleanup_keyboard(message.bot, message.chat.id)
+            msg = await message.answer(
+                phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
+                reply_markup=get_duplicate_keyboard(),
+            )
+            _track_keyboard(message.chat.id, msg.message_id)
+            return
+
+        all_silent = False
+
         try:
             async with async_session_maker() as session:
                 expense = Expense(
-                    telegram_id=message.from_user.id,
+                    telegram_id=user_id,
                     amount=amount,
                     description=description or cat_name,
                     category_id=cat_id,
@@ -943,17 +992,18 @@ async def process_expense(message: Message, state: FSMContext):
             cause = getattr(e, "__cause__", None)
             if cause:
                 logging.error("Caused by: %s: %s", type(cause).__name__, cause)
-            expense_id_failed = True
             errors += 1
             continue
 
+        dup_middleware.record(user_id, message.message_id, amount, description, expense.id)
         lines.append(
             phrases.EXPENSE_SAVED_LINE.format(
                 amount=f"{amount:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
             )
         )
 
-    await state.clear()
+    if all_silent:
+        return
 
     if not lines:
         await message.answer(phrases.ERR_EXPENSE_SAVE)
@@ -963,7 +1013,7 @@ async def process_expense(message: Message, state: FSMContext):
 
     total_round_up = ""
     if total_amount > 0:
-        r = await try_apply_round_up(message.from_user.id, total_amount)
+        r = await try_apply_round_up(user_id, total_amount)
         if r:
             total_round_up = r
 
@@ -987,12 +1037,10 @@ async def process_expense(message: Message, state: FSMContext):
             ]
         )
 
-    msg = await message.answer(
-        text=phrases.EXPENSE_SAVED_ALL.format(
-            name=user_name, lines="\n".join(lines), round_up=total_round_up
-        ),
-        reply_markup=kb,
+    response_text = phrases.EXPENSE_SAVED_ALL.format(
+        name=user_name, lines="\n".join(lines), round_up=total_round_up
     )
+    msg = await message.answer(text=response_text, reply_markup=kb)
     _track_keyboard(message.chat.id, msg.message_id)
 
 
@@ -1782,6 +1830,74 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
+# ============ DUPLICATE DETECTION CALLBACKS ============
+
+
+@router.callback_query(F.data == "dup_confirm")
+async def handle_duplicate_confirm(callback: CallbackQuery):
+    await callback.answer()
+    user_id = callback.from_user.id
+    pending = dup_middleware.get_pending(user_id)
+    if not pending:
+        await callback.message.edit_text(phrases.ERR_EXPENSE_NOT_FOUND)
+        return
+
+    try:
+        async with async_session_maker() as session:
+            expense = Expense(
+                telegram_id=user_id,
+                amount=pending["amount"],
+                description=pending["description"],
+                category_id=pending["cat_id"],
+                date=get_msk_now(),
+            )
+            session.add(expense)
+            await session.commit()
+    except Exception as e:
+        logging.error("Duplicate confirm expense insert failed", exc_info=e)
+        await callback.message.edit_text(phrases.ERR_EXPENSE_SAVE)
+        return
+
+    dup_middleware.record(user_id, 0, pending["amount"], pending["description"], expense.id)
+    dup_middleware.reset_dup_count(user_id, pending["amount"], pending["description"])
+
+    spent = await get_today_expenses_sum(user_id)
+    balance = "неизвестно"
+    try:
+        budget = await get_active_budget(user_id)
+        if budget:
+            remaining = max(int(budget.daily_limit) - int(spent), 0)
+            balance = f"{remaining:,} ₽"
+    except Exception:
+        pass
+
+    await callback.message.edit_text(
+        text=phrases.DUP_CONFIRMED.format(
+            amount=f"{pending['amount']:,.0f}",
+            desc=safe(pending["description"]),
+            balance=balance,
+        ),
+    )
+
+
+@router.callback_query(F.data == "dup_del")
+async def handle_duplicate_delete(callback: CallbackQuery):
+    await callback.answer()
+    user_id = callback.from_user.id
+    pending = dup_middleware.get_pending(user_id)
+    if not pending:
+        await callback.message.edit_text(phrases.ERR_EXPENSE_NOT_FOUND)
+        return
+
+    dup_middleware.reset_dup_count(user_id, pending["amount"], pending["description"])
+    await callback.message.edit_text(
+        text=phrases.DUP_DELETED.format(
+            amount=f"{pending['amount']:,.0f}",
+            desc=safe(pending["description"]),
+        ),
+    )
+
+
 # ============ UNSUPPORTED CONTENT ============
 
 
@@ -1824,9 +1940,11 @@ async def handle_text(message: Message, state: FSMContext):
             username=message.from_user.username,
         )
 
+        user_id = message.from_user.id
         lines = []
         total_amount = 0
         first_id = None
+        all_silent = True
 
         for amount, description in parsed_list:
             if not description:
@@ -1837,7 +1955,7 @@ async def handle_text(message: Message, state: FSMContext):
                 cat = None
             else:
                 try:
-                    cat, matched = await detect_category_db(description, message.from_user.id, amount)
+                    cat, matched = await detect_category_db(description, user_id, amount)
                 except Exception as e:
                     logging.error("Category detection failed", exc_info=e)
                     cat = None
@@ -1845,10 +1963,24 @@ async def handle_text(message: Message, state: FSMContext):
             cat_id = cat.id if cat else None
             emoji, cat_name = get_category_display(cat.name) if cat else phrases.DEFAULT_CATEGORY
 
+            dup_status = dup_middleware.check(user_id, amount, description)
+            if dup_status == "silent":
+                continue
+            if dup_status == "warn":
+                dup_middleware.set_pending(user_id, amount, description, cat_id, description, emoji, cat_name)
+                await _cleanup_keyboard(message.bot, message.chat.id)
+                msg = await message.answer(
+                    phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
+                    reply_markup=get_duplicate_keyboard(),
+                )
+                _track_keyboard(message.chat.id, msg.message_id)
+                return
+            all_silent = False
+
             try:
                 async with async_session_maker() as session:
                     expense = Expense(
-                        telegram_id=message.from_user.id,
+                        telegram_id=user_id,
                         amount=amount,
                         description=description or cat_name,
                         category_id=cat_id,
@@ -1865,11 +1997,15 @@ async def handle_text(message: Message, state: FSMContext):
                     logging.error("Caused by: %s: %s", type(cause).__name__, cause)
                 continue
 
-        lines.append(
-            phrases.EXPENSE_SAVED_LINE.format(
-                amount=f"{amount:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
+            dup_middleware.record(user_id, message.message_id, amount, description, expense.id)
+            lines.append(
+                phrases.EXPENSE_SAVED_LINE.format(
+                    amount=f"{amount:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
+                )
             )
-        )
+
+        if all_silent:
+            return
 
     if not lines:
         await message.answer(phrases.ERR_EXPENSE_SAVE)
@@ -1879,7 +2015,7 @@ async def handle_text(message: Message, state: FSMContext):
 
     total_round_up = ""
     if total_amount > 0:
-        r = await try_apply_round_up(message.from_user.id, total_amount)
+        r = await try_apply_round_up(user_id, total_amount)
         if r:
             total_round_up = r
 
@@ -1903,20 +2039,8 @@ async def handle_text(message: Message, state: FSMContext):
             ]
         )
 
-    msg = await message.answer(
-        text=phrases.EXPENSE_SAVED_ALL.format(
-            name=user_name, lines="\n".join(lines), round_up=total_round_up
-        ),
-        reply_markup=kb,
+    response_text = phrases.EXPENSE_SAVED_ALL.format(
+        name=user_name, lines="\n".join(lines), round_up=total_round_up
     )
-    _track_keyboard(message.chat.id, msg.message_id)
-    return
-
-    user_name = message.from_user.first_name or phrases.FALLBACK_NAME
-
-    await _cleanup_keyboard(message.bot, message.chat.id)
-    msg = await message.answer(
-        text=phrases.UNRECOGNIZED_TEXT.format(name=user_name),
-        reply_markup=await get_main_menu_keyboard(message.from_user.id),
-    )
+    msg = await message.answer(text=response_text, reply_markup=kb)
     _track_keyboard(message.chat.id, msg.message_id)
