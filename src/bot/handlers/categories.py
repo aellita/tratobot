@@ -304,12 +304,18 @@ async def process_cat_rename(message: Message, state: FSMContext):
             return
 
         old_emoji, _ = get_category_display(cat.name)
-        text_part = raw[1:].strip() if ord(raw[0]) > 0x1F000 else raw
+        if ord(raw[0]) > 0x1F000:
+            user_emoji = raw[0]
+            text_part = raw[1:].strip()
+            emoji = user_emoji
+        else:
+            text_part = raw
+            emoji = old_emoji
         if not text_part:
             await message.answer(phrases.ERR_NAME_LENGTH)
             return
         text_part = text_part[0].upper() + text_part[1:].lower()
-        new_name = f"{old_emoji} {text_part}"
+        new_name = f"{emoji} {text_part}"
 
         dup = await session.execute(
             select(Category).where(
