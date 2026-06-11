@@ -280,12 +280,7 @@ async def category_rename_cancel(callback: CallbackQuery, state: FSMContext):
 @router.message(CategoryRename.waiting_for_name)
 async def process_cat_rename(message: Message, state: FSMContext):
     raw = message.text.strip()
-    parts = raw.split(None, 1)
-    if len(parts) == 2:
-        new_name = parts[0] + " " + parts[1].capitalize()
-    else:
-        new_name = parts[0].capitalize() if parts else ""
-    if not new_name or len(new_name) > 30:
+    if not raw or len(raw) > 30:
         await message.answer(phrases.ERR_NAME_LENGTH)
         return
 
@@ -296,6 +291,26 @@ async def process_cat_rename(message: Message, state: FSMContext):
         return
 
     async with async_session_maker() as session:
+        result = await session.execute(
+            select(Category).where(
+                Category.id == category_id,
+                Category.telegram_id == message.from_user.id,
+            )
+        )
+        cat = result.scalar_one_or_none()
+        if not cat:
+            await state.clear()
+            await message.answer(phrases.CATEGORY_NOT_FOUND, reply_markup=await get_main_menu_keyboard(message.from_user.id))
+            return
+
+        old_emoji, _ = get_category_display(cat.name)
+        text_part = raw[1:].strip() if ord(raw[0]) > 0x1F000 else raw
+        if not text_part:
+            await message.answer(phrases.ERR_NAME_LENGTH)
+            return
+        text_part = text_part[0].upper() + text_part[1:].lower()
+        new_name = f"{old_emoji} {text_part}"
+
         dup = await session.execute(
             select(Category).where(
                 Category.telegram_id == message.from_user.id,
