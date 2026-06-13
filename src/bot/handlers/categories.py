@@ -71,13 +71,12 @@ async def _render_category_page(telegram_id: int) -> tuple[str, InlineKeyboardMa
     nav_buttons = []
     back_target = _get_back_target(telegram_id) if telegram_id else None
     if back_target:
-        nav_buttons.append(
-            InlineKeyboardButton(text=phrases.BTN_BACK, callback_data=back_target)
+        buttons.append(
+            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data=back_target)]
         )
-    nav_buttons.append(
-        InlineKeyboardButton(text=phrases.BTN_BACK_TO_MENU, callback_data="menu_back")
+    buttons.append(
+        [InlineKeyboardButton(text=phrases.BTN_BACK_TO_MENU, callback_data="menu_back")]
     )
-    buttons.append(nav_buttons)
 
     return phrases.BTN_MANAGE_CATEGORIES, InlineKeyboardMarkup(inline_keyboard=buttons)
 
