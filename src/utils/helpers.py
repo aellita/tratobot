@@ -3,8 +3,12 @@ import math
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import emoji
+
 MAX_RETRIES = 3
 MSK_TZ = ZoneInfo("Europe/Moscow")
+
+FALLBACK_EMOJI = "🏷️"
 
 
 def get_msk_now() -> datetime:
@@ -23,6 +27,21 @@ def parse_amount(text: str, *, allow_zero: bool = False) -> float:
     if not allow_zero and amount == 0:
         raise ValueError("Zero amount not allowed")
     return amount
+
+
+def _extract_emoji(text: str) -> tuple[str | None, str]:
+    if not text:
+        return None, ""
+
+    emojis = emoji.emoji_list(text)
+    if not emojis:
+        return None, text.strip()
+
+    anchor = emojis[0]["emoji"]
+    cleaned = emoji.replace_emoji(text, "")
+    cleaned = " ".join(cleaned.split()).strip()
+
+    return anchor, cleaned
 
 
 def safe(text: str | None) -> str:

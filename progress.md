@@ -373,6 +373,22 @@
 
 ---
 
+### 2026-06-13 — Queue 9: Переименование категорий — emoji-детекция + тесты
+
+**Проблема:** `ord(raw[0]) > 0x1F000` не ловил многие emoji (☕, ©, флаги, составные), а fallback `📦` пересекался с «Прочее».
+
+**Решение:**
+- Добавлена библиотека `emoji` в `requirements.txt`
+- Создана `_extract_emoji(text)` в `helpers.py` — использует `emoji.emoji_list()` для поиска первого emoji + `emoji.replace_emoji()` для очистки текста
+- Новый fallback emoji `FALLBACK_EMOJI = "🏷️"` (tag) — не пересекается с существующими категориями
+- `get_category_display()` — fallback `📦` → `🏷️`
+- `process_cat_rename` переписан: `_extract_emoji` вместо `ord()`, цепочка `emoji = new_emoji or old_emoji or FALLBACK_EMOJI`, no-op детекция (то же имя → тихий успех)
+- `conftest.py` — добавлены `category_service` и `categories` хендлер в monkeypatch
+
+**Тесты:** 33 новых теста (14 unit на `_extract_emoji`, 4 service, 13 FSM-хендлера). Итого 325 тестов, 0 новых ruff-ошибок.
+
+---
+
 ## Шпаргалка для агента
 
 После каждой сессии (или по запросу пользователя) агент проверяет: было ли что-то из списка «Когда писать». Если да — добавляет запись в этот файл перед завершением работы.

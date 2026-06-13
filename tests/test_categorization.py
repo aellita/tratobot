@@ -49,7 +49,7 @@ class TestGetCategoryDisplay:
 
     def test_unknown_category_returns_fallback(self):
         emoji, name = get_category_display("Неизвестная")
-        assert emoji == "📦"
+        assert emoji == "🏷️"
         assert name == "Неизвестная"
 
     def test_transport_category(self):
@@ -59,7 +59,7 @@ class TestGetCategoryDisplay:
 
     def test_empty_string(self):
         emoji, name = get_category_display("")
-        assert emoji == "📦"
+        assert emoji == "🏷️"
         assert name == ""
 
     def test_leading_trailing_spaces(self):

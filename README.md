@@ -35,7 +35,7 @@ Telegram-бот для учёта личных финансов. Ироничн�
 
 - [x] **pre-commit hooks:** ruff (lint+format), mypy, pytest, базовые хуки (`trailing-whitespace`, `end-of-file-fixer`, `check-yaml`)
 - [x] **GitHub Actions CI:** автоматический прогон ruff (check + format), mypy, pytest при push/PR на main
-- [x] **Юнит-тесты:** 292 теста — чистые функции, DB-mocked сервисы, FSM/integration
+- [x] **Юнит-тесты:** 325 тестов — чистые функции, DB-mocked сервисы, FSM/integration
 - [x] **phrases.py:** все пользовательские строки вынесены в `src/utils/phrases.py` (8 файлов, ~180 замен)
 - [x] **Фикс хотелки:** статус теперь показывает реальную накопленную сумму из `Wishlist.current_amount`, а не `budget.wishlist_target`
 - [x] **Фикс перехода периода:** `menu_daily` и кнопка лимита переведены на `get_active_budget()` — находят бюджет при переходе через месяц
@@ -47,6 +47,7 @@ Telegram-бот для учёта личных финансов. Ироничн�
 - [x] **Проверка дубликатов:** при создании и переименовании категории — защита от одинаковых названий
 - [x] **Сидирование категорий:** вынесено в `/start` и `reset_budget`, убрано из `detect_category_db` и `change_category`
 - [x] **Детект дубликатов трат (Б2):** новый `DuplicateMiddleware` — in-memory кэш последних трат (15s окно), 3-ступенчатая эскалация (success → warn с кнопками → silence), защита от Telegram-ретраев через `message_id`, фоновая очистка памяти раз в сутки
+- [x] **Переименование категорий:** emoji-детекция через библиотеку `emoji` вместо `ord()`, извлечение emoji из любого места ввода, удаление всех emoji из текста названия, fallback `🏷️` для кастомных категорий, no-op детекция, 33 теста
 
 ### Known Bugs (ASAP)
 

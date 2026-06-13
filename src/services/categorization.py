@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from ..db.database import async_session_maker
 from ..db.models.models import Category, Expense
 from ..utils import phrases
+from ..utils.helpers import FALLBACK_EMOJI
 
 _seeded_users: set[int] = set()
 
@@ -257,19 +258,19 @@ async def add_keyword_to_category(
 def get_category_display(category_name: str) -> tuple[str, str]:
     """Return (emoji, display_name) for a category name."""
     if not category_name:
-        return "📦", ""
+        return FALLBACK_EMOJI, ""
 
     key = category_name.lower().strip()
-    emoji = CATEGORY_EMOJI_MAP.get(key)
+    matched_emoji = CATEGORY_EMOJI_MAP.get(key)
     display = CATEGORY_NAME_MAP.get(key)
-    if emoji and display:
-        return emoji, display
+    if matched_emoji and display:
+        return matched_emoji, display
 
     name = category_name.strip()
     if len(name) > 1 and unicodedata.category(name[0]) == "So":
         return name[0], name[1:].strip()
 
-    return "📦", name
+    return FALLBACK_EMOJI, name
 
 
 async def detect_category_db(
