@@ -23,7 +23,6 @@ from ...utils.helpers import FALLBACK_EMOJI, _extract_emoji, safe
 from ..keyboards import get_main_menu_keyboard
 
 router = Router()
-PAGE_SIZE = 5
 
 _cat_back_target: dict[int, str] = {}
 
@@ -44,39 +43,33 @@ class CategoryRename(StatesGroup):
     waiting_for_name = State()
 
 
-async def _build_list_keyboard(
-    page: int, total_pages: int, page_items: list[Category], user_id: int = 0
-) -> InlineKeyboardMarkup:
+async def _render_category_page(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    all_cats = await get_all_categories(telegram_id)
+    if not all_cats:
+        return phrases.CATEGORY_LIST_EMPTY, await get_main_menu_keyboard(telegram_id)
+
+    active = [c for c in all_cats if not c.is_archived]
+    archived = [c for c in all_cats if c.is_archived]
+
     buttons = []
     row = []
-    offset = page * PAGE_SIZE
-    for i, cat in enumerate(page_items):
+
+    for cat in active + archived:
+        emoji, display_text = get_category_display(cat.name)
+        label = f"{emoji} {display_text}"
+        if cat.is_archived:
+            label += phrases.CATEGORY_LIST_ARCHIVED_SUFFIX
         row.append(
-            InlineKeyboardButton(
-                text=str(i + 1 + offset), callback_data=f"cat_sel:{cat.id}"
-            )
+            InlineKeyboardButton(text=label, callback_data=f"cat_sel:{cat.id}")
         )
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
     if row:
         buttons.append(row)
-    nav = []
-    if page > 0:
-        nav.append(
-            InlineKeyboardButton(
-                text=phrases.BTN_HISTORY_BACK,
-                callback_data=f"cat_page:{page - 1}",
-            )
-        )
-    if page < total_pages - 1:
-        nav.append(
-            InlineKeyboardButton(
-                text=phrases.BTN_HISTORY_FWD,
-                callback_data=f"cat_page:{page + 1}",
-            )
-        )
-    if page > 0 or page < total_pages - 1:
-        buttons.append(nav)
+
     nav_buttons = []
-    back_target = _get_back_target(user_id) if user_id else None
+    back_target = _get_back_target(telegram_id) if telegram_id else None
     if back_target:
         nav_buttons.append(
             InlineKeyboardButton(text=phrases.BTN_BACK, callback_data=back_target)
@@ -85,44 +78,8 @@ async def _build_list_keyboard(
         InlineKeyboardButton(text=phrases.BTN_BACK_TO_MENU, callback_data="menu_back")
     )
     buttons.append(nav_buttons)
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
-async def _render_category_page(telegram_id: int, page: int) -> tuple[str, InlineKeyboardMarkup]:
-    all_cats = await get_all_categories(telegram_id)
-    if not all_cats:
-        return phrases.CATEGORY_LIST_EMPTY, await get_main_menu_keyboard(telegram_id)
-
-    active = [c for c in all_cats if not c.is_archived]
-    archived = [c for c in all_cats if c.is_archived]
-    ordered = active + archived
-    total_items = len(ordered)
-    total_pages = max((total_items + PAGE_SIZE - 1) // PAGE_SIZE, 1)
-    start = page * PAGE_SIZE
-    end = start + PAGE_SIZE
-    page_items = ordered[start:end]
-
-    lines = [phrases.CATEGORY_MANAGEMENT_TITLE.format(page=page + 1, total=total_pages)]
-    active_start_idx = 0
-    archived_start_idx = len(active)
-
-    for i, cat in enumerate(page_items):
-        global_idx = start + i
-        emoji, display_text = get_category_display(cat.name)
-
-        if global_idx == active_start_idx and active:
-            lines.append(phrases.CATEGORY_LIST_ACTIVE_HEADER)
-        if global_idx == archived_start_idx and archived:
-            lines.append(phrases.CATEGORY_LIST_ARCHIVED_HEADER)
-
-        label = f"{emoji} {global_idx + 1}. {display_text}"
-        if cat.is_archived:
-            label += phrases.CATEGORY_LIST_ARCHIVED_SUFFIX
-        lines.append(label)
-
-    text = "\n".join(lines)
-    kb = await _build_list_keyboard(page, total_pages, page_items, telegram_id)
-    return text, kb
+    return phrases.BTN_MANAGE_CATEGORIES, InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 @router.callback_query(F.data.startswith("menu_categories"))
@@ -136,23 +93,7 @@ async def cmd_categories(callback: CallbackQuery, state: FSMContext):
             _set_back_target(callback.from_user.id, f"change_cat:{expense_id}")
         except (IndexError, ValueError, TypeError):
             pass
-    text, kb = await _render_category_page(callback.from_user.id, 0)
-    await callback.message.edit_text(text=text, reply_markup=kb)
-
-
-@router.callback_query(F.data.startswith("cat_page:"))
-async def category_page(callback: CallbackQuery):
-    await callback.answer()
-    try:
-        page = int(callback.data.split(":")[1])
-    except (IndexError, ValueError, TypeError):
-        await callback.message.edit_text(
-            text=phrases.ERR_INVALID_DATA,
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
-        )
-        return
-
-    text, kb = await _render_category_page(callback.from_user.id, page)
+    text, kb = await _render_category_page(callback.from_user.id)
     await callback.message.edit_text(text=text, reply_markup=kb)
 
 
@@ -273,7 +214,7 @@ async def category_rename_prompt(callback: CallbackQuery, state: FSMContext):
 async def category_rename_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
-    text, kb = await _render_category_page(callback.from_user.id, 0)
+    text, kb = await _render_category_page(callback.from_user.id)
     await callback.message.edit_text(text=text, reply_markup=kb)
 
 
@@ -625,5 +566,5 @@ async def category_delete_hard_execute(callback: CallbackQuery):
 @router.callback_query(F.data == "cat_back")
 async def category_back_to_list(callback: CallbackQuery):
     await callback.answer()
-    text, kb = await _render_category_page(callback.from_user.id, 0)
+    text, kb = await _render_category_page(callback.from_user.id)
     await callback.message.edit_text(text=text, reply_markup=kb)
