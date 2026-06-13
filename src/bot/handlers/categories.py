@@ -108,14 +108,14 @@ async def _render_category_page(telegram_id: int, page: int) -> tuple[str, Inlin
 
     for i, cat in enumerate(page_items):
         global_idx = start + i
-        emoji, _ = get_category_display(cat.name)
+        emoji, display_text = get_category_display(cat.name)
 
         if global_idx == active_start_idx and active:
             lines.append(phrases.CATEGORY_LIST_ACTIVE_HEADER)
         if global_idx == archived_start_idx and archived:
             lines.append(phrases.CATEGORY_LIST_ARCHIVED_HEADER)
 
-        label = f"{emoji} {global_idx + 1}. {cat.name}"
+        label = f"{emoji} {global_idx + 1}. {display_text}"
         if cat.is_archived:
             label += phrases.CATEGORY_LIST_ARCHIVED_SUFFIX
         lines.append(label)
@@ -185,9 +185,9 @@ async def category_detail(callback: CallbackQuery):
         return
 
     count = await get_category_expense_count(callback.from_user.id, category_id)
-    emoji, _ = get_category_display(cat.name)
+    emoji, display_text = get_category_display(cat.name)
 
-    text = phrases.CATEGORY_DETAIL_HEADER.format(emoji=emoji, name=safe(cat.name), count=count)
+    text = phrases.CATEGORY_DETAIL_HEADER.format(emoji=emoji, name=safe(display_text), count=count)
     if cat.is_archived:
         text += phrases.CATEGORY_DETAIL_ARCHIVED_NOTE
 

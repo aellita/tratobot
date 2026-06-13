@@ -72,6 +72,16 @@ class TestGetCategoryDisplay:
         assert emoji == "🍔"
         assert name == "Еда"
 
+    def test_emoji_prefixed_name(self):
+        emoji, name = get_category_display("🚛 Гэс")
+        assert emoji == "🚛"
+        assert name == "Гэс"
+
+    def test_emoji_prefixed_display_no_double(self):
+        emoji, name = get_category_display("🚛 Гэс")
+        label = f"{emoji} 12. {name}"
+        assert label == "🚛 12. Гэс"
+
 
 class TestParseKeywords:
     def test_valid_json(self):

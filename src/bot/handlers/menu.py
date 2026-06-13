@@ -1064,10 +1064,10 @@ async def change_category(callback: CallbackQuery):
     buttons = []
     row = []
     for i, cat in enumerate(categories):
-        emoji, _ = get_category_display(cat.name)
+        emoji, display_text = get_category_display(cat.name)
         row.append(
             InlineKeyboardButton(
-                text=f"{emoji} {cat.name}",
+                text=f"{emoji} {display_text}",
                 callback_data=f"set_cat:{expense_id}:{cat.id}",
             )
         )
