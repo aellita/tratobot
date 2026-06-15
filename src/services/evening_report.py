@@ -12,7 +12,6 @@ from sqlalchemy import select
 from ..db.database import async_session_maker
 from ..db.models.models import User, UserSettings
 from ..utils import phrases
-from ..utils.helpers import safe
 from .expense_service import get_today_expenses_sum
 
 logger = logging.getLogger(__name__)
@@ -42,9 +41,7 @@ def _build_container_text(session_expenses: list[str]) -> str:
     return phrases.EVENING_CONTAINER.format(expenses=expenses_text)
 
 
-def get_evening_message(
-    limit: float, spent: float, available_cash: float, days_left: int, wishlist_name: str
-) -> str:
+def get_evening_message(limit: float, spent: float, available_cash: float, days_left: int) -> str:
     if spent <= limit:
         saved = limit - spent
         if int(spent) == 0:
@@ -67,13 +64,10 @@ def get_evening_message(
     overdraft = spent - limit
     days_to_grease = int(available_cash / overdraft) if overdraft > 0 else days_left
     days_to_grease = max(1, min(days_to_grease, days_left))
-    wishlist_delay = max(1, int(overdraft / limit)) if limit > 0 else 1
 
     evening_phrases = [
         phrases.EVENING_OVER_1.format(over=int(overdraft), days=days_to_grease),
-        phrases.EVENING_OVER_2.format(
-            over=int(overdraft), wishlist=safe(wishlist_name), delay=wishlist_delay
-        ),
+        phrases.EVENING_OVER_2.format(over=int(overdraft), days_left=days_left),
         phrases.EVENING_OVER_3.format(over=int(overdraft), days=min(5, days_left)),
     ]
     return random.choice(evening_phrases)

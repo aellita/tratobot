@@ -110,11 +110,9 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
             )
         period_spent = await get_current_period_expenses_sum(user_id)
         available_cash = max(total_available - period_spent, 0)
-        wishlist_name = budget.wishlist_name or "Хотелка"
     else:
         days_left = 1
         available_cash = 0
-        wishlist_name = "Хотелка"
 
     if limit <= 0:
         await callback.message.answer(
@@ -129,7 +127,6 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
         spent=spent,
         available_cash=available_cash,
         days_left=days_left,
-        wishlist_name=wishlist_name,
     )
 
     main_kb = InlineKeyboardMarkup(
