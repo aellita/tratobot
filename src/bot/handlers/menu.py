@@ -31,11 +31,12 @@ from ...services.categorization import (
     seed_user_categories,
 )
 from ...services.expense_service import (
+    compute_rounding,
+    get_rounding_mode,
     get_today_expenses_sum,
     parse_multi_expense_text,
-    try_apply_round_up,
 )
-from ...services.goal_service import get_goal_current_amount
+from ...services.goal_service import add_spare_change_to_goal, get_goal_current_amount
 from ...services.user_service import get_or_create_user
 from ...utils import phrases
 from ...utils.helpers import get_msk_now, parse_amount, safe
@@ -936,8 +937,9 @@ async def process_expense(message: Message, state: FSMContext):
             _track_keyboard(message.chat.id, msg.message_id)
             return
 
+    rounding_mode = await get_rounding_mode(user_id)
     lines = []
-    total_amount = 0
+    total_spare = 0.0
     first_id = None
     errors = 0
     all_silent = True
@@ -945,7 +947,11 @@ async def process_expense(message: Message, state: FSMContext):
     for amount, description in parsed_list:
         if not description:
             description = phrases.FALLBACK_DESC
-        total_amount += amount
+
+        effective = amount
+        if rounding_mode > 0:
+            effective, spare = compute_rounding(amount, rounding_mode)
+            total_spare += spare
 
         if description == phrases.FALLBACK_DESC:
             cat = None
@@ -963,10 +969,10 @@ async def process_expense(message: Message, state: FSMContext):
         if dup_status == "silent":
             continue
         if dup_status == "warn":
-            dup_middleware.set_pending(user_id, amount, description, cat_id, description, emoji, cat_name)
+            dup_middleware.set_pending(user_id, effective, description, cat_id, description, emoji, cat_name)
             await _cleanup_keyboard(message.bot, message.chat.id)
             msg = await message.answer(
-                phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
+                phrases.DUP_WARNING.format(amount=f"{effective:,.0f}", desc=safe(description)),
                 reply_markup=get_duplicate_keyboard(),
             )
             _track_keyboard(message.chat.id, msg.message_id)
@@ -978,7 +984,7 @@ async def process_expense(message: Message, state: FSMContext):
             async with async_session_maker() as session:
                 expense = Expense(
                     telegram_id=user_id,
-                    amount=amount,
+                    amount=effective,
                     description=description or cat_name,
                     category_id=cat_id,
                     date=get_msk_now(),
@@ -995,10 +1001,10 @@ async def process_expense(message: Message, state: FSMContext):
             errors += 1
             continue
 
-        dup_middleware.record(user_id, message.message_id, amount, description, expense.id)
+        dup_middleware.record(user_id, message.message_id, effective, description, expense.id)
         lines.append(
             phrases.EXPENSE_SAVED_LINE.format(
-                amount=f"{amount:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
+                amount=f"{effective:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
             )
         )
 
@@ -1012,10 +1018,11 @@ async def process_expense(message: Message, state: FSMContext):
     user_name = safe(message.from_user.first_name or phrases.FALLBACK_NAME)
 
     total_round_up = ""
-    if total_amount > 0:
-        r = await try_apply_round_up(user_id, total_amount)
-        if r:
-            total_round_up = r
+    if total_spare > 0:
+        new_total, goal_name = await add_spare_change_to_goal(user_id, total_spare)
+        total_round_up = phrases.ROUND_UP.format(
+            amount=int(total_spare), goal=goal_name, total=int(new_total)
+        )
 
     await _cleanup_keyboard(message.bot, message.chat.id)
 
@@ -1941,15 +1948,20 @@ async def handle_text(message: Message, state: FSMContext):
         )
 
         user_id = message.from_user.id
+        rounding_mode = await get_rounding_mode(user_id)
         lines = []
-        total_amount = 0
+        total_spare = 0.0
         first_id = None
         all_silent = True
 
         for amount, description in parsed_list:
             if not description:
                 description = phrases.FALLBACK_DESC
-            total_amount += amount
+
+            effective = amount
+            if rounding_mode > 0:
+                effective, spare = compute_rounding(amount, rounding_mode)
+                total_spare += spare
 
             if description == phrases.FALLBACK_DESC:
                 cat = None
@@ -1967,10 +1979,10 @@ async def handle_text(message: Message, state: FSMContext):
             if dup_status == "silent":
                 continue
             if dup_status == "warn":
-                dup_middleware.set_pending(user_id, amount, description, cat_id, description, emoji, cat_name)
+                dup_middleware.set_pending(user_id, effective, description, cat_id, description, emoji, cat_name)
                 await _cleanup_keyboard(message.bot, message.chat.id)
                 msg = await message.answer(
-                    phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
+                    phrases.DUP_WARNING.format(amount=f"{effective:,.0f}", desc=safe(description)),
                     reply_markup=get_duplicate_keyboard(),
                 )
                 _track_keyboard(message.chat.id, msg.message_id)
@@ -1981,7 +1993,7 @@ async def handle_text(message: Message, state: FSMContext):
                 async with async_session_maker() as session:
                     expense = Expense(
                         telegram_id=user_id,
-                        amount=amount,
+                        amount=effective,
                         description=description or cat_name,
                         category_id=cat_id,
                         date=get_msk_now(),
@@ -1997,10 +2009,10 @@ async def handle_text(message: Message, state: FSMContext):
                     logging.error("Caused by: %s: %s", type(cause).__name__, cause)
                 continue
 
-            dup_middleware.record(user_id, message.message_id, amount, description, expense.id)
+            dup_middleware.record(user_id, message.message_id, effective, description, expense.id)
             lines.append(
                 phrases.EXPENSE_SAVED_LINE.format(
-                    amount=f"{amount:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
+                    amount=f"{effective:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
                 )
             )
 
@@ -2014,10 +2026,11 @@ async def handle_text(message: Message, state: FSMContext):
     user_name = safe(message.from_user.first_name or phrases.FALLBACK_NAME)
 
     total_round_up = ""
-    if total_amount > 0:
-        r = await try_apply_round_up(user_id, total_amount)
-        if r:
-            total_round_up = r
+    if total_spare > 0:
+        new_total, goal_name = await add_spare_change_to_goal(user_id, total_spare)
+        total_round_up = phrases.ROUND_UP.format(
+            amount=int(total_spare), goal=goal_name, total=int(new_total)
+        )
 
     await _cleanup_keyboard(message.bot, message.chat.id)
 

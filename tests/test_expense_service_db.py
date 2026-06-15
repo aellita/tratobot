@@ -2,91 +2,73 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.db.models.models import Expense, User, UserSettings, Wishlist
+from src.db.models.models import Expense, User
 from src.services.expense_service import (
+    compute_rounding,
     get_current_period_expenses_sum,
-    try_apply_round_up,
 )
 
 
-class TestTryApplyRoundUp:
-    async def test_no_settings_returns_none(self, db_session, test_user):
-        result = await try_apply_round_up(99999, 123.0)
-        assert result is None
+class TestComputeRounding:
+    def test_rounds_up_to_next_10(self):
+        rounded, spare = compute_rounding(1.0, 10)
+        assert rounded == 10.0
+        assert spare == 9.0
 
-    async def test_rounding_mode_zero_returns_none(self, db_session, test_user):
-        db_session.add(UserSettings(telegram_id=99999, rounding_mode=0))
-        await db_session.commit()
+    def test_rounds_up_to_next_100(self):
+        rounded, spare = compute_rounding(310.0, 100)
+        assert rounded == 400.0
+        assert spare == 90.0
 
-        result = await try_apply_round_up(99999, 123.0)
-        assert result is None
+    def test_exact_multiple_no_spare(self):
+        rounded, spare = compute_rounding(300.0, 10)
+        assert rounded == 300.0
+        assert spare == 0.0
 
-    async def test_rounds_up_with_spare_change(self, db_session, test_budget):
-        db_session.add(UserSettings(telegram_id=99999, rounding_mode=10))
-        await db_session.commit()
+    def test_exact_multiple_mode_100(self):
+        rounded, spare = compute_rounding(500.0, 100)
+        assert rounded == 500.0
+        assert spare == 0.0
 
-        result = await try_apply_round_up(99999, 123.0)
-        assert result is not None
-        assert "7" in result
+    def test_small_amount_rounds_to_mode(self):
+        rounded, spare = compute_rounding(0.5, 10)
+        assert rounded == 10.0
+        assert spare == 9.5
 
-    async def test_round_up_mode_100(self, db_session, test_budget):
-        db_session.add(UserSettings(telegram_id=99999, rounding_mode=100))
-        await db_session.commit()
+    def test_large_amount_rounds_correctly(self):
+        rounded, spare = compute_rounding(12345.0, 100)
+        assert rounded == 12400.0
+        assert spare == 55.0
 
-        result = await try_apply_round_up(99999, 310.0)
-        assert result is not None
-        assert "90" in result
+    def test_zero_amount_returns_zero(self):
+        rounded, spare = compute_rounding(0.0, 10)
+        assert rounded == 0.0
+        assert spare == 0.0
 
-    async def test_exact_multiple_no_spare(self, db_session, test_budget):
-        db_session.add(UserSettings(telegram_id=99999, rounding_mode=10))
-        await db_session.commit()
+    def test_mode_1_rounds_to_integer(self):
+        rounded, spare = compute_rounding(123.45, 1)
+        assert rounded == 124.0
+        assert spare == pytest.approx(0.55, rel=1e-9)
 
-        result = await try_apply_round_up(99999, 300.0)
-        assert result is None
+    def test_negative_amount_rounds_to_zero(self):
+        rounded, spare = compute_rounding(-5.0, 10)
+        assert rounded == 0.0
+        assert spare == 5.0
 
-    async def test_exact_multiple_mode_100(self, db_session, test_budget):
-        db_session.add(UserSettings(telegram_id=99999, rounding_mode=100))
-        await db_session.commit()
+    def test_float_precision_preserved(self):
+        rounded, spare = compute_rounding(0.1, 10)
+        assert rounded == 10.0
+        assert spare == pytest.approx(9.9, rel=1e-9)
 
-        result = await try_apply_round_up(99999, 500.0)
-        assert result is None
+    def test_mode_larger_than_amount(self):
+        rounded, spare = compute_rounding(3.0, 100)
+        assert rounded == 100.0
+        assert spare == 97.0
 
-    async def test_round_up_with_existing_goal(self, db_session, test_goal):
-        db_session.add(UserSettings(telegram_id=99999, rounding_mode=10))
-        await db_session.commit()
-
-        result = await try_apply_round_up(99999, 123.0)
-        assert result is not None
-        assert "PS5" in result
-        assert "10007" in result
-        assert "7" in result
-
-    async def test_very_small_amount(self, db_session, test_budget):
-        db_session.add(UserSettings(telegram_id=99999, rounding_mode=10))
-        await db_session.commit()
-
-        result = await try_apply_round_up(99999, 0.5)
-        assert result is not None
-        assert "9" in result
-
-    async def test_large_amount(self, db_session, test_budget):
-        db_session.add(UserSettings(telegram_id=99999, rounding_mode=100))
-        await db_session.commit()
-
-        result = await try_apply_round_up(99999, 12345.0)
-        assert result is not None
-        assert "55" in result
-
-    async def test_round_up_creates_goal_if_missing(self, db_session, test_user):
-        db_session.add(UserSettings(telegram_id=99999, rounding_mode=10))
-        await db_session.commit()
-
-        result = await try_apply_round_up(99999, 123.0)
-        assert result is not None
-
-        goal = await db_session.get(Wishlist, 1)
-        assert goal is not None
-        assert goal.current_amount > 0
+    def test_rounding_mode_10_edge(self):
+        rounded, spare = compute_rounding(9.99, 10)
+        assert rounded == 10.0
+        assert spare == pytest.approx(0.01, rel=1e-9)
 
 
 class TestGetCurrentPeriodExpensesSum:

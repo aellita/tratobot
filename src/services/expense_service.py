@@ -1,38 +1,29 @@
+import math
 from datetime import datetime, time
 
 from sqlalchemy import func, select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Expense, UserSettings
-from ..utils import phrases
 from ..utils.helpers import get_msk_now
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
 
 
-async def try_apply_round_up(telegram_id: int, amount: float) -> str | None:
-    import math
+def compute_rounding(amount: float, mode: int) -> tuple[float, float]:
+    rounded = math.ceil(amount / mode) * mode
+    spare = rounded - amount
+    return rounded, spare
 
+
+async def get_rounding_mode(telegram_id: int) -> int:
     async with async_session_maker() as session:
         result = await session.execute(
             select(UserSettings).where(UserSettings.telegram_id == telegram_id)
         )
         settings = result.scalar_one_or_none()
-        if not settings or settings.rounding_mode <= 0:
-            return None
-
-        mode = settings.rounding_mode
-        rounded = math.ceil(amount / mode) * mode
-        spare = rounded - amount
-        if spare <= 0:
-            return None
-
-    from .goal_service import add_spare_change_to_goal
-
-    new_total, goal_name = await add_spare_change_to_goal(telegram_id, spare)
-
-    return phrases.ROUND_UP.format(amount=int(spare), goal=goal_name, total=int(new_total))
+        return settings.rounding_mode if settings else 0
 
 
 def clean_description(text: str) -> str:

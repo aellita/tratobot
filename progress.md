@@ -404,4 +404,20 @@
 
 ---
 
+### 2026-06-15 — Queue 11: B3 — Округление вычитается из дневного лимита
+
+**Проблема:** При `rounding_mode=10` трата 1₽ сохранялась как `amount=1`, разница 9₽ уходила в хотелку «бесплатно» — дневной лимит уменьшался только на 1₽.
+
+**Решение:**
+- Добавлена `compute_rounding(amount, mode)` — чистая функция, возвращает `(effective_amount, spare)`
+- Добавлена `get_rounding_mode(telegram_id)` — читает настройки из БД
+- В обоих хендлерах (FSM `process_expense` и `handle_text`): в цикле считается `effective = ceil(amount/mode)*mode`, сохраняется `Expense(amount=effective)`, аккумулируется `total_spare`
+- После цикла: `add_spare_change_to_goal(total_spare)` вместо `try_apply_round_up(total_amount)`
+- `try_apply_round_up` удалён (не нужен — 1 пользователь)
+- `parse_amount` (поле `effective` для дубликата поменяно с `amount` на `effective`)
+
+**Тесты:** 329 (было 327), 12 новых на `compute_rounding`, 10 удалённых `TestTryApplyRoundUp`. 0 новых ruff-ошибок.
+
+---
+
 После каждой сессии (или по запросу пользователя) агент проверяет: было ли что-то из списка «Когда писать». Если да — добавляет запись в этот файл перед завершением работы.
