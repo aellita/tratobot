@@ -5,7 +5,6 @@ from collections import defaultdict
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message
 
-RATE_LIMIT = 0.7
 BURST_LIMIT = 5
 BURST_WINDOW = 3.0
 
@@ -29,10 +28,6 @@ class RateLimitMiddleware(BaseMiddleware):
                 await event.answer("⏳ Слишком быстро. Сбавь темп.")
             elif isinstance(event, CallbackQuery):
                 await event.answer("⏳ Слишком быстро", show_alert=False)
-            return
-
-        last = self._last_time[user_id]
-        if now - last < RATE_LIMIT:
             return
 
         self._last_time[user_id] = now
