@@ -1,9 +1,32 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 from src.utils import phrases
 from src.utils.helpers import get_msk_now
 
 from ..services.budget_service import get_active_budget
+
+
+def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=phrases.BTN_ADD_EXPENSE)],
+            [
+                KeyboardButton(text=phrases.BTN_DAILY_LIMIT),
+                KeyboardButton(text=phrases.BTN_HISTORY),
+            ],
+            [
+                KeyboardButton(text=phrases.BTN_SETTINGS),
+                KeyboardButton(text=phrases.BTN_HELP),
+            ],
+        ],
+        resize_keyboard=True,
+        persistent=True,
+    )
 
 
 async def get_main_menu_keyboard(telegram_id: int = None):

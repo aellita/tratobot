@@ -530,3 +530,22 @@
 **329 тестов проходят, 0 новых ruff-ошибок.**
 
 **🧠 Решение:** Все последующие фазы редизайна сообщений (Phase 2: ReplyKeyboard, Phase 3: Undo-паттерн удаления и т.д.) — тоже под флаг `EXPENSE_SIMPLE_CHECK`. Флаг остаётся в `src/core/config.py` как Pydantic Settings-переменная, по умолчанию `True`.
+
+---
+
+### 2026-06-19 — Queue 17: Phase 2 — ReplyKeyboard (постоянное меню внизу)
+
+**Проблема:** После Phase 1 (чистые чеки без меню) у пользователя не было способа вернуться в навигацию, кроме как нажать «✏️ Сменить категорию» → «⬅️ Назад». ReplyKeyboard решает это — меню всегда внизу.
+
+**Решение — ReplyKeyboardMarkup с persistent=True:**
+- `keyboards.py` — новая `get_main_reply_keyboard()`: 4 кнопки (Добавить трату, Дневной лимит, История, Настройки, Помощь), 2 в ряд
+- `menu.py` — `handle_reply_menu()`: `@router.message(F.text.in_(...))` ловит текст reply-кнопок, чистит FSM, направляет в нужное действие
+- `_build_status()` — выделена из `menu_status` как общая функция для callback и reply-хендлера
+- `cmd_start` (возвращающиеся) и `_finish_onboarding` — отправляют ReplyKeyboard
+- `process_expense` — проверка reply-текстов в начале (если в FSM нажали «📜 История» → чистка FSM + редирект)
+
+**Файлы:**
+- `src/bot/keyboards.py` — `get_main_reply_keyboard()`
+- `src/bot/handlers/menu.py` — `handle_reply_menu`, `_build_status`, `process_expense` guard, `cmd_start`/`_finish_onboarding`
+
+**329 тестов проходят, 0 новых ruff-ошибок.**

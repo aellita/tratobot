@@ -45,6 +45,7 @@ from ..keyboards import (
     get_cancel_keyboard,
     get_duplicate_keyboard,
     get_main_menu_keyboard,
+    get_main_reply_keyboard,
     get_onboarding_keyboard,
     get_period_start_keyboard,
     get_rounding_mode_keyboard,
@@ -184,6 +185,10 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
+    await callback.message.answer(
+        text="👇",
+        reply_markup=get_main_reply_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "menu_help")
@@ -226,6 +231,10 @@ async def cmd_start(message: Message, state: FSMContext):
             text=phrases.WELCOME_BACK.format(name=user_name),
             reply_markup=get_start_choice_keyboard(),
         )
+        await message.answer(
+            text="👇",
+            reply_markup=get_main_reply_keyboard(),
+        )
 
 
 @router.callback_query(F.data == "open_menu")
@@ -238,6 +247,10 @@ async def open_menu(callback: CallbackQuery, state: FSMContext):
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
+    await callback.message.answer(
+        text="👇",
+        reply_markup=get_main_reply_keyboard(),
+    )
 
 
 @router.callback_query(F.data == "reset_budget")
@@ -267,16 +280,17 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "menu_status")
 async def menu_status(callback: CallbackQuery):
     await callback.answer()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
-    tg_id = callback.from_user.id
+    text, kb = await _build_status(callback.from_user.id)
+    await callback.message.edit_text(text=text, reply_markup=kb)
+
+
+async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    user_name = "user"
+    tg_id = telegram_id
 
     budget = await get_budget_or_none(tg_id)
     if not budget:
-        await callback.message.edit_text(
-            text=phrases.NO_BUDGET.format(name=user_name),
-            reply_markup=await get_main_menu_keyboard(tg_id),
-        )
-        return
+        return phrases.NO_BUDGET.format(name=user_name), await get_main_menu_keyboard(tg_id)
 
     async with async_session_maker() as session:
         today_start = get_msk_now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -315,15 +329,11 @@ async def menu_status(callback: CallbackQuery):
 
     remaining_today = max(dl_base - spent_today, 0)
     remaining_period = money_for_life
-    period_end_day = budget._clamped_start
+    period_end_day = budget.period_start_day or 1
     period_end_str = f"{period_end_day}-го" if period_end_day > 1 else f"{period_end_day}-го"
 
-    end_of_period = (
-        days_left <= 3
-    )  # Wait, the comment says "менее 3 дней", so <= 2 probably. Let me use the user's definition: Осталось <= 3 дней
-    # Actually user says "Осталось <= 3 дней" in section 4, meaning days_left <= 3 for the special mode. Actually, 3 days means "до 3 дней" = up to 3 days = 1, 2, or 3.
+    end_of_period = days_left <= 3
 
-    # Zone label
     if end_of_period and money_for_life <= 0:
         zone_emoji = "🔴"
         zone_label = "Атас"
@@ -429,10 +439,7 @@ async def menu_status(callback: CallbackQuery):
             btns = "FRESH_START"
 
     kb = _build_status_keyboard(btns, tg_id)
-    await callback.message.edit_text(
-        text=text + "\n\n" + footer if footer else text,
-        reply_markup=kb,
-    )
+    return text + "\n\n" + footer if footer else text, kb
 
 
 def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
@@ -709,6 +716,12 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
     else:
         await source.answer(text=text, reply_markup=kb)
 
+    if isinstance(source, Message):
+        await source.answer(
+            text="👇",
+            reply_markup=get_main_reply_keyboard(),
+        )
+
     await state.clear()
 
 
@@ -919,13 +932,19 @@ async def menu_add(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AddExpense.waiting_for_amount)
 async def process_expense(message: Message, state: FSMContext):
+    text = message.text.strip()
+    if text in _REPLY_BTNS:
+        await state.clear()
+        await handle_reply_menu(message, state)
+        return
+
     await get_or_create_user(
         telegram_id=message.from_user.id,
         first_name=message.from_user.first_name,
         username=message.from_user.username,
     )
 
-    parsed_list = parse_multi_expense_text(message.text.strip())
+    parsed_list = parse_multi_expense_text(text)
     if not parsed_list:
         data = await state.get_data()
         retries = data.get("_retry_count", 0) + 1
@@ -1858,6 +1877,10 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
+    await callback.message.answer(
+        text="👇",
+        reply_markup=get_main_reply_keyboard(),
+    )
 
 
 # ============ DUPLICATE DETECTION CALLBACKS ============
@@ -1939,6 +1962,80 @@ async def handle_voice(message: Message):
 @router.message(F.photo | F.video | F.document | F.sticker | F.animation)
 async def handle_media(message: Message):
     await message.answer(phrases.ERR_MEDIA)
+
+
+# ============ REPLY KEYBOARD ============
+
+_REPLY_BTNS = {
+    phrases.BTN_ADD_EXPENSE,
+    phrases.BTN_DAILY_LIMIT,
+    phrases.BTN_HISTORY,
+    phrases.BTN_SETTINGS,
+    phrases.BTN_HELP,
+}
+
+
+@router.message(F.text.in_(_REPLY_BTNS))
+async def handle_reply_menu(message: Message, state: FSMContext):
+    await state.clear()
+    btn_text = message.text
+
+    if btn_text == phrases.BTN_ADD_EXPENSE:
+        user_name = message.from_user.first_name or phrases.FALLBACK_NAME
+        await state.set_state(AddExpense.waiting_for_amount)
+        await message.answer(
+            text=phrases.ADD_EXPENSE_PROMPT.format(name=user_name),
+            reply_markup=get_cancel_keyboard(),
+        )
+        return
+
+    if btn_text == phrases.BTN_DAILY_LIMIT:
+        text, kb = await _build_status(message.from_user.id)
+        await message.answer(text=text, reply_markup=kb)
+        return
+
+    if btn_text == phrases.BTN_HISTORY:
+        from ...services.expense_service import get_expense_page
+        from .history import _expense_line, _build_list_keyboard
+
+        expenses, total, total_pages = await get_expense_page(message.from_user.id, 0)
+        if total == 0:
+            await message.answer(
+                text=phrases.HISTORY_EMPTY,
+                reply_markup=await get_main_menu_keyboard(message.from_user.id),
+            )
+            return
+        lines = []
+        for i, exp in enumerate(expenses):
+            line = await _expense_line(i + 1, exp)
+            lines.append(line)
+        text = phrases.HISTORY_PAGE.format(page=1, total=total_pages) + "\n".join(lines)
+        kb = _build_list_keyboard(expenses, 0, total_pages)
+        await message.answer(text=text, reply_markup=kb)
+        return
+
+    if btn_text == phrases.BTN_SETTINGS:
+        budget = await get_budget_or_none(message.from_user.id)
+        if not budget:
+            user_name = message.from_user.first_name or phrases.FALLBACK_NAME
+            await message.answer(
+                text=phrases.NO_BUDGET_SETTINGS.format(name=user_name),
+                reply_markup=await get_main_menu_keyboard(message.from_user.id),
+            )
+            return
+        await message.answer(
+            text=phrases.BTN_SETTINGS,
+            reply_markup=get_settings_keyboard(),
+        )
+        return
+
+    if btn_text == phrases.BTN_HELP:
+        user_name = message.from_user.first_name or phrases.FALLBACK_NAME
+        await message.answer(
+            text=phrases.HELP_TEXT.format(name=user_name),
+            reply_markup=await get_main_menu_keyboard(message.from_user.id),
+        )
+        return
 
 
 # ============ TEXT INPUT (free form) ============
