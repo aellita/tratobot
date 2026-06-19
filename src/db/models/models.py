@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -153,3 +153,11 @@ class UserSettings(Base):
     evening_report_time: Mapped[str] = mapped_column(String(5), default="22:00")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     rounding_mode: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class DailyReportsLog(Base):
+    __tablename__ = "daily_reports_log"
+
+    telegram_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_type: Mapped[str] = mapped_column(String(10), primary_key=True)
+    sent_date: Mapped[date] = mapped_column(Date, primary_key=True)

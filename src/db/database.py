@@ -18,6 +18,7 @@ ALLOWED_TABLES = {
     "black_day_funds",
     "user_settings",
     "users",
+    "daily_reports_log",
 }
 ALLOWED_COLUMNS = {
     "user_id",
@@ -27,6 +28,8 @@ ALLOWED_COLUMNS = {
     "rounding_mode",
     "free_money",
     "is_archived",
+    "report_type",
+    "sent_date",
 }
 
 

@@ -7,6 +7,8 @@ from aiogram.enums import ParseMode
 
 from ..core.config import settings
 from ..db.database import close_db, init_db, migrate_schema
+from ..services.morning_report import send_morning_reports
+from ..utils.helpers import get_msk_now
 from .handlers.categories import router as categories_router
 from .handlers.evening_flow import router as evening_router
 from .handlers.history import router as history_router
@@ -40,6 +42,10 @@ async def on_startup():
     logger.info("Migrating schema...")
     await migrate_schema()
     setup_scheduler(bot, dp.storage)
+    msk_now = get_msk_now()
+    if 5 <= msk_now.hour < 12:
+        logger.info("Старт в утреннем окне — запускаю morning report (если не отправлен)")
+        asyncio.create_task(send_morning_reports(bot))
     asyncio.create_task(dup_middleware.start_cleanup())
     logger.info("Bot started!")
 

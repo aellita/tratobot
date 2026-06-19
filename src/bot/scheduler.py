@@ -22,7 +22,7 @@ def setup_scheduler(bot: Bot, storage: BaseStorage):
         id="morning_report",
         name="Утренняя рассылка",
         replace_existing=True,
-        misfire_grace_time=300,
+        misfire_grace_time=14400,
         coalesce=True,
         max_instances=1,
     )
