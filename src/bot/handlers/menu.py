@@ -1218,6 +1218,10 @@ async def back_from_category_change(callback: CallbackQuery):
         text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
+    await callback.message.answer(
+        text="👇",
+        reply_markup=get_main_reply_keyboard(),
+    )
 
 
 @router.callback_query(F.data.startswith("new_cat:"))
