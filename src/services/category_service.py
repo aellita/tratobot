@@ -87,6 +87,44 @@ async def move_expenses_to_default_and_delete(
         return True
 
 
+async def move_expenses_to_category_and_delete(
+    telegram_id: int, source_category_id: int, target_category_id: int
+) -> tuple[bool, str | None]:
+    async with async_session_maker() as session:
+        source = await session.execute(
+            select(Category).where(
+                Category.id == source_category_id,
+                Category.telegram_id == telegram_id,
+            )
+        )
+        source_cat = source.scalar_one_or_none()
+        if not source_cat:
+            return False, None
+
+        target = await session.execute(
+            select(Category).where(
+                Category.id == target_category_id,
+                Category.telegram_id == telegram_id,
+            )
+        )
+        target_cat = target.scalar_one_or_none()
+        if not target_cat:
+            return False, None
+
+        await session.execute(
+            Expense.__table__.update()
+            .where(
+                Expense.telegram_id == telegram_id,
+                Expense.category_id == source_category_id,
+            )
+            .values(category_id=target_category_id)
+        )
+
+        await session.delete(source_cat)
+        await session.commit()
+        return True, target_cat.name
+
+
 async def hard_delete_category(telegram_id: int, category_id: int) -> bool:
     async with async_session_maker() as session:
         result = await session.execute(

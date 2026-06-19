@@ -431,7 +431,7 @@ BTN_CATEGORY_ARCHIVE = "🗄 Архивировать"
 BTN_CATEGORY_UNARCHIVE = "↩️ Вернуть из архива"
 BTN_CATEGORY_DELETE = "🗑️ Удалить категорию"
 BTN_CATEGORY_DELETE_ARCHIVE = "🗄 Архивировать (Рекомендуется)"
-BTN_CATEGORY_DELETE_MOVE = "📦 Перенести в Прочее"
+BTN_CATEGORY_DELETE_MOVE = "📦 Перенести в другую категорию"
 BTN_CATEGORY_DELETE_HARD = "💣 Удалить насовсем"
 BTN_CATEGORY_DELETE_CONFIRM = "✅ Да, удалить всё"
 BTN_CATEGORY_BACK_TO_LIST = "⬅️ К списку категорий"
@@ -458,7 +458,8 @@ CATEGORY_DELETE_WARNING = (
     "В ней уже есть <b>{count} трат</b> за этот период.\n\n"
     "Что с ними сделать?"
 )
-CATEGORY_DELETED_MOVED = "✅ Категория «{name}» удалена. Траты перенесены в «Прочее»."
+CATEGORY_DELETE_MOVE_PROMPT = "📂 В какую категорию перенести траты?"
+CATEGORY_DELETED_MOVED = "✅ Категория «{name}» удалена. Траты перенесены в «{target}»."
 CATEGORY_DELETED_HARD = "💥 Категория «{name}» удалена насовсем. Траты обнулены."
 CATEGORY_DELETE_CONFIRM_PROMPT = (
     "⚠️ <b>Вы уверены?</b> Это изменит твой баланс и отчёты за прошлые периоды. "

@@ -11,11 +11,12 @@ from ...db.models.models import Category
 from ...services.categorization import (
     get_all_categories,
     get_category_display,
+    get_user_categories,
 )
 from ...services.category_service import (
     get_category_expense_count,
     hard_delete_category,
-    move_expenses_to_default_and_delete,
+    move_expenses_to_category_and_delete,
     rename_category,
     toggle_archive_category,
 )
@@ -426,31 +427,80 @@ async def category_delete_warning(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("cat_delete_move:"))
-async def category_delete_move(callback: CallbackQuery):
+async def category_delete_move_picker(callback: CallbackQuery):
     await callback.answer()
     try:
-        category_id = int(callback.data.split(":")[1])
+        source_id = int(callback.data.split(":")[1])
     except (IndexError, ValueError, TypeError):
         return
 
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Category).where(
-                Category.id == category_id,
-                Category.telegram_id == callback.from_user.id,
-            )
-        )
-        cat = result.scalar_one_or_none()
+    categories = await get_user_categories(callback.from_user.id)
+    categories = [c for c in categories if c.id != source_id]
 
-    if not cat:
+    if not categories:
         await callback.message.edit_text(
             text=phrases.CATEGORY_NOT_FOUND,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
 
-    name = cat.name
-    success = await move_expenses_to_default_and_delete(callback.from_user.id, category_id)
+    buttons = []
+    row = []
+    for cat in categories:
+        emoji, display_text = get_category_display(cat.name)
+        row.append(
+            InlineKeyboardButton(
+                text=f"{emoji} {display_text}",
+                callback_data=f"cat_delete_move_to:{source_id}:{cat.id}",
+            )
+        )
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append(
+        [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="cat_back")]
+    )
+
+    await callback.message.edit_text(
+        text=phrases.CATEGORY_DELETE_MOVE_PROMPT,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+    )
+
+
+@router.callback_query(F.data.startswith("cat_delete_move_to:"))
+async def category_delete_move_execute(callback: CallbackQuery):
+    await callback.answer()
+    parts = callback.data.split(":")
+    if len(parts) != 3:
+        return
+    try:
+        source_id = int(parts[1])
+        target_id = int(parts[2])
+    except (IndexError, ValueError, TypeError):
+        return
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Category).where(
+                Category.id == source_id,
+                Category.telegram_id == callback.from_user.id,
+            )
+        )
+        source_cat = result.scalar_one_or_none()
+
+    if not source_cat:
+        await callback.message.edit_text(
+            text=phrases.CATEGORY_NOT_FOUND,
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+        )
+        return
+
+    name = safe(source_cat.name)
+    success, target_name = await move_expenses_to_category_and_delete(
+        callback.from_user.id, source_id, target_id
+    )
 
     if not success:
         await callback.message.edit_text(
@@ -460,7 +510,7 @@ async def category_delete_move(callback: CallbackQuery):
         return
 
     await callback.message.edit_text(
-        text=phrases.CATEGORY_DELETED_MOVED.format(name=safe(name)),
+        text=phrases.CATEGORY_DELETED_MOVED.format(name=name, target=safe(target_name)),
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(

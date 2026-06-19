@@ -453,3 +453,51 @@
 **329 тестов проходят. Запушено в main.**
 
 ---
+
+### 2026-06-19 — Queue 14: Morning report recovery (баг: отчёт не пришёл 18 июня)
+
+**Проблема:** Утренний отчёт не пришёл 18 июня. Диагностика выявила 3 причины:
+1. **Railway перезапустил контейнер** — APScheduler хранит джобы в памяти, при рестарте они теряются. `misfire_grace_time=300` (5 мин) не покрывал время простоя.
+2. **Нет общего try/except** — если падал запрос к БД (select User.telegram_id), вся функция падала без лога.
+3. **Нет startup recovery** — при старте после 08:05 бот не проверял, что утренний отчёт пропущен.
+
+**Решение (3 компонента):**
+
+- **Таблица `daily_reports_log`** — новая модель `DailyReportsLog` (composite PK: telegram_id + report_type + sent_date). При успешной отправке — INSERT, перед отправкой — SELECT для dedup.
+- **Startup check** (`main.py`): при старте в окне 05:00-12:00 МСК → `asyncio.create_task(send_morning_reports(bot))`. Встроенный dedup через таблицу не даёт дублей, если scheduler уже отработал в 08:00.
+- **misfire_grace_time=14400** (4ч) — покрывает стандартное окно деплоя.
+- **Общий try/except** вокруг `send_morning_reports()` с `exc_info=True`.
+
+**Файлы:**
+- `src/db/models/models.py` — `DailyReportsLog` (date, Date)
+- `src/db/database.py` — ALLOWED_TABLES/ALLOWED_COLUMNS
+- `src/services/morning_report.py` — `_has_morning_report_today`, `_log_morning_report`, outer try/except
+- `src/bot/scheduler.py` — misfire_grace_time 300→14400
+- `src/bot/main.py` — startup check (05-12 MSK)
+
+**Решение принято через Ask User Question:**
+- Таблица-лог вместо in-memory флага или колонки в UserSettings
+- misfire_grace_time = 4 часа
+- Общий try/except — да
+
+**329 тестов проходят, 0 новых ruff-ошибок. Запушено в main.**
+
+---
+
+### 2026-06-19 — Queue 15: Удаление категории — выбор целевой категории для переноса трат
+
+**Проблема:** При удалении категории кнопка «Перенести в Прочее» автоматически переносила траты в «Прочее» без возможности выбора.
+
+**Решение:**
+- Кнопка переименована в «📦 Перенести в другую категорию»
+- При нажатии — показывается инлайн-пикер со всеми активными категориями (исключая удаляемую), 2 в ряд
+- Пикер использует существующий паттерн (`get_user_categories` + `get_category_display`)
+- Выбор категории → все траты переносятся туда → категория удаляется
+- Сообщение об успехе показывает имя целевой категории вместо «Прочее»
+
+**Файлы:**
+- `src/utils/phrases.py` — обновлены `BTN_CATEGORY_DELETE_MOVE`, `CATEGORY_DELETED_MOVED`, добавлен `CATEGORY_DELETE_MOVE_PROMPT`
+- `src/services/category_service.py` — новая `move_expenses_to_category_and_delete(target_category_id)`
+- `src/bot/handlers/categories.py` — `cat_delete_move` переделан в пикер; новый `cat_delete_move_to`
+
+**329 тестов проходят, 0 новых ruff-ошибок. Запушено в main.**
