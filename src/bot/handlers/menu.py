@@ -181,14 +181,16 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
-        text=phrases.WELCOME_MENU.format(name=user_name),
+        text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
-    await callback.message.answer(
-        text="👇",
-        reply_markup=get_main_reply_keyboard(),
-    )
+    if settings.EXPENSE_SIMPLE_CHECK:
+        await callback.message.answer(
+            text=phrases.WELCOME_MENU.format(name=user_name),
+            reply_markup=get_main_reply_keyboard(),
+        )
+    else:
+        _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "menu_help")
@@ -231,10 +233,11 @@ async def cmd_start(message: Message, state: FSMContext):
             text=phrases.WELCOME_BACK.format(name=user_name),
             reply_markup=get_start_choice_keyboard(),
         )
-        await message.answer(
-            text="👇",
-            reply_markup=get_main_reply_keyboard(),
-        )
+        if settings.EXPENSE_SIMPLE_CHECK:
+            await message.answer(
+                text=phrases.WELCOME_MENU.format(name=user_name),
+                reply_markup=get_main_reply_keyboard(),
+            )
 
 
 @router.callback_query(F.data == "open_menu")
@@ -243,14 +246,16 @@ async def open_menu(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
-        text=phrases.WELCOME_MENU.format(name=user_name),
+        text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
-    await callback.message.answer(
-        text="👇",
-        reply_markup=get_main_reply_keyboard(),
-    )
+    if settings.EXPENSE_SIMPLE_CHECK:
+        await callback.message.answer(
+            text=phrases.WELCOME_MENU.format(name=user_name),
+            reply_markup=get_main_reply_keyboard(),
+        )
+    else:
+        _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "reset_budget")
@@ -716,11 +721,18 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
     else:
         await source.answer(text=text, reply_markup=kb)
 
-    if isinstance(source, Message):
-        await source.answer(
-            text="👇",
-            reply_markup=get_main_reply_keyboard(),
-        )
+    if settings.EXPENSE_SIMPLE_CHECK:
+        user_name = source.from_user.first_name or phrases.FALLBACK_NAME
+        if isinstance(source, CallbackQuery):
+            await source.message.answer(
+                text=phrases.WELCOME_MENU.format(name=user_name),
+                reply_markup=get_main_reply_keyboard(),
+            )
+        else:
+            await source.answer(
+                text=phrases.WELCOME_MENU.format(name=user_name),
+                reply_markup=get_main_reply_keyboard(),
+            )
 
     await state.clear()
 
@@ -1218,10 +1230,11 @@ async def back_from_category_change(callback: CallbackQuery):
         text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    await callback.message.answer(
-        text="👇",
-        reply_markup=get_main_reply_keyboard(),
-    )
+    if settings.EXPENSE_SIMPLE_CHECK:
+        await callback.message.answer(
+            text=phrases.WELCOME_MENU.format(name=user_name),
+            reply_markup=get_main_reply_keyboard(),
+        )
 
 
 @router.callback_query(F.data.startswith("new_cat:"))
@@ -1880,11 +1893,13 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
         text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
-    await callback.message.answer(
-        text="👇",
-        reply_markup=get_main_reply_keyboard(),
-    )
+    if settings.EXPENSE_SIMPLE_CHECK:
+        await callback.message.answer(
+            text=phrases.WELCOME_MENU.format(name=user_name),
+            reply_markup=get_main_reply_keyboard(),
+        )
+    else:
+        _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 # ============ DUPLICATE DETECTION CALLBACKS ============

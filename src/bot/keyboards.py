@@ -5,6 +5,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
+from src.core.config import settings
 from src.utils import phrases
 from src.utils.helpers import get_msk_now
 
@@ -30,6 +31,8 @@ def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
 
 
 async def get_main_menu_keyboard(telegram_id: int = None):
+    if settings.EXPENSE_SIMPLE_CHECK:
+        return None
     status_label = phrases.BTN_DAILY_LIMIT
     if telegram_id:
         label = await _get_daily_limit_label(telegram_id)
