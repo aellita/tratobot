@@ -501,3 +501,30 @@
 - `src/bot/handlers/categories.py` — `cat_delete_move` переделан в пикер; новый `cat_delete_move_to`
 
 **329 тестов проходят, 0 новых ruff-ошибок. Запушено в main.**
+
+---
+
+### 2026-06-19 — Queue 16: Soft Correction + чистые чеки (Phase 1)
+
+**Soft Correction для ошибок категорий:**
+- `save_new_category` (menu.py) — обе ошибки (`ERR_NAME_LENGTH`, `ERR_CATEGORY_EXISTS`): FSM не сбрасывается, добавлена кнопка «⬅️ Отмена», пользователь может сразу ввести новое имя
+- `process_cat_rename` (categories.py) — 3 ошибки: те же принципы, кнопка «⬅️ Отмена» через `cat_cancel_rename`
+- `ERR_CATEGORY_EXISTS` переписана: «❌ Категория ... уже существует. Напиши другое название или нажми «Отмена»:»
+
+**Убрана кнопка «🗂 Категории» из пикера смены категории:**
+- Пользователь нажимает «✏️ Сменить категорию» → видит категории + «✏️ Новая категория» + «⬅️ Назад»
+- Полный менеджмент категорий доступен из Настроек
+
+**Phase 1: Чистые чеки без меню (NX-флаг `EXPENSE_SIMPLE_CHECK`):**
+- `config.py` — новый флаг `EXPENSE_SIMPLE_CHECK: bool = True` (Pydantic Settings)
+- `_build_expense_check_kb()` — helper: при True — только «✏️ Сменить категорию» (одна трата) или без кнопок (мультилайн); при False — старое поведение (меню + назад)
+- `process_expense` — при True очищает FSM после чека; `handle_text` — аналогично
+- Автоочистка клавиатуры предыдущего чека через существующий `_cleanup_keyboard`/`_track_keyboard`
+
+**Файлы:**
+- `src/core/config.py` — `EXPENSE_SIMPLE_CHECK`
+- `src/bot/handlers/menu.py` — helper + оба хендлера + `save_new_category` error handling
+- `src/bot/handlers/categories.py` — `process_cat_rename` error handling
+- `src/utils/phrases.py` — `ERR_CATEGORY_EXISTS` переформулирована
+
+**329 тестов проходят, 0 новых ruff-ошибок.**

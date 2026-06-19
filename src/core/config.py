@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     BOT_TOKEN: str = ""
     DATABASE_URL: str = "sqlite+aiosqlite:///tratobot.db"
+    EXPENSE_SIMPLE_CHECK: bool = True
 
     @property
     def db_url(self) -> str:

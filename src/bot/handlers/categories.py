@@ -222,7 +222,17 @@ async def category_rename_cancel(callback: CallbackQuery, state: FSMContext):
 async def process_cat_rename(message: Message, state: FSMContext):
     raw = message.text.strip()
     if not raw or len(raw) > 30:
-        await message.answer(phrases.ERR_NAME_LENGTH)
+        await message.answer(
+            phrases.ERR_NAME_LENGTH,
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(
+                        text=phrases.BTN_CANCEL,
+                        callback_data="cat_cancel_rename",
+                    )],
+                ],
+            ),
+        )
         return
 
     data = await state.get_data()
@@ -254,7 +264,17 @@ async def process_cat_rename(message: Message, state: FSMContext):
             emoji = new_emoji
 
         if not text_part:
-            await message.answer(phrases.ERR_NAME_LENGTH)
+            await message.answer(
+                phrases.ERR_NAME_LENGTH,
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(
+                            text=phrases.BTN_CANCEL,
+                            callback_data="cat_cancel_rename",
+                        )],
+                    ],
+                ),
+            )
             return
         text_part = text_part[0].upper() + text_part[1:].lower()
         new_name = f"{emoji} {text_part}"
@@ -275,7 +295,17 @@ async def process_cat_rename(message: Message, state: FSMContext):
             )
         )
         if dup.scalar_one_or_none():
-            await message.answer(phrases.ERR_CATEGORY_EXISTS.format(name=safe(new_name)))
+            await message.answer(
+                phrases.ERR_CATEGORY_EXISTS.format(name=safe(new_name)),
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(
+                            text=phrases.BTN_CANCEL,
+                            callback_data="cat_cancel_rename",
+                        )],
+                    ],
+                ),
+            )
             return
 
     success = await rename_category(message.from_user.id, category_id, new_name)

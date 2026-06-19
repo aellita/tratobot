@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from cachetools import TTLCache
 from sqlalchemy import func, select
 
+from ...core.config import settings
 from ...db.database import async_session_maker
 from ...db.models.models import Budget, Category, Expense, User, UserSettings, Wishlist
 from ...services.budget_service import (
@@ -131,6 +132,39 @@ async def _cleanup_old_buttons(state: FSMContext, bot: Bot):
             )
         except Exception:
             pass
+
+
+def _build_expense_check_kb(first_id: int | None, line_count: int) -> InlineKeyboardMarkup | None:
+    if not settings.EXPENSE_SIMPLE_CHECK:
+        if line_count == 1:
+            return InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=phrases.BTN_CHANGE_CATEGORY,
+                            callback_data=f"change_cat:{first_id}",
+                        )
+                    ],
+                    [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+                ]
+            )
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            ]
+        )
+    if line_count == 1 and first_id:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_CHANGE_CATEGORY,
+                        callback_data=f"change_cat:{first_id}",
+                    )
+                ],
+            ]
+        )
+    return None
 
 
 async def _save_msg_id(state: FSMContext, msg: Message):
@@ -1026,29 +1060,17 @@ async def process_expense(message: Message, state: FSMContext):
 
     await _cleanup_keyboard(message.bot, message.chat.id)
 
-    if len(lines) == 1:
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_CHANGE_CATEGORY, callback_data=f"change_cat:{first_id}"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-            ]
-        )
-    else:
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-            ]
-        )
+    kb = _build_expense_check_kb(first_id, len(lines))
 
     response_text = phrases.EXPENSE_SAVED_ALL.format(
         name=user_name, lines="\n".join(lines), round_up=total_round_up
     )
     msg = await message.answer(text=response_text, reply_markup=kb)
-    _track_keyboard(message.chat.id, msg.message_id)
+    if kb:
+        _track_keyboard(message.chat.id, msg.message_id)
+
+    if settings.EXPENSE_SIMPLE_CHECK:
+        await state.clear()
 
 
 # ============ CATEGORY CHANGE ============
@@ -1085,9 +1107,6 @@ async def change_category(callback: CallbackQuery):
         buttons.append(row)
     buttons.append(
         [InlineKeyboardButton(text=phrases.BTN_NEW_CATEGORY, callback_data=f"new_cat:{expense_id}")]
-    )
-    buttons.append(
-        [InlineKeyboardButton(text=phrases.BTN_MANAGE_CATEGORIES, callback_data=f"menu_categories:{expense_id}")]
     )
     buttons.append(
         [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data=f"exp_back_cat:{expense_id}")]
@@ -1209,7 +1228,14 @@ async def new_category_prompt(callback: CallbackQuery, state: FSMContext):
 async def save_new_category(message: Message, state: FSMContext):
     name = message.text.strip().capitalize()
     if not name or len(name) > 30:
-        await message.answer(phrases.ERR_NAME_LENGTH)
+        await message.answer(
+            phrases.ERR_NAME_LENGTH,
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
+                ]
+            ),
+        )
         return
 
     data = await state.get_data()
@@ -1230,10 +1256,7 @@ async def save_new_category(message: Message, state: FSMContext):
                 text=phrases.ERR_CATEGORY_EXISTS.format(name=name),
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
-                        [InlineKeyboardButton(
-                            text=phrases.BTN_BACK,
-                            callback_data=f"change_cat:{expense_id}",
-                        )],
+                        [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
                     ]
                 ),
             )
@@ -2034,26 +2057,11 @@ async def handle_text(message: Message, state: FSMContext):
 
     await _cleanup_keyboard(message.bot, message.chat.id)
 
-    if len(lines) == 1:
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_CHANGE_CATEGORY, callback_data=f"change_cat:{first_id}"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-            ]
-        )
-    else:
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-            ]
-        )
+    kb = _build_expense_check_kb(first_id, len(lines))
 
     response_text = phrases.EXPENSE_SAVED_ALL.format(
         name=user_name, lines="\n".join(lines), round_up=total_round_up
     )
     msg = await message.answer(text=response_text, reply_markup=kb)
-    _track_keyboard(message.chat.id, msg.message_id)
+    if kb:
+        _track_keyboard(message.chat.id, msg.message_id)
