@@ -528,3 +528,5 @@
 - `src/utils/phrases.py` — `ERR_CATEGORY_EXISTS` переформулирована
 
 **329 тестов проходят, 0 новых ruff-ошибок.**
+
+**🧠 Решение:** Все последующие фазы редизайна сообщений (Phase 2: ReplyKeyboard, Phase 3: Undo-паттерн удаления и т.д.) — тоже под флаг `EXPENSE_SIMPLE_CHECK`. Флаг остаётся в `src/core/config.py` как Pydantic Settings-переменная, по умолчанию `True`.
