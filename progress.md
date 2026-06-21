@@ -549,3 +549,21 @@
 - `src/bot/handlers/menu.py` — `handle_reply_menu`, `_build_status`, `process_expense` guard, `cmd_start`/`_finish_onboarding`
 
 **329 тестов проходят, 0 новых ruff-ошибок.**
+
+---
+
+### 2026-06-21 — Queue 18: Phase 2 — полное отключение inline-меню + чистка «👇»
+
+**Проблема:** При `EXPENSE_SIMPLE_CHECK=True` одновременно отображались старое inline-меню (плитка под сообщением) и новое ReplyKeyboard снизу. Дублирование UX. Также в сообщении был эмодзи «👇».
+
+**Решение:**
+- `keyboards.py` — `get_main_menu_keyboard()` возвращает `None` при `EXPENSE_SIMPLE_CHECK=True` (нигде не показывается)
+- `menu.py` — убраны все 6 сообщений с «👇», заменены на отправку `WELCOME_MENU` + ReplyKeyboard под флагом
+- Все «назад в меню» хендлеры (`menu_back`, `open_menu`, `cancel`, `back_from_category_change`, `cmd_start`, `_finish_onboarding`): при флаге True — только ReplyKeyboard, inline-клавиатура не ставится
+
+**Файлы:**
+- `src/bot/keyboards.py` — `get_main_menu_keyboard` conditional return None
+- `src/bot/handlers/menu.py` — 6 хендлеров: убран «👇», добавлен `if settings.EXPENSE_SIMPLE_CHECK:` с `get_main_reply_keyboard()`
+- `README.md` — обновлён статус
+
+**330 тестов проходят, 0 новых ruff-ошибок.**
