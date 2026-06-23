@@ -280,7 +280,7 @@ def format_summary_text(data: dict, label: str = "") -> str:
         wishlist_target=int(data["wishlist_target"]),
         mandatory=int(budget.mandatory_payments),
     )
-    lines.append("<details>\n<summary>📂 Детали расчёта</summary>" + details + "\n</details>")
+    lines.append(f"<blockquote expandable>📂 Детали расчёта\n{details}</blockquote>")
 
     return "\n".join(lines)
 
