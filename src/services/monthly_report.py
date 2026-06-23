@@ -250,15 +250,12 @@ def format_summary_text(data: dict, label: str = "") -> str:
     lines.append('<pre><code class="language-table">')
     lines.append(phrases.MONTHLY_TABLE_HDR.format("Категория", "Операций", "Сумма"))
     for cat_name, count, amount in data["breakdown"]:
-        emoji_pos = cat_name.find(" ") if cat_name else 0
+        clean_name = (cat_name or "Прочее").strip()
+        emoji_pos = clean_name.find(" ") if clean_name else 0
         if emoji_pos > 0 and emoji_pos <= 2:
-            emoji_part = cat_name[:emoji_pos]
-            name_part = cat_name[emoji_pos:].strip()
-        else:
-            emoji_part = ""
-            name_part = cat_name or ""
+            clean_name = clean_name[emoji_pos:].strip()
         lines.append(
-            phrases.MONTHLY_TABLE_ROW.format(emoji_part, name_part[:13], count, int(amount))
+            phrases.MONTHLY_TABLE_ROW.format("", clean_name[:16], count, int(amount))
         )
     lines.append("</code></pre>")
 
@@ -280,7 +277,7 @@ def format_summary_text(data: dict, label: str = "") -> str:
         wishlist_target=int(data["wishlist_target"]),
         mandatory=int(budget.mandatory_payments),
     )
-    lines.append(f"<blockquote expandable>📂 Детали расчёта\n{details}</blockquote>")
+    lines.append("<details>\n<summary>📂 Детали расчёта</summary>\n" + details + "\n</details>")
 
     return "\n".join(lines)
 
