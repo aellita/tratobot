@@ -247,7 +247,7 @@ def format_summary_text(data: dict, label: str = "") -> str:
     lines.append("")
 
     lines.append("<b>📑 Топ расходов по категориям:</b>")
-    lines.append("<pre>")
+    lines.append('<pre><code class="language-table">')
     lines.append(phrases.MONTHLY_TABLE_HDR.format("Категория", "Операций", "Сумма"))
     for cat_name, count, amount in data["breakdown"]:
         emoji_pos = cat_name.find(" ") if cat_name else 0
@@ -260,7 +260,7 @@ def format_summary_text(data: dict, label: str = "") -> str:
         lines.append(
             phrases.MONTHLY_TABLE_ROW.format(emoji_part, name_part[:13], count, int(amount))
         )
-    lines.append("</pre>")
+    lines.append("</code></pre>")
 
     lines.append(
         phrases.MONTHLY_TOTAL.format("ИТОГО", "", int(data["total_spent"]))
@@ -280,8 +280,7 @@ def format_summary_text(data: dict, label: str = "") -> str:
         wishlist_target=int(data["wishlist_target"]),
         mandatory=int(budget.mandatory_payments),
     )
-    collapsible = phrases.MONTHLY_COLLAPSIBLE.format(details=details)
-    lines.append(f"<blockquote expandable>{collapsible}</blockquote>")
+    lines.append("<details>\n<summary>📂 Детали расчёта</summary>" + details + "\n</details>")
 
     return "\n".join(lines)
 

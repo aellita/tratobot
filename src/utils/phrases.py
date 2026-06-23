@@ -487,7 +487,6 @@ MONTHLY_TABLE_ROW = "{} {:<13} | {:>9} | {:>10,} ₽"
 MONTHLY_TOTAL = "─" * 42 + "\n{:<16}   {:>9}   {:>10,} ₽"
 MONTHLY_ZONE_TAG = "Зона: {zone_emoji} {zone_label}"
 MONTHLY_AVG_DAY = "В день в среднем: {avg:,.0f} ₽"
-MONTHLY_COLLAPSIBLE = "<b>📂 Детали расчёта</b>\n{details}"
 MONTHLY_DETAILS = (
     "• Финальный дневной лимит: {daily_limit:,.0f} ₽\n"
     "• Отложено через округление: +{rounding_total:,.0f} ₽\n"
