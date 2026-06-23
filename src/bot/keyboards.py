@@ -18,7 +18,7 @@ def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text=phrases.BTN_ADD_EXPENSE)],
             [
                 KeyboardButton(text=phrases.BTN_DAILY_LIMIT),
-                KeyboardButton(text=phrases.BTN_HISTORY),
+                KeyboardButton(text=phrases.BTN_STATS),
             ],
             [
                 KeyboardButton(text=phrases.BTN_SETTINGS),
@@ -143,5 +143,50 @@ def get_start_choice_keyboard():
         inline_keyboard=[
             [InlineKeyboardButton(text=phrases.BTN_TO_MAIN, callback_data="open_menu")],
             [InlineKeyboardButton(text=phrases.BTN_RESTART_BUDGET, callback_data="reset_budget")],
+        ]
+    )
+
+
+def get_stats_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=phrases.BTN_VIEW_HISTORY, callback_data="menu_history"),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_MONTHLY_REPORT, callback_data="menu_monthly_report"
+                ),
+            ],
+            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")],
+        ]
+    )
+
+
+def get_monthly_nav_keyboard(
+    has_prev: bool, has_next: bool, prev_label: str = "", next_label: str = ""
+) -> InlineKeyboardMarkup:
+    row = []
+    if has_prev:
+        row.append(
+            InlineKeyboardButton(
+                text=phrases.BTN_REPORT_PREV.format(month=prev_label),
+                callback_data="monthly_prev",
+            )
+        )
+    row.append(
+        InlineKeyboardButton(text=phrases.BTN_REPORT_REFRESH, callback_data="monthly_refresh")
+    )
+    if has_next:
+        row.append(
+            InlineKeyboardButton(
+                text=phrases.BTN_REPORT_NEXT.format(month=next_label),
+                callback_data="monthly_next",
+            )
+        )
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            row,
+            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")],
         ]
     )

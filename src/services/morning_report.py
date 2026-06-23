@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+from datetime import timedelta
 
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -153,6 +154,20 @@ async def send_morning_reports(bot: Bot):
                 budget = await get_active_budget(tg_id)
 
                 if not budget or budget.daily_limit <= 0:
+                    continue
+
+                from .monthly_report import build_summary_data, format_summary_text, get_period_dates
+
+                period_start, period_end = get_period_dates(budget)
+                today = get_msk_now().date()
+                period_end_date = period_end.date()
+                if today == period_end_date + timedelta(days=1):
+                    async with async_session_maker() as session:
+                        await _log_morning_report(tg_id, session)
+                    data = await build_summary_data(tg_id, budget)
+                    msg = format_summary_text(data)
+                    await bot.send_message(tg_id, msg)
+                    logger.info(f"Ежемесячный отчёт отправлен {tg_id}")
                     continue
 
                 yesterday_spent = await get_yesterday_expenses_sum(tg_id)

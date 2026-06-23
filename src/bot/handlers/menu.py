@@ -1988,7 +1988,7 @@ async def handle_media(message: Message):
 _REPLY_BTNS = {
     phrases.BTN_ADD_EXPENSE,
     phrases.BTN_DAILY_LIMIT,
-    phrases.BTN_HISTORY,
+    phrases.BTN_STATS,
     phrases.BTN_SETTINGS,
     phrases.BTN_HELP,
 }
@@ -2013,24 +2013,13 @@ async def handle_reply_menu(message: Message, state: FSMContext):
         await message.answer(text=text, reply_markup=kb)
         return
 
-    if btn_text == phrases.BTN_HISTORY:
-        from ...services.expense_service import get_expense_page
-        from .history import _expense_line, _build_list_keyboard
+    if btn_text == phrases.BTN_STATS:
+        from ..keyboards import get_stats_keyboard
 
-        expenses, total, total_pages = await get_expense_page(message.from_user.id, 0)
-        if total == 0:
-            await message.answer(
-                text=phrases.HISTORY_EMPTY,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        lines = []
-        for i, exp in enumerate(expenses):
-            line = await _expense_line(i + 1, exp)
-            lines.append(line)
-        text = phrases.HISTORY_PAGE.format(page=1, total=total_pages) + "\n".join(lines)
-        kb = _build_list_keyboard(expenses, 0, total_pages)
-        await message.answer(text=text, reply_markup=kb)
+        await message.answer(
+            text=phrases.BTN_STATS,
+            reply_markup=get_stats_keyboard(),
+        )
         return
 
     if btn_text == phrases.BTN_SETTINGS:
