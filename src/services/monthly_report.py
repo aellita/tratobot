@@ -216,48 +216,50 @@ def format_summary_text(data: dict, label: str = "") -> str:
     active = data["active"]
 
     month_str = period_start.strftime("%B %Y").lower()
-    header = label or ("📊 " + month_str.capitalize())
+    header_text = label or month_str.capitalize()
     if active:
-        header += f" ({period_start.strftime('%B').lower()} в процессе ⏳)"
+        header_text += f" ({period_start.strftime('%B').lower()} в процессе ⏳)"
 
-    lines = [header, ""]
+    lines = [f"📊 <b>Итог за {header_text}</b>", ""]
 
     if active:
         lines.append(
-            phrases.MONTHLY_EGG_TOTEM.format(
+            f"🥚 <b>Твой тотем ещё не сформирован</b> — "
+            + phrases.MONTHLY_EGG_TOTEM.format(
                 period=period_start.strftime("%B").lower(),
                 top_cat=data["top_cat_name"],
                 totem_name=data["totem_name"],
             )
         )
     else:
-        lines.append(f"{data['totem_emoji']} {data['totem_phrase']}")
+        lines.append(
+            f"{data['totem_emoji']} <b>{data['totem_name']}</b> — {data['totem_phrase']}"
+        )
 
-    lines.append("─" * 42)
+    lines.append("")
+    lines.append("───────────────────")
     lines.append("")
 
     zone_str = phrases.MONTHLY_ZONE_TAG.format(
         zone_emoji=data["zone_emoji"], zone_label=data["zone_label"]
     )
-    total_line = f"<b>💰 Всего потрачено: {data['total_spent']:,.0f} ₽</b> ({zone_str})"
-    lines.append(total_line)
+    lines.append(
+        f"<b>💰 Всего потрачено: {data['total_spent']:,.0f} ₽</b> ({zone_str})"
+    )
 
     avg_line = phrases.MONTHLY_AVG_DAY.format(avg=data["avg_day"])
     lines.append(avg_line)
     lines.append("")
 
     lines.append("<b>📑 Топ расходов по категориям:</b>")
-    lines.append('<pre><code class="language-table">')
+    lines.append("<pre>")
     lines.append(phrases.MONTHLY_TABLE_HDR.format("Категория", "Операций", "Сумма"))
     for cat_name, count, amount in data["breakdown"]:
-        clean_name = (cat_name or "Прочее").strip()
-        emoji_pos = clean_name.find(" ") if clean_name else 0
-        if emoji_pos > 0 and emoji_pos <= 2:
-            clean_name = clean_name[emoji_pos:].strip()
         lines.append(
-            phrases.MONTHLY_TABLE_ROW.format("", clean_name[:16], count, int(amount))
+            phrases.MONTHLY_TABLE_ROW.format((cat_name or "Прочее")[:16], count, int(amount))
         )
-    lines.append("</code></pre>")
+    lines.append("</pre>")
+    lines.append("")
 
     lines.append(
         phrases.MONTHLY_TOTAL.format("ИТОГО", "", int(data["total_spent"]))
@@ -277,7 +279,11 @@ def format_summary_text(data: dict, label: str = "") -> str:
         wishlist_target=int(data["wishlist_target"]),
         mandatory=int(budget.mandatory_payments),
     )
-    lines.append("<blockquote expandable>📂 Детали расчёта\n" + details + "</blockquote>")
+    lines.append("<details>")
+    lines.append("<summary>📂 Детали расчёта</summary>")
+    for det_line in details.split("\n"):
+        lines.append(det_line)
+    lines.append("</details>")
 
     return "\n".join(lines)
 

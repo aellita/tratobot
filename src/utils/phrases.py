@@ -483,7 +483,7 @@ MONTHLY_EGG_TOTEM = (
     "Если продолжишь в том же духе, вылупится {totem_name}!"
 )
 MONTHLY_TABLE_HDR = "{:<16} | {:>9} | {:>10}"
-MONTHLY_TABLE_ROW = "{} {:<13} | {:>9} | {:>10,} ₽"
+MONTHLY_TABLE_ROW = "{:<16} | {:>9} | {:>10,} ₽"
 MONTHLY_TOTAL = "─" * 42 + "\n{:<16}   {:>9}   {:>10,} ₽"
 MONTHLY_ZONE_TAG = "Зона: {zone_emoji} {zone_label}"
 MONTHLY_AVG_DAY = "В день в среднем: {avg:,.0f} ₽"
