@@ -288,20 +288,11 @@ def format_summary_text(data: dict, label: str = "") -> str:
         wishlist_target=int(data["wishlist_target"]),
         mandatory=int(budget.mandatory_payments),
     )
-    li_items = []
-    for line in details.split("\n"):
-        text = line.strip()
-        if text.startswith("•"):
-            text = text[1:].strip()
-        if text:
-            li_items.append(f"  <li>{_esc(text)}</li>")
-    if li_items:
-        parts.append("<details open>")
-        parts.append("  <summary>📂 Детали расчёта</summary>")
-        parts.append("  <ul>")
-        parts.extend(li_items)
-        parts.append("  </ul>")
-        parts.append("</details>")
+    det_html = "📂 Детали расчёта\n" + _esc(details)
+    parts.append("<blockquote expandable>")
+    for det_line in det_html.split("\n"):
+        parts.append("  " + det_line)
+    parts.append("</blockquote>")
 
     return "\n".join(parts)
 
