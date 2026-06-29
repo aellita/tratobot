@@ -1,7 +1,6 @@
 import logging
 
-from aiogram import F, Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
@@ -14,6 +13,7 @@ from ...services.monthly_report import (
 )
 from ...utils import phrases
 from ..keyboards import get_main_menu_keyboard, get_monthly_nav_keyboard
+from ..rich_api import edit_rich_message, send_rich_message
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +33,13 @@ def _get_index(telegram_id: int) -> int:
 async def _build_report_text(telegram_id: int, budget_idx: int) -> tuple[str, bool, bool, str, str]:
     budgets = await get_all_budgets(telegram_id)
     if not budgets or budget_idx < 0 or budget_idx >= len(budgets):
-        return phrases.MONTHLY_EMPTY, False, False, "", ""
+        return f"<p>{phrases.MONTHLY_EMPTY}</p>", False, False, "", ""
 
     budget = budgets[budget_idx]
     data = await build_summary_data(telegram_id, budget)
 
     if data["total_spent"] == 0 and not data["active"]:
-        return phrases.MONTHLY_EMPTY, False, False, "", ""
+        return f"<p>{phrases.MONTHLY_EMPTY}</p>", False, False, "", ""
 
     text = format_summary_text(data)
 
@@ -60,16 +60,19 @@ async def _build_report_text(telegram_id: int, budget_idx: int) -> tuple[str, bo
 
 
 @router.callback_query(F.data == "menu_monthly_report")
-async def cmd_monthly_report(callback: CallbackQuery, state: FSMContext):
+async def cmd_monthly_report(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await callback.answer()
     await state.clear()
     tg_id = callback.from_user.id
     try:
         budgets = await get_all_budgets(tg_id)
         if not budgets:
-            await callback.message.edit_text(
-                text=phrases.ERR_NO_BUDGET,
-                reply_markup=await get_main_menu_keyboard(tg_id),
+            await edit_rich_message(
+                bot,
+                callback.message.chat.id,
+                callback.message.message_id,
+                f"<p>{phrases.ERR_NO_BUDGET}</p>",
+                await get_main_menu_keyboard(tg_id),
             )
             return
 
@@ -84,30 +87,34 @@ async def cmd_monthly_report(callback: CallbackQuery, state: FSMContext):
             tg_id, active_idx
         )
         kb = get_monthly_nav_keyboard(has_prev, has_next, prev_label, next_label)
-        await callback.message.edit_text(text=text, reply_markup=kb)
-    except TelegramBadRequest as e:
-        logger.warning(f"Monthly report edit failed: {e}")
+        sent = await send_rich_message(
+            bot, callback.message.chat.id, text, kb
+        )
+        if sent:
+            await bot.delete_message(
+                callback.message.chat.id, callback.message.message_id
+            )
     except Exception as e:
         logger.error(f"Monthly report error: {e}", exc_info=True)
 
 
 @router.callback_query(F.data == "monthly_refresh")
-async def monthly_refresh(callback: CallbackQuery):
+async def monthly_refresh(callback: CallbackQuery, bot: Bot):
     await callback.answer()
     tg_id = callback.from_user.id
     try:
         idx = _get_index(tg_id)
         text, has_prev, has_next, prev_label, next_label = await _build_report_text(tg_id, idx)
         kb = get_monthly_nav_keyboard(has_prev, has_next, prev_label, next_label)
-        await callback.message.edit_text(text=text, reply_markup=kb)
-    except TelegramBadRequest:
-        pass
+        await edit_rich_message(
+            bot, callback.message.chat.id, callback.message.message_id, text, kb
+        )
     except Exception as e:
         logger.error(f"Monthly refresh error: {e}", exc_info=True)
 
 
 @router.callback_query(F.data == "monthly_prev")
-async def monthly_prev(callback: CallbackQuery):
+async def monthly_prev(callback: CallbackQuery, bot: Bot):
     await callback.answer()
     tg_id = callback.from_user.id
     try:
@@ -119,15 +126,15 @@ async def monthly_prev(callback: CallbackQuery):
             tg_id, idx + 1
         )
         kb = get_monthly_nav_keyboard(has_prev, has_next, prev_label, next_label)
-        await callback.message.edit_text(text=text, reply_markup=kb)
-    except TelegramBadRequest as e:
-        logger.warning(f"Monthly nav edit failed: {e}")
+        await edit_rich_message(
+            bot, callback.message.chat.id, callback.message.message_id, text, kb
+        )
     except Exception as e:
         logger.error(f"Monthly nav error: {e}", exc_info=True)
 
 
 @router.callback_query(F.data == "monthly_next")
-async def monthly_next(callback: CallbackQuery):
+async def monthly_next(callback: CallbackQuery, bot: Bot):
     await callback.answer()
     tg_id = callback.from_user.id
     try:
@@ -139,8 +146,8 @@ async def monthly_next(callback: CallbackQuery):
             tg_id, idx - 1
         )
         kb = get_monthly_nav_keyboard(has_prev, has_next, prev_label, next_label)
-        await callback.message.edit_text(text=text, reply_markup=kb)
-    except TelegramBadRequest as e:
-        logger.warning(f"Monthly nav edit failed: {e}")
+        await edit_rich_message(
+            bot, callback.message.chat.id, callback.message.message_id, text, kb
+        )
     except Exception as e:
         logger.error(f"Monthly nav error: {e}", exc_info=True)
