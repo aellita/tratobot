@@ -289,9 +289,9 @@ def format_summary_text(data: dict, label: str = "") -> str:
         mandatory=int(budget.mandatory_payments),
     )
     parts.append(
-        "<blockquote expandable>📁 <b>Детали расчёта</b><br>"
+        "<details>\n<summary>📁 Детали расчёта</summary>\n<blockquote>"
         + _esc(details).replace("\n", "<br>")
-        + "</blockquote>"
+        + "</blockquote>\n</details>"
     )
 
     return "\n".join(parts)
