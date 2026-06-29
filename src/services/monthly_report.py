@@ -288,11 +288,11 @@ def format_summary_text(data: dict, label: str = "") -> str:
         wishlist_target=int(data["wishlist_target"]),
         mandatory=int(budget.mandatory_payments),
     )
-    det_html = "📂 Детали расчёта\n" + _esc(details)
-    parts.append("<blockquote expandable>")
-    for det_line in det_html.split("\n"):
-        parts.append("  " + det_line)
-    parts.append("</blockquote>")
+    parts.append(
+        "<blockquote expandable>📁 <b>Детали расчёта</b>\n"
+        + _esc(details)
+        + "</blockquote>"
+    )
 
     return "\n".join(parts)
 
