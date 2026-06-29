@@ -164,11 +164,9 @@ async def send_morning_reports(bot: Bot):
                 if today == period_end_date + timedelta(days=1):
                     async with async_session_maker() as session:
                         await _log_morning_report(tg_id, session)
-                    from ..bot.rich_api import send_rich_message
-
                     data = await build_summary_data(tg_id, budget)
                     msg = format_summary_text(data)
-                    await send_rich_message(bot, tg_id, msg)
+                    await bot.send_message(tg_id, msg)
                     logger.info(f"Ежемесячный отчёт отправлен {tg_id}")
                     continue
 
