@@ -304,9 +304,9 @@ def format_summary_text(data: dict, label: str = "") -> str:
     det_html = det_html.rstrip("<br>")
 
     parts.append(
-        "<details>\n<summary>📁 Детали расчёта</summary>\n<blockquote>"
+        "<details>\n<summary>📁 Детали расчёта</summary>\n"
         + det_html
-        + "</blockquote>\n</details>"
+        + "\n</details>"
     )
 
     return "\n".join(parts)
