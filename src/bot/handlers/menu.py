@@ -186,7 +186,7 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
     )
     if settings.EXPENSE_SIMPLE_CHECK:
         await callback.message.answer(
-            text=phrases.WELCOME_MENU.format(name=user_name),
+            text="\u200b",
             reply_markup=get_main_reply_keyboard(),
         )
     else:
@@ -251,7 +251,7 @@ async def open_menu(callback: CallbackQuery, state: FSMContext):
     )
     if settings.EXPENSE_SIMPLE_CHECK:
         await callback.message.answer(
-            text=phrases.WELCOME_MENU.format(name=user_name),
+            text="\u200b",
             reply_markup=get_main_reply_keyboard(),
         )
     else:
@@ -1232,7 +1232,7 @@ async def back_from_category_change(callback: CallbackQuery):
     )
     if settings.EXPENSE_SIMPLE_CHECK:
         await callback.message.answer(
-            text=phrases.WELCOME_MENU.format(name=user_name),
+            text="\u200b",
             reply_markup=get_main_reply_keyboard(),
         )
 
@@ -1895,7 +1895,7 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
     )
     if settings.EXPENSE_SIMPLE_CHECK:
         await callback.message.answer(
-            text=phrases.WELCOME_MENU.format(name=user_name),
+            text="\u200b",
             reply_markup=get_main_reply_keyboard(),
         )
     else:

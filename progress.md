@@ -604,3 +604,17 @@
 - `src/services/morning_report.py` — проверка: если сегодня `period_end + 1d` → monthly summary вместо morning report
 
 **329 тестов проходят, 0 новых ruff-ошибок (только pre-existing E712/E711, принятые).**
+
+---
+
+### 2026-07-02 — UX1: Убрано «Вернулись, Aelita!» при возврате в меню
+
+**Проблема:** `BACK_NAV = "⬅️ Вернулись, {name}!"` избыточно — пользователь и так знает, что вернулся.
+
+**Решение:**
+- `phrases.BACK_NAV` → `"\u200b"` (zero-width space) — сообщение невидимо
+- 4 хендлера (`menu_back`, `open_menu`, `back_from_category_change`, `cancel`): в SIMPLE_CHECK-режиме `answer()` с WELCOME_MENU заменён на `"\u200b"` — только ReplyKeyboard без текста
+- Подход: Т-Банк минимализм — никаких лишних сообщений
+
+**Файлы:** `src/utils/phrases.py`, `src/bot/handlers/menu.py`
+**329 тестов проходят, 0 новых ruff-ошибок.**
