@@ -65,23 +65,19 @@ async def _get_daily_limit_label(telegram_id: int) -> str | None:
 
 
 def get_settings_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_UPDATE_INCOME, callback_data="edit_income")],
-            [InlineKeyboardButton(text=phrases.BTN_ADD_INCOME, callback_data="add_income")],
-            [InlineKeyboardButton(text=phrases.BTN_MANDATORY, callback_data="edit_mandatory")],
-            [InlineKeyboardButton(text=phrases.BTN_SAVINGS, callback_data="edit_black_day")],
-            [InlineKeyboardButton(text=phrases.BTN_WISHLIST, callback_data="edit_wishlist")],
-            [
-                InlineKeyboardButton(
-                    text=phrases.BTN_PERIOD_START, callback_data="edit_period_start"
-                )
-            ],
-            [InlineKeyboardButton(text=phrases.BTN_ROUNDING, callback_data="edit_rounding")],
-            [InlineKeyboardButton(text=phrases.BTN_MANAGE_CATEGORIES, callback_data="menu_categories")],
-            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")],
-        ]
-    )
+    buttons = [
+        [InlineKeyboardButton(text=phrases.BTN_UPDATE_INCOME, callback_data="edit_income")],
+        [InlineKeyboardButton(text=phrases.BTN_ADD_INCOME, callback_data="add_income")],
+        [InlineKeyboardButton(text=phrases.BTN_MANDATORY, callback_data="edit_mandatory")],
+        [InlineKeyboardButton(text=phrases.BTN_SAVINGS, callback_data="edit_black_day")],
+        [InlineKeyboardButton(text=phrases.BTN_WISHLIST, callback_data="edit_wishlist")],
+        [InlineKeyboardButton(text=phrases.BTN_PERIOD_START, callback_data="edit_period_start")],
+        [InlineKeyboardButton(text=phrases.BTN_ROUNDING, callback_data="edit_rounding")],
+        [InlineKeyboardButton(text=phrases.BTN_MANAGE_CATEGORIES, callback_data="menu_categories")],
+    ]
+    if not settings.EXPENSE_SIMPLE_CHECK:
+        buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_period_start_keyboard():
@@ -139,28 +135,29 @@ def get_duplicate_keyboard():
 
 
 def get_start_choice_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_TO_MAIN, callback_data="open_menu")],
-            [InlineKeyboardButton(text=phrases.BTN_RESTART_BUDGET, callback_data="reset_budget")],
-        ]
+    buttons = []
+    if not settings.EXPENSE_SIMPLE_CHECK:
+        buttons.append([InlineKeyboardButton(text=phrases.BTN_TO_MAIN, callback_data="open_menu")])
+    buttons.append(
+        [InlineKeyboardButton(text=phrases.BTN_RESTART_BUDGET, callback_data="reset_budget")]
     )
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_stats_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text=phrases.BTN_VIEW_HISTORY, callback_data="menu_history"),
-            ],
-            [
-                InlineKeyboardButton(
-                    text=phrases.BTN_MONTHLY_REPORT, callback_data="menu_monthly_report"
-                ),
-            ],
-            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")],
-        ]
-    )
+    buttons = [
+        [
+            InlineKeyboardButton(text=phrases.BTN_VIEW_HISTORY, callback_data="menu_history"),
+        ],
+        [
+            InlineKeyboardButton(
+                text=phrases.BTN_MONTHLY_REPORT, callback_data="menu_monthly_report"
+            ),
+        ],
+    ]
+    if not settings.EXPENSE_SIMPLE_CHECK:
+        buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_monthly_nav_keyboard(
@@ -184,9 +181,7 @@ def get_monthly_nav_keyboard(
                 callback_data="monthly_next",
             )
         )
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            row,
-            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")],
-        ]
-    )
+    buttons = [row]
+    if not settings.EXPENSE_SIMPLE_CHECK:
+        buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

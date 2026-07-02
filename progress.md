@@ -618,3 +618,29 @@
 
 **Файлы:** `src/utils/phrases.py`, `src/bot/handlers/menu.py`
 **329 тестов проходят, 0 новых ruff-ошибок.**
+
+---
+
+### 2026-07-02 — UX1.5: Удалены inline-кнопки «В главное меню» при SIMPLE_CHECK
+
+**Проблема:** После UX1 (BACK_NAV → zero-width space) inline-кнопки «В главное меню» / «В меню» / «Назад» (ведущие в меню) остались — посылали невидимое сообщение, создавали визуальный шум, дублировали ReplyKeyboard.
+
+**Решение (Т-Банк минимализм):**
+- Убраны все inline-кнопки, ведущие в главное меню, при `EXPENSE_SIMPLE_CHECK=True`:
+  - `keyboards.py`: настройки, статистика, monthly nav, start choice
+  - `menu.py`: статус (все зоны), чек траты, пикер категорий, critical reset (жёлтая зона)
+  - `history.py`: список трат
+  - `categories.py`: список категорий
+  - `evening_flow.py`: финальный отчёт
+- Убраны мислидинг-кнопки «💪 Буду экономить» и «💪 Принимаю вызов!» (вели в меню без логики)
+- `menu_back`, `open_menu`, `exp_back_cat` — early return при SIMPLE_CHECK
+
+**Контекстная навигация сохранена:** `exp_back` (история), `cat_back` (категории), `cat_cancel_rename`, `cancel` (FSM)
+
+**Починено:**
+- `back_from_category_change` — добавлен `state.clear()` (не чистил FSM)
+- `category_back_to_list` — добавлен `state.clear()` (не чистил FSM)
+- `nav_buttons` unused variable — удалён в categories.py
+
+**Файлы:** `src/bot/keyboards.py`, `src/bot/handlers/menu.py`, `src/bot/handlers/history.py`, `src/bot/handlers/categories.py`, `src/bot/handlers/evening_flow.py`
+**329 тестов проходят, 0 новых ruff-ошибок.**

@@ -5,6 +5,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 
+from src.core.config import settings
 from src.utils import phrases
 
 from ...db.database import async_session_maker
@@ -77,7 +78,10 @@ def _build_list_keyboard(expenses: list[Expense], page: int, total_pages: int):
     if page > 0 or page < total_pages - 1:
         buttons.append(nav)
 
-    buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK_TO_MENU, callback_data="menu_back")])
+    if not settings.EXPENSE_SIMPLE_CHECK:
+        buttons.append(
+            [InlineKeyboardButton(text=phrases.BTN_BACK_TO_MENU, callback_data="menu_back")]
+        )
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 

@@ -178,19 +178,15 @@ async def _save_msg_id(state: FSMContext, msg: Message):
 @router.callback_query(F.data == "menu_back")
 async def menu_back(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+    if settings.EXPENSE_SIMPLE_CHECK:
+        return
     await state.clear()
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
         text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    if settings.EXPENSE_SIMPLE_CHECK:
-        await callback.message.answer(
-            text="\u200b",
-            reply_markup=get_main_reply_keyboard(),
-        )
-    else:
-        _track_keyboard(callback.message.chat.id, callback.message.message_id)
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "menu_help")
@@ -243,19 +239,15 @@ async def cmd_start(message: Message, state: FSMContext):
 @router.callback_query(F.data == "open_menu")
 async def open_menu(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+    if settings.EXPENSE_SIMPLE_CHECK:
+        return
     await state.clear()
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
         text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    if settings.EXPENSE_SIMPLE_CHECK:
-        await callback.message.answer(
-            text="\u200b",
-            reply_markup=get_main_reply_keyboard(),
-        )
-    else:
-        _track_keyboard(callback.message.chat.id, callback.message.message_id)
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "reset_budget")
@@ -384,32 +376,40 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     footer = ""
     if end_of_period:
         if money_for_life <= 0:
-            footer = random.choice([
-                "Финишная прямая! Кошелёк пуст. Держимся на морально-волевых, без новых долгов!",
-                "До конца периода пара дней, а мы на нуле. Терпим, финиш уже виден!",
-                "Последние метры, денег нет. Но мы доползём без кредитов!",
-            ])
+            footer = random.choice(
+                [
+                    "Финишная прямая! Кошелёк пуст. Держимся на морально-волевых, без новых долгов!",
+                    "До конца периода пара дней, а мы на нуле. Терпим, финиш уже виден!",
+                    "Последние метры, денег нет. Но мы доползём без кредитов!",
+                ]
+            )
             btns = "FRESH_START"
         else:
-            footer = random.choice([
-                "Осталось пару дней, а у нас ещё есть кэш! Досрочная победа!",
-                "Финишная прямая, в кармане шуршат купюры! Горжусь дисциплиной!",
-                "Период почти закрыт, бюджет не пробит! Абсолютная победа!",
-            ])
+            footer = random.choice(
+                [
+                    "Осталось пару дней, а у нас ещё есть кэш! Досрочная победа!",
+                    "Финишная прямая, в кармане шуршат купюры! Горжусь дисциплиной!",
+                    "Период почти закрыт, бюджет не пробит! Абсолютная победа!",
+                ]
+            )
             btns = "REGULAR"
     elif pct_pred > 80:
-        footer = random.choice([
-            f"Идём идеально по графику! Прогнозный лимит: {int(dl_pred):,} ₽/день. Жаба спокойна!",
-            "Всё пучком. Лимит комфортный. Продолжай в том же духе!",
-            "Финансовая карма в порядке. Можно позволить себе чуточку больше!",
-        ])
+        footer = random.choice(
+            [
+                f"Идём идеально по графику! Прогнозный лимит: {int(dl_pred):,} ₽/день. Жаба спокойна!",
+                "Всё пучком. Лимит комфортный. Продолжай в том же духе!",
+                "Финансовая карма в порядке. Можно позволить себе чуточку больше!",
+            ]
+        )
         btns = "REGULAR"
     elif pct_pred >= 51:
-        footer = random.choice([
-            f"Заметил, мы ускорились. Лимит сожмётся до {int(dl_pred):,} ₽. Притормози?",
-            f"Съезжаем с курса. Прогноз {int(dl_pred):,} ₽/день. Включи осознанность.",
-            f"График пополз вниз. Прогноз {int(dl_pred):,} ₽/день — удержим планку?",
-        ])
+        footer = random.choice(
+            [
+                f"Заметил, мы ускорились. Лимит сожмётся до {int(dl_pred):,} ₽. Притормози?",
+                f"Съезжаем с курса. Прогноз {int(dl_pred):,} ₽/день. Включи осознанность.",
+                f"График пополз вниз. Прогноз {int(dl_pred):,} ₽/день — удержим планку?",
+            ]
+        )
         btns = "REGULAR"
     elif pct_pred >= 26:
         if pct_sim > 80:
@@ -419,11 +419,13 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             footer = f"Кубышка подстрахует — {int(dl_simulated):,}₽/день"
             btns = "FROM_YELLOW_TO_BLUE"
         else:
-            footer = random.choice([
-                f"Лимит сожмётся до {int(dl_pred):,} ₽/день. Режим супер-экономии.",
-                f"Прогноз {int(dl_pred):,} ₽/день. Постарайся сегодня ничего не покупать!",
-                f"До конца периода — гречка. Лимит {int(dl_pred):,} ₽/день. Держимся!",
-            ])
+            footer = random.choice(
+                [
+                    f"Лимит сожмётся до {int(dl_pred):,} ₽/день. Режим супер-экономии.",
+                    f"Прогноз {int(dl_pred):,} ₽/день. Постарайся сегодня ничего не покупать!",
+                    f"До конца периода — гречка. Лимит {int(dl_pred):,} ₽/день. Держимся!",
+                ]
+            )
             btns = "REGULAR"
     else:
         if pct_sim > 80:
@@ -436,11 +438,13 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             footer = f"Кубышка поднимет до {int(dl_simulated):,}₽/день"
             btns = "FROM_RED_TO_YELLOW"
         else:
-            footer = random.choice([
-                "Пробили дно! Деньги кончились. Пора пересобрать бюджет.",
-                "Дальше ехать некуда. Давай начнём с чистого листа?",
-                "Математика не бьётся с картой. Пора обнулить месяц!",
-            ])
+            footer = random.choice(
+                [
+                    "Пробили дно! Деньги кончились. Пора пересобрать бюджет.",
+                    "Дальше ехать некуда. Давай начнём с чистого листа?",
+                    "Математика не бьётся с картой. Пора обнулить месяц!",
+                ]
+            )
             btns = "FRESH_START"
 
     kb = _build_status_keyboard(btns, tg_id)
@@ -448,6 +452,52 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
 
 
 def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
+    if settings.EXPENSE_SIMPLE_CHECK:
+        if btn_type == "REGULAR":
+            return InlineKeyboardMarkup(inline_keyboard=[])
+        if btn_type == "FRESH_START":
+            return InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=phrases.BTN_FRESH_START, callback_data="trigger_critical_reset"
+                        )
+                    ],
+                ]
+            )
+        if btn_type in ("FROM_YELLOW_TO_GREEN", "FROM_YELLOW_TO_BLUE"):
+            label = (
+                phrases.BTN_USE_SAVINGS_COMFORT
+                if btn_type == "FROM_YELLOW_TO_GREEN"
+                else phrases.BTN_RAISE_LIMIT_SAVINGS
+            )
+            return InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=label, callback_data="use_savings")],
+                ]
+            )
+        if btn_type in ("FROM_RED_TO_GREEN", "FROM_RED_TO_BLUE", "FROM_RED_TO_YELLOW"):
+            return InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text={
+                                "FROM_RED_TO_GREEN": phrases.BTN_RESTORE_GREEN_SAVINGS,
+                                "FROM_RED_TO_BLUE": phrases.BTN_EXIT_CRISIS_GREEN,
+                                "FROM_RED_TO_YELLOW": phrases.BTN_SAVE_BUDGET_SAVINGS,
+                            }[btn_type],
+                            callback_data="use_savings",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
+                        )
+                    ],
+                ]
+            )
+        return InlineKeyboardMarkup(inline_keyboard=[])
+
     if btn_type == "REGULAR":
         return InlineKeyboardMarkup(
             inline_keyboard=[
@@ -562,9 +612,6 @@ async def handle_use_savings(callback: CallbackQuery):
         budget.black_day_fund = 0
         await session.commit()
     await menu_status(callback)
-
-
-
 
 
 # ============ ONBOARDING / SKIP ============
@@ -993,7 +1040,9 @@ async def process_expense(message: Message, state: FSMContext):
                     cat = None
             cat_id = cat.id if cat else None
             emoji, cat_name = get_category_display(cat.name) if cat else phrases.DEFAULT_CATEGORY
-            dup_middleware.set_pending(user_id, amount, description, cat_id, description, emoji, cat_name)
+            dup_middleware.set_pending(
+                user_id, amount, description, cat_id, description, emoji, cat_name
+            )
             await _cleanup_keyboard(message.bot, message.chat.id)
             msg = await message.answer(
                 phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
@@ -1034,7 +1083,9 @@ async def process_expense(message: Message, state: FSMContext):
         if dup_status == "silent":
             continue
         if dup_status == "warn":
-            dup_middleware.set_pending(user_id, effective, description, cat_id, description, emoji, cat_name)
+            dup_middleware.set_pending(
+                user_id, effective, description, cat_id, description, emoji, cat_name
+            )
             await _cleanup_keyboard(message.bot, message.chat.id)
             msg = await message.answer(
                 phrases.DUP_WARNING.format(amount=f"{effective:,.0f}", desc=safe(description)),
@@ -1139,9 +1190,14 @@ async def change_category(callback: CallbackQuery):
     buttons.append(
         [InlineKeyboardButton(text=phrases.BTN_NEW_CATEGORY, callback_data=f"new_cat:{expense_id}")]
     )
-    buttons.append(
-        [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data=f"exp_back_cat:{expense_id}")]
-    )
+    if not settings.EXPENSE_SIMPLE_CHECK:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_BACK, callback_data=f"exp_back_cat:{expense_id}"
+                )
+            ]
+        )
 
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     await callback.message.edit_text(
@@ -1223,18 +1279,17 @@ async def set_category(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("exp_back_cat:"))
-async def back_from_category_change(callback: CallbackQuery):
+async def back_from_category_change(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+    if settings.EXPENSE_SIMPLE_CHECK:
+        return
+    await state.clear()
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
         text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    if settings.EXPENSE_SIMPLE_CHECK:
-        await callback.message.answer(
-            text="\u200b",
-            reply_markup=get_main_reply_keyboard(),
-        )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data.startswith("new_cat:"))
@@ -1451,6 +1506,22 @@ async def save_real_balance(message: Message, state: FSMContext):
     if new_limit >= 100:
         await apply_reconciliation(message.from_user.id, money_for_life)
         await state.clear()
+        yellow_buttons = [
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_TAKE_FROM_SAVINGS, callback_data="edit_black_day"
+                )
+            ],
+        ]
+        if not settings.EXPENSE_SIMPLE_CHECK:
+            yellow_buttons.insert(
+                0,
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_ACCEPT_CHALLENGE, callback_data="menu_back"
+                    )
+                ],
+            )
         msg = await message.answer(
             text=phrases.FRESH_START_YELLOW.format(
                 name=user_name,
@@ -1459,20 +1530,7 @@ async def save_real_balance(message: Message, state: FSMContext):
                 money=int(money_for_life),
                 limit=int(new_limit),
             ),
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text=phrases.BTN_ACCEPT_CHALLENGE, callback_data="menu_back"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            text=phrases.BTN_TAKE_FROM_SAVINGS, callback_data="edit_black_day"
-                        )
-                    ],
-                ]
-            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=yellow_buttons),
         )
         _track_keyboard(message.chat.id, msg.message_id)
         return
@@ -2107,7 +2165,9 @@ async def handle_text(message: Message, state: FSMContext):
             if dup_status == "silent":
                 continue
             if dup_status == "warn":
-                dup_middleware.set_pending(user_id, effective, description, cat_id, description, emoji, cat_name)
+                dup_middleware.set_pending(
+                    user_id, effective, description, cat_id, description, emoji, cat_name
+                )
                 await _cleanup_keyboard(message.bot, message.chat.id)
                 msg = await message.answer(
                     phrases.DUP_WARNING.format(amount=f"{effective:,.0f}", desc=safe(description)),

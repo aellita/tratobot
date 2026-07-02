@@ -5,6 +5,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from src.core.config import settings
 from src.utils import phrases
 from src.utils.helpers import get_msk_now
 
@@ -129,11 +130,14 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
         days_left=days_left,
     )
 
-    main_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
-        ]
-    )
+    if settings.EXPENSE_SIMPLE_CHECK:
+        main_kb = None
+    else:
+        main_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
+            ]
+        )
     await callback.message.answer(text, reply_markup=main_kb)
 
     await state.clear()

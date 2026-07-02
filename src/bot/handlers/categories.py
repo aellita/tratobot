@@ -4,6 +4,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 
+from src.core.config import settings
 from src.utils import phrases
 
 from ...db.database import async_session_maker
@@ -60,24 +61,20 @@ async def _render_category_page(telegram_id: int) -> tuple[str, InlineKeyboardMa
         label = f"{emoji} {display_text}"
         if cat.is_archived:
             label += phrases.CATEGORY_LIST_ARCHIVED_SUFFIX
-        row.append(
-            InlineKeyboardButton(text=label, callback_data=f"cat_sel:{cat.id}")
-        )
+        row.append(InlineKeyboardButton(text=label, callback_data=f"cat_sel:{cat.id}"))
         if len(row) == 2:
             buttons.append(row)
             row = []
     if row:
         buttons.append(row)
 
-    nav_buttons = []
     back_target = _get_back_target(telegram_id) if telegram_id else None
     if back_target:
+        buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data=back_target)])
+    if not settings.EXPENSE_SIMPLE_CHECK:
         buttons.append(
-            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data=back_target)]
+            [InlineKeyboardButton(text=phrases.BTN_BACK_TO_MENU, callback_data="menu_back")]
         )
-    buttons.append(
-        [InlineKeyboardButton(text=phrases.BTN_BACK_TO_MENU, callback_data="menu_back")]
-    )
 
     return phrases.BTN_MANAGE_CATEGORIES, InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -141,28 +138,33 @@ async def category_detail(callback: CallbackQuery):
     ]
 
     if cat.is_archived:
-        buttons.append([
-            InlineKeyboardButton(
-                text=phrases.BTN_CATEGORY_UNARCHIVE, callback_data=f"cat_unarchive:{category_id}"
-            )
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_CATEGORY_UNARCHIVE,
+                    callback_data=f"cat_unarchive:{category_id}",
+                )
+            ]
+        )
     else:
-        buttons.append([
-            InlineKeyboardButton(
-                text=phrases.BTN_CATEGORY_ARCHIVE, callback_data=f"cat_archive:{category_id}"
-            )
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_CATEGORY_ARCHIVE, callback_data=f"cat_archive:{category_id}"
+                )
+            ]
+        )
 
-    buttons.append([
-        InlineKeyboardButton(
-            text=phrases.BTN_CATEGORY_DELETE, callback_data=f"cat_delete:{category_id}"
-        )
-    ])
-    buttons.append([
-        InlineKeyboardButton(
-            text=phrases.BTN_CATEGORY_BACK_TO_LIST, callback_data="cat_back"
-        )
-    ])
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text=phrases.BTN_CATEGORY_DELETE, callback_data=f"cat_delete:{category_id}"
+            )
+        ]
+    )
+    buttons.append(
+        [InlineKeyboardButton(text=phrases.BTN_CATEGORY_BACK_TO_LIST, callback_data="cat_back")]
+    )
 
     await callback.message.edit_text(
         text=text,
@@ -226,10 +228,12 @@ async def process_cat_rename(message: Message, state: FSMContext):
             phrases.ERR_NAME_LENGTH,
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(
-                        text=phrases.BTN_CANCEL,
-                        callback_data="cat_cancel_rename",
-                    )],
+                    [
+                        InlineKeyboardButton(
+                            text=phrases.BTN_CANCEL,
+                            callback_data="cat_cancel_rename",
+                        )
+                    ],
                 ],
             ),
         )
@@ -251,7 +255,10 @@ async def process_cat_rename(message: Message, state: FSMContext):
         cat = result.scalar_one_or_none()
         if not cat:
             await state.clear()
-            await message.answer(phrases.CATEGORY_NOT_FOUND, reply_markup=await get_main_menu_keyboard(message.from_user.id))
+            await message.answer(
+                phrases.CATEGORY_NOT_FOUND,
+                reply_markup=await get_main_menu_keyboard(message.from_user.id),
+            )
             return
 
         old_emoji, _ = get_category_display(cat.name)
@@ -268,10 +275,12 @@ async def process_cat_rename(message: Message, state: FSMContext):
                 phrases.ERR_NAME_LENGTH,
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
-                        [InlineKeyboardButton(
-                            text=phrases.BTN_CANCEL,
-                            callback_data="cat_cancel_rename",
-                        )],
+                        [
+                            InlineKeyboardButton(
+                                text=phrases.BTN_CANCEL,
+                                callback_data="cat_cancel_rename",
+                            )
+                        ],
                     ],
                 ),
             )
@@ -299,10 +308,12 @@ async def process_cat_rename(message: Message, state: FSMContext):
                 phrases.ERR_CATEGORY_EXISTS.format(name=safe(new_name)),
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
-                        [InlineKeyboardButton(
-                            text=phrases.BTN_CANCEL,
-                            callback_data="cat_cancel_rename",
-                        )],
+                        [
+                            InlineKeyboardButton(
+                                text=phrases.BTN_CANCEL,
+                                callback_data="cat_cancel_rename",
+                            )
+                        ],
                     ],
                 ),
             )
@@ -350,10 +361,12 @@ async def category_archive(callback: CallbackQuery):
         text=phrases.CATEGORY_ARCHIVED.format(name=safe(cat.name)),
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(
-                    text=phrases.BTN_CATEGORY_BACK_TO_LIST,
-                    callback_data="cat_back",
-                )],
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_CATEGORY_BACK_TO_LIST,
+                        callback_data="cat_back",
+                    )
+                ],
             ]
         ),
     )
@@ -388,10 +401,12 @@ async def category_unarchive(callback: CallbackQuery):
         text=phrases.CATEGORY_UNARCHIVED.format(name=safe(cat.name)),
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(
-                    text=phrases.BTN_CATEGORY_BACK_TO_LIST,
-                    callback_data="cat_back",
-                )],
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_CATEGORY_BACK_TO_LIST,
+                        callback_data="cat_back",
+                    )
+                ],
             ]
         ),
     )
@@ -489,9 +504,7 @@ async def category_delete_move_picker(callback: CallbackQuery):
             row = []
     if row:
         buttons.append(row)
-    buttons.append(
-        [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="cat_back")]
-    )
+    buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="cat_back")])
 
     await callback.message.edit_text(
         text=phrases.CATEGORY_DELETE_MOVE_PROMPT,
@@ -543,10 +556,12 @@ async def category_delete_move_execute(callback: CallbackQuery):
         text=phrases.CATEGORY_DELETED_MOVED.format(name=name, target=safe(target_name)),
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(
-                    text=phrases.BTN_CATEGORY_BACK_TO_LIST,
-                    callback_data="cat_back",
-                )],
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_CATEGORY_BACK_TO_LIST,
+                        callback_data="cat_back",
+                    )
+                ],
             ]
         ),
     )
@@ -633,17 +648,20 @@ async def category_delete_hard_execute(callback: CallbackQuery):
         text=phrases.CATEGORY_DELETED_HARD.format(name=safe(name)),
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(
-                    text=phrases.BTN_CATEGORY_BACK_TO_LIST,
-                    callback_data="cat_back",
-                )],
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_CATEGORY_BACK_TO_LIST,
+                        callback_data="cat_back",
+                    )
+                ],
             ]
         ),
     )
 
 
 @router.callback_query(F.data == "cat_back")
-async def category_back_to_list(callback: CallbackQuery):
+async def category_back_to_list(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+    await state.clear()
     text, kb = await _render_category_page(callback.from_user.id)
     await callback.message.edit_text(text=text, reply_markup=kb)
