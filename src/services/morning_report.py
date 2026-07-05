@@ -20,7 +20,7 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
     if btn_type == "REGULAR":
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
             ]
         )
     if btn_type == "FRESH_START":
@@ -31,7 +31,7 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
                         text=phrases.BTN_FRESH_START, callback_data="trigger_critical_reset"
                     )
                 ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
             ]
         )
     if btn_type == "FROM_YELLOW_TO_GREEN":
@@ -69,7 +69,7 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
                         text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
                     )
                 ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
             ]
         )
     if btn_type == "FROM_RED_TO_BLUE":
@@ -85,7 +85,7 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
                         text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
                     )
                 ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
             ]
         )
     if btn_type == "FROM_RED_TO_YELLOW":
@@ -101,12 +101,12 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
                         text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
                     )
                 ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
             ]
         )
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
         ]
     )
 

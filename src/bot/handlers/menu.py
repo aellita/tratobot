@@ -208,6 +208,19 @@ async def open_menu(callback: CallbackQuery, state: FSMContext):
     )
 
 
+@router.callback_query(F.data == "report_back")
+async def report_back(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    if settings.EXPENSE_SIMPLE_CHECK:
+        return
+    await state.clear()
+    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
+    await callback.message.answer(
+        text=phrases.BACK_NAV.format(name=user_name),
+        reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+    )
+
+
 @router.callback_query(F.data == "reset_budget")
 async def reset_budget(callback: CallbackQuery, state: FSMContext):
     await callback.answer()

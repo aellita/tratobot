@@ -170,6 +170,40 @@ async def get_today_expenses_sum(telegram_id: int) -> float:
         return float(total) if total else 0.0
 
 
+async def get_today_expenses_grouped(telegram_id: int) -> list[str]:
+    from ..db.models.models import Category
+    from .categorization import get_category_display
+
+    today = get_msk_now().date()
+    day_start = datetime.combine(today, time.min)
+    day_end = datetime.combine(today, time.max)
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Expense, Category)
+            .outerjoin(Category, Expense.category_id == Category.id)
+            .where(Expense.telegram_id == telegram_id)
+            .where(Expense.date >= day_start)
+            .where(Expense.date <= day_end)
+            .where(Expense.is_deleted == False)
+            .order_by(Expense.date)
+        )
+        rows = result.all()
+
+    lines: list[str] = []
+    for exp, cat in rows:
+        if cat:
+            emoji, cat_name = get_category_display(cat.name)
+            prefix = f"{emoji} {cat_name}"
+        else:
+            prefix = "📦 Прочее"
+        desc = exp.description or ""
+        label = f"{desc} — {exp.amount:,.0f}₽" if desc else f"{exp.amount:,.0f}₽"
+        lines.append(f"{prefix} {label}")
+
+    return lines
+
+
 async def get_today_daily_limit(telegram_id: int) -> float:
     from .budget_service import get_active_budget
 

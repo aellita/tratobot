@@ -12,7 +12,8 @@ from sqlalchemy import select
 from ..db.database import async_session_maker
 from ..db.models.models import User, UserSettings
 from ..utils import phrases
-from .expense_service import get_today_expenses_sum
+from ..utils.helpers import get_msk_now
+from .expense_service import get_today_expenses_grouped, get_today_expenses_sum
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,13 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
     return random.choice(evening_phrases)
 
 
+_MONTH_NAMES_RU = {
+    1: "января", 2: "февраля", 3: "марта", 4: "апреля",
+    5: "мая", 6: "июня", 7: "июля", 8: "августа",
+    9: "сентября", 10: "октября", 11: "ноября", 12: "декабря",
+}
+
+
 async def send_evening_teaser(bot: Bot, storage: BaseStorage):
     logger.info("Запуск вечернего тизера в 22:00...")
 
@@ -103,7 +111,19 @@ async def send_evening_teaser(bot: Bot, storage: BaseStorage):
                 logger.info(f"Пользователь {tg_id} занят в {current_state}, тизер пропущен")
                 continue
 
-            msg = await bot.send_message(tg_id, INITIAL_TEXT, reply_markup=EVENING_KB)
+            today = get_msk_now()
+            date_str = f"{today.day} {_MONTH_NAMES_RU[today.month]}"
+            expense_lines = await get_today_expenses_grouped(tg_id)
+
+            if expense_lines:
+                quote_lines = [f"> Сегодня, {date_str}:"]
+                quote_lines.extend(f"> {line}" for line in expense_lines)
+                blockquote = "\n".join(quote_lines)
+                teaser_text = f"{INITIAL_TEXT}\n\n{blockquote}"
+            else:
+                teaser_text = INITIAL_TEXT
+
+            msg = await bot.send_message(tg_id, teaser_text, reply_markup=EVENING_KB)
             await state.set_state(EveningState.filling)
             await state.update_data(container_id=msg.message_id, session_expenses=[])
 
@@ -152,6 +172,12 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
 
             total = await get_today_expenses_sum(tg_id)
 
+            if is_evening_state:
+                try:
+                    await bot.delete_message(chat_id=tg_id, message_id=container_id)
+                except Exception:
+                    pass
+
             await bot.send_message(
                 tg_id,
                 phrases.AUTO_CLOSE.format(total=f"{int(total):,}"),
@@ -159,7 +185,7 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
-                                text=phrases.BTN_BACK_MAIN, callback_data="open_menu"
+                                text=phrases.BTN_BACK_MAIN, callback_data="report_back"
                             )
                         ],
                     ]
