@@ -68,10 +68,13 @@ class AutoTrackOutgoingMiddleware(BaseRequestMiddleware):
     ) -> Response[TelegramType]:
         response = await make_request(bot, method)
 
-        if not response.ok:
-            return response
+        if isinstance(response, Response):
+            if not response.ok:
+                return response
+            msg = response.result
+        else:
+            msg = response
 
-        msg = response.result
         if isinstance(msg, Message) and msg.reply_markup:
             inline_kb = getattr(msg.reply_markup, "inline_keyboard", None)
             if inline_kb:
