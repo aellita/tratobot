@@ -87,13 +87,9 @@ async def cmd_monthly_report(callback: CallbackQuery, state: FSMContext, bot: Bo
             tg_id, active_idx
         )
         kb = get_monthly_nav_keyboard(has_prev, has_next, prev_label, next_label)
-        sent = await send_rich_message(
-            bot, callback.message.chat.id, text, kb
-        )
+        sent = await send_rich_message(bot, callback.message.chat.id, text, kb)
         if sent:
-            await bot.delete_message(
-                callback.message.chat.id, callback.message.message_id
-            )
+            await bot.delete_message(callback.message.chat.id, callback.message.message_id)
     except Exception as e:
         logger.error(f"Monthly report error: {e}", exc_info=True)
 
@@ -122,9 +118,7 @@ async def monthly_prev(callback: CallbackQuery, bot: Bot):
         if idx >= len(list(await get_all_budgets(tg_id))) - 1:
             return
         _set_index(tg_id, idx + 1)
-        text, has_prev, has_next, prev_label, next_label = await _build_report_text(
-            tg_id, idx + 1
-        )
+        text, has_prev, has_next, prev_label, next_label = await _build_report_text(tg_id, idx + 1)
         kb = get_monthly_nav_keyboard(has_prev, has_next, prev_label, next_label)
         await edit_rich_message(
             bot, callback.message.chat.id, callback.message.message_id, text, kb
@@ -142,9 +136,7 @@ async def monthly_next(callback: CallbackQuery, bot: Bot):
         if idx <= 0:
             return
         _set_index(tg_id, idx - 1)
-        text, has_prev, has_next, prev_label, next_label = await _build_report_text(
-            tg_id, idx - 1
-        )
+        text, has_prev, has_next, prev_label, next_label = await _build_report_text(tg_id, idx - 1)
         kb = get_monthly_nav_keyboard(has_prev, has_next, prev_label, next_label)
         await edit_rich_message(
             bot, callback.message.chat.id, callback.message.message_id, text, kb

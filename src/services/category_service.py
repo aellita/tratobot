@@ -4,9 +4,7 @@ from ..db.database import async_session_maker
 from ..db.models.models import Category, Expense
 
 
-async def get_category_expense_count(
-    telegram_id: int, category_id: int
-) -> int:
+async def get_category_expense_count(telegram_id: int, category_id: int) -> int:
     async with async_session_maker() as session:
         result = await session.execute(
             select(func.count(Expense.id)).where(
@@ -50,9 +48,7 @@ async def toggle_archive_category(telegram_id: int, category_id: int) -> bool:
         return True
 
 
-async def move_expenses_to_default_and_delete(
-    telegram_id: int, category_id: int
-) -> bool:
+async def move_expenses_to_default_and_delete(telegram_id: int, category_id: int) -> bool:
     async with async_session_maker() as session:
         result = await session.execute(
             select(Category).where(
@@ -138,8 +134,7 @@ async def hard_delete_category(telegram_id: int, category_id: int) -> bool:
             return False
 
         await session.execute(
-            Expense.__table__.delete()
-            .where(
+            Expense.__table__.delete().where(
                 Expense.telegram_id == telegram_id,
                 Expense.category_id == category_id,
             )

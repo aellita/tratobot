@@ -16,18 +16,17 @@ from ..utils import phrases
 from ..utils.helpers import get_msk_now
 
 TOTEM_MAP: list[tuple[list[str], str, str, str]] = [
-    (["транспорт", "активности", "такси", "билеты"],
-     "Лягушка-путешественница", "🐸", phrases.MONTHLY_TOTEM_TRAVEL),
-    (["еда", "кафе", "ресторан", "доставка"],
-     "Винни-Пух", "🍯", phrases.MONTHLY_TOTEM_FOOD),
-    (["покупки", "одежда", "шопинг"],
-     "Золушка", "✨", phrases.MONTHLY_TOTEM_SHOPPING),
-    (["развлечения", "гэс-2", "кино", "театр"],
-     "Кот Леопольд", "🎨", phrases.MONTHLY_TOTEM_FUN),
-    (["здоровье", "спорт", "красота", "аптека"],
-     "Дядя Стёпа", "🏋️", phrases.MONTHLY_TOTEM_HEALTH),
-    (["дом", "подписки", "жкх"],
-     "Домовёнок Кузя", "🏡", phrases.MONTHLY_TOTEM_HOME),
+    (
+        ["транспорт", "активности", "такси", "билеты"],
+        "Лягушка-путешественница",
+        "🐸",
+        phrases.MONTHLY_TOTEM_TRAVEL,
+    ),
+    (["еда", "кафе", "ресторан", "доставка"], "Винни-Пух", "🍯", phrases.MONTHLY_TOTEM_FOOD),
+    (["покупки", "одежда", "шопинг"], "Золушка", "✨", phrases.MONTHLY_TOTEM_SHOPPING),
+    (["развлечения", "гэс-2", "кино", "театр"], "Кот Леопольд", "🎨", phrases.MONTHLY_TOTEM_FUN),
+    (["здоровье", "спорт", "красота", "аптека"], "Дядя Стёпа", "🏋️", phrases.MONTHLY_TOTEM_HEALTH),
+    (["дом", "подписки", "жкх"], "Домовёнок Кузя", "🏡", phrases.MONTHLY_TOTEM_HOME),
 ]
 
 
@@ -82,9 +81,7 @@ def is_period_active(budget: Budget) -> bool:
 async def get_all_budgets(telegram_id: int) -> list[Budget]:
     async with async_session_maker() as session:
         result = await session.execute(
-            select(Budget)
-            .where(Budget.telegram_id == telegram_id)
-            .order_by(Budget.month.desc())
+            select(Budget).where(Budget.telegram_id == telegram_id).order_by(Budget.month.desc())
         )
         return list(result.scalars().all())
 
@@ -107,8 +104,7 @@ async def get_category_breakdown(
 
     uncategorized_result = await _get_uncategorized_sum(telegram_id, period_start, period_end)
     results: list[tuple[str | None, int, float]] = [
-        (row.name, row[2], float(row[3]) if row[3] else 0.0)
-        for row in rows
+        (row.name, row[2], float(row[3]) if row[3] else 0.0) for row in rows
     ]
     if uncategorized_result:
         cat_name, count, amount = uncategorized_result
@@ -139,9 +135,7 @@ async def _get_uncategorized_sum(
 async def _get_active_wishlist(telegram_id: int) -> Wishlist | None:
     async with async_session_maker() as session:
         result = await session.execute(
-            select(Wishlist).where(
-                Wishlist.telegram_id == telegram_id, Wishlist.is_active == True
-            )
+            select(Wishlist).where(Wishlist.telegram_id == telegram_id, Wishlist.is_active == True)
         )
         return result.scalar_one_or_none()
 
@@ -212,10 +206,7 @@ def _zone_for_period(
 
 def _esc(text: str) -> str:
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -257,21 +248,21 @@ def format_summary_text(data: dict, label: str = "") -> str:
 
     if data["breakdown"]:
         parts.append("<h3>📑 Топ расходов по категориям:</h3>")
-        parts.append('<table bordered striped>')
-        parts.append('  <caption>Распределение трат за период</caption>')
-        parts.append('  <tr>')
+        parts.append("<table bordered striped>")
+        parts.append("  <caption>Распределение трат за период</caption>")
+        parts.append("  <tr>")
         parts.append('    <th align="left">Категория</th>')
         parts.append('    <th align="center">Операций</th>')
         parts.append('    <th align="right">Сумма</th>')
-        parts.append('  </tr>')
+        parts.append("  </tr>")
         for cat_name, count, amount in data["breakdown"]:
             clean_name = _esc(cat_name or "Прочее")
-            parts.append('  <tr>')
-            parts.append(f'    <td>{clean_name}</td>')
+            parts.append("  <tr>")
+            parts.append(f"    <td>{clean_name}</td>")
             parts.append(f'    <td align="center">{count}</td>')
             parts.append(f'    <td align="right">{int(amount):,} ₽</td>')
-            parts.append('  </tr>')
-        parts.append('</table>')
+            parts.append("  </tr>")
+        parts.append("</table>")
 
         parts.append("<hr>")
         parts.append(f"<p><b>Итого: {int(data['total_spent']):,} ₽</b></p>")
@@ -303,11 +294,7 @@ def format_summary_text(data: dict, label: str = "") -> str:
             det_html += f"• {_esc(content)}<br>"
     det_html = det_html.rstrip("<br>")
 
-    parts.append(
-        "<details>\n<summary>📁 Детали расчёта</summary>\n"
-        + det_html
-        + "\n</details>"
-    )
+    parts.append("<details>\n<summary>📁 Детали расчёта</summary>\n" + det_html + "\n</details>")
 
     return "\n".join(parts)
 

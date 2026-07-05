@@ -156,7 +156,11 @@ async def send_morning_reports(bot: Bot):
                 if not budget or budget.daily_limit <= 0:
                     continue
 
-                from .monthly_report import build_summary_data, format_summary_text, get_period_dates
+                from .monthly_report import (
+                    build_summary_data,
+                    format_summary_text,
+                    get_period_dates,
+                )
 
                 period_start, period_end = get_period_dates(budget)
                 today = get_msk_now().date()

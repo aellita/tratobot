@@ -185,11 +185,16 @@ class TestKeywordAvg:
         cats = await seed_user_categories(test_user.telegram_id)
         transport = [c for c in cats if c.name == "Транспорт"][0]
         now = get_msk_now()
-        db_session.add(Expense(
-            telegram_id=test_user.telegram_id, amount=200.0,
-            description="самокат", category_id=transport.id,
-            date=now, is_deleted=False,
-        ))
+        db_session.add(
+            Expense(
+                telegram_id=test_user.telegram_id,
+                amount=200.0,
+                description="самокат",
+                category_id=transport.id,
+                date=now,
+                is_deleted=False,
+            )
+        )
         await db_session.commit()
 
         avg = await _get_keyword_avg(test_user.telegram_id, "самокат", transport.id)
@@ -200,11 +205,16 @@ class TestKeywordAvg:
         transport = [c for c in cats if c.name == "Транспорт"][0]
         now = get_msk_now()
         for amt in [200, 300, 400]:
-            db_session.add(Expense(
-                telegram_id=test_user.telegram_id, amount=amt,
-                description="самокат", category_id=transport.id,
-                date=now, is_deleted=False,
-            ))
+            db_session.add(
+                Expense(
+                    telegram_id=test_user.telegram_id,
+                    amount=amt,
+                    description="самокат",
+                    category_id=transport.id,
+                    date=now,
+                    is_deleted=False,
+                )
+            )
         await db_session.commit()
 
         avg = await _get_keyword_avg(test_user.telegram_id, "самокат", transport.id)
@@ -212,15 +222,21 @@ class TestKeywordAvg:
 
     async def test_avg_respects_last_10_limit(self, db_session, test_user):
         from datetime import timedelta
+
         cats = await seed_user_categories(test_user.telegram_id)
         transport = [c for c in cats if c.name == "Транспорт"][0]
         now = get_msk_now()
         for i in range(15):
-            db_session.add(Expense(
-                telegram_id=test_user.telegram_id, amount=float(i * 100),
-                description="самокат", category_id=transport.id,
-                date=now + timedelta(seconds=i), is_deleted=False,
-            ))
+            db_session.add(
+                Expense(
+                    telegram_id=test_user.telegram_id,
+                    amount=float(i * 100),
+                    description="самокат",
+                    category_id=transport.id,
+                    date=now + timedelta(seconds=i),
+                    is_deleted=False,
+                )
+            )
         await db_session.commit()
 
         avg = await _get_keyword_avg(test_user.telegram_id, "самокат", transport.id)
@@ -230,16 +246,26 @@ class TestKeywordAvg:
         cats = await seed_user_categories(test_user.telegram_id)
         transport = [c for c in cats if c.name == "Транспорт"][0]
         now = get_msk_now()
-        db_session.add(Expense(
-            telegram_id=test_user.telegram_id, amount=100.0,
-            description="самокат", category_id=transport.id,
-            date=now, is_deleted=False,
-        ))
-        db_session.add(Expense(
-            telegram_id=test_user.telegram_id, amount=9999.0,
-            description="самокат", category_id=transport.id,
-            date=now, is_deleted=True,
-        ))
+        db_session.add(
+            Expense(
+                telegram_id=test_user.telegram_id,
+                amount=100.0,
+                description="самокат",
+                category_id=transport.id,
+                date=now,
+                is_deleted=False,
+            )
+        )
+        db_session.add(
+            Expense(
+                telegram_id=test_user.telegram_id,
+                amount=9999.0,
+                description="самокат",
+                category_id=transport.id,
+                date=now,
+                is_deleted=True,
+            )
+        )
         await db_session.commit()
 
         avg = await _get_keyword_avg(test_user.telegram_id, "самокат", transport.id)
@@ -256,16 +282,26 @@ class TestKeywordAvg:
         transport = [c for c in cats if c.name == "Транспорт"][0]
         cafe = [c for c in cats if c.name == "Кафе"][0]
         now = get_msk_now()
-        db_session.add(Expense(
-            telegram_id=test_user.telegram_id, amount=200.0,
-            description="самокат", category_id=transport.id,
-            date=now, is_deleted=False,
-        ))
-        db_session.add(Expense(
-            telegram_id=test_user.telegram_id, amount=999.0,
-            description="кофе", category_id=cafe.id,
-            date=now, is_deleted=False,
-        ))
+        db_session.add(
+            Expense(
+                telegram_id=test_user.telegram_id,
+                amount=200.0,
+                description="самокат",
+                category_id=transport.id,
+                date=now,
+                is_deleted=False,
+            )
+        )
+        db_session.add(
+            Expense(
+                telegram_id=test_user.telegram_id,
+                amount=999.0,
+                description="кофе",
+                category_id=cafe.id,
+                date=now,
+                is_deleted=False,
+            )
+        )
         await db_session.commit()
 
         avg = await _get_keyword_avg(test_user.telegram_id, "самокат", transport.id)
@@ -280,11 +316,16 @@ class TestCategoryScoring:
         return eda, cafe
 
     async def _add_expense(self, db_session, telegram_id, amount, desc, cat_id):
-        db_session.add(Expense(
-            telegram_id=telegram_id, amount=amount,
-            description=desc, category_id=cat_id,
-            date=get_msk_now(), is_deleted=False,
-        ))
+        db_session.add(
+            Expense(
+                telegram_id=telegram_id,
+                amount=amount,
+                description=desc,
+                category_id=cat_id,
+                date=get_msk_now(),
+                is_deleted=False,
+            )
+        )
         await db_session.commit()
 
     async def test_scoring_picks_closer_category(self, db_session, test_user):

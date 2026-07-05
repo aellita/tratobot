@@ -190,7 +190,8 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "menu_help")
-async def menu_help(callback: CallbackQuery):
+async def menu_help(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
     await callback.answer()
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
@@ -989,68 +990,11 @@ async def menu_add(callback: CallbackQuery, state: FSMContext):
     _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
-@router.message(AddExpense.waiting_for_amount)
-async def process_expense(message: Message, state: FSMContext):
-    text = message.text.strip()
-    if text in _REPLY_BTNS:
-        await state.clear()
-        await handle_reply_menu(message, state)
-        return
-
-    await get_or_create_user(
-        telegram_id=message.from_user.id,
-        first_name=message.from_user.first_name,
-        username=message.from_user.username,
-    )
-
-    parsed_list = parse_multi_expense_text(text)
-    if not parsed_list:
-        data = await state.get_data()
-        retries = data.get("_retry_count", 0) + 1
-        await state.update_data(_retry_count=retries)
-        if retries >= 3:
-            await state.clear()
-            await _cleanup_keyboard(message.bot, message.chat.id)
-            sent = await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            _track_keyboard(message.chat.id, sent.message_id)
-            return
-        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="500 кофе"))
-        return
-
-    user_id = message.from_user.id
-
-    # Quick pre-check: single-line expense may be a duplicate
-    if len(parsed_list) == 1:
-        amount, description = parsed_list[0]
-        dup_status = dup_middleware.check(user_id, amount, description)
-        if dup_status != "new":
-            if dup_status == "silent":
-                await state.clear()
-                return
-            if description == phrases.FALLBACK_DESC:
-                cat = None
-            else:
-                try:
-                    cat, _ = await detect_category_db(description, user_id, amount)
-                except Exception as e:
-                    logging.error("Category detection failed", exc_info=e)
-                    cat = None
-            cat_id = cat.id if cat else None
-            emoji, cat_name = get_category_display(cat.name) if cat else phrases.DEFAULT_CATEGORY
-            dup_middleware.set_pending(
-                user_id, amount, description, cat_id, description, emoji, cat_name
-            )
-            await _cleanup_keyboard(message.bot, message.chat.id)
-            msg = await message.answer(
-                phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
-                reply_markup=get_duplicate_keyboard(),
-            )
-            _track_keyboard(message.chat.id, msg.message_id)
-            return
-
+async def _save_expenses_from_parsed_list(
+    user_id: int,
+    parsed_list: list[tuple[float, str]],
+    message: Message,
+) -> tuple[bool, bool, list[str], float, int | None]:
     rounding_mode = await get_rounding_mode(user_id)
     lines = []
     total_spare = 0.0
@@ -1092,7 +1036,7 @@ async def process_expense(message: Message, state: FSMContext):
                 reply_markup=get_duplicate_keyboard(),
             )
             _track_keyboard(message.chat.id, msg.message_id)
-            return
+            return True, True, [], 0.0, None
 
         all_silent = False
 
@@ -1110,7 +1054,7 @@ async def process_expense(message: Message, state: FSMContext):
                 if first_id is None:
                     first_id = expense.id
         except Exception as e:
-            logging.error("Expense insert failed (FSM)", exc_info=e)
+            logging.error("Expense insert failed", exc_info=e)
             cause = getattr(e, "__cause__", None)
             if cause:
                 logging.error("Caused by: %s: %s", type(cause).__name__, cause)
@@ -1123,6 +1067,76 @@ async def process_expense(message: Message, state: FSMContext):
                 amount=f"{effective:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
             )
         )
+
+    return False, all_silent, lines, total_spare, first_id
+
+
+@router.message(AddExpense.waiting_for_amount)
+async def process_expense(message: Message, state: FSMContext):
+    text = message.text.strip()
+    if text in _REPLY_BTNS:
+        await state.clear()
+        await handle_reply_menu(message, state)
+        return
+
+    await get_or_create_user(
+        telegram_id=message.from_user.id,
+        first_name=message.from_user.first_name,
+        username=message.from_user.username,
+    )
+
+    parsed_list = parse_multi_expense_text(text)
+    if not parsed_list:
+        data = await state.get_data()
+        retries = data.get("_retry_count", 0) + 1
+        await state.update_data(_retry_count=retries)
+        if retries >= 3:
+            await state.clear()
+            await _cleanup_keyboard(message.bot, message.chat.id)
+            sent = await message.answer(
+                phrases.ERR_TOO_MANY_RETRIES,
+                reply_markup=await get_main_menu_keyboard(message.from_user.id),
+            )
+            _track_keyboard(message.chat.id, sent.message_id)
+            return
+        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="500 кофе"))
+        return
+
+    user_id = message.from_user.id
+
+    if len(parsed_list) == 1:
+        amount, description = parsed_list[0]
+        dup_status = dup_middleware.check(user_id, amount, description)
+        if dup_status != "new":
+            if dup_status == "silent":
+                await state.clear()
+                return
+            if description == phrases.FALLBACK_DESC:
+                cat = None
+            else:
+                try:
+                    cat, _ = await detect_category_db(description, user_id, amount)
+                except Exception as e:
+                    logging.error("Category detection failed", exc_info=e)
+                    cat = None
+            cat_id = cat.id if cat else None
+            emoji, cat_name = get_category_display(cat.name) if cat else phrases.DEFAULT_CATEGORY
+            dup_middleware.set_pending(
+                user_id, amount, description, cat_id, description, emoji, cat_name
+            )
+            await _cleanup_keyboard(message.bot, message.chat.id)
+            msg = await message.answer(
+                phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
+                reply_markup=get_duplicate_keyboard(),
+            )
+            _track_keyboard(message.chat.id, msg.message_id)
+            return
+
+    sent_dup, all_silent, lines, total_spare, first_id = await _save_expenses_from_parsed_list(
+        user_id, parsed_list, message
+    )
+    if sent_dup:
+        return
 
     if all_silent:
         return
@@ -1313,6 +1327,7 @@ async def new_category_prompt(callback: CallbackQuery, state: FSMContext):
             ]
         ),
     )
+    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.message(CustomCategory.waiting_for_name)
@@ -1672,6 +1687,7 @@ async def fresh_start_save_balance(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "menu_settings")
 async def menu_settings(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
     await callback.answer()
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
 
@@ -2126,86 +2142,24 @@ async def handle_text(message: Message, state: FSMContext):
         return
 
     parsed_list = parse_multi_expense_text(text)
-    if parsed_list:
-        await get_or_create_user(
-            telegram_id=message.from_user.id,
-            first_name=message.from_user.first_name,
-            username=message.from_user.username,
-        )
+    if not parsed_list:
+        return
 
-        user_id = message.from_user.id
-        rounding_mode = await get_rounding_mode(user_id)
-        lines = []
-        total_spare = 0.0
-        first_id = None
-        all_silent = True
+    await get_or_create_user(
+        telegram_id=message.from_user.id,
+        first_name=message.from_user.first_name,
+        username=message.from_user.username,
+    )
 
-        for amount, description in parsed_list:
-            if not description:
-                description = phrases.FALLBACK_DESC
+    user_id = message.from_user.id
+    sent_dup, all_silent, lines, total_spare, first_id = await _save_expenses_from_parsed_list(
+        user_id, parsed_list, message
+    )
+    if sent_dup:
+        return
 
-            effective = amount
-            if rounding_mode > 0:
-                effective, spare = compute_rounding(amount, rounding_mode)
-                total_spare += spare
-
-            if description == phrases.FALLBACK_DESC:
-                cat = None
-            else:
-                try:
-                    cat, matched = await detect_category_db(description, user_id, amount)
-                except Exception as e:
-                    logging.error("Category detection failed", exc_info=e)
-                    cat = None
-
-            cat_id = cat.id if cat else None
-            emoji, cat_name = get_category_display(cat.name) if cat else phrases.DEFAULT_CATEGORY
-
-            dup_status = dup_middleware.check(user_id, amount, description)
-            if dup_status == "silent":
-                continue
-            if dup_status == "warn":
-                dup_middleware.set_pending(
-                    user_id, effective, description, cat_id, description, emoji, cat_name
-                )
-                await _cleanup_keyboard(message.bot, message.chat.id)
-                msg = await message.answer(
-                    phrases.DUP_WARNING.format(amount=f"{effective:,.0f}", desc=safe(description)),
-                    reply_markup=get_duplicate_keyboard(),
-                )
-                _track_keyboard(message.chat.id, msg.message_id)
-                return
-            all_silent = False
-
-            try:
-                async with async_session_maker() as session:
-                    expense = Expense(
-                        telegram_id=user_id,
-                        amount=effective,
-                        description=description or cat_name,
-                        category_id=cat_id,
-                        date=get_msk_now(),
-                    )
-                    session.add(expense)
-                    await session.commit()
-                    if first_id is None:
-                        first_id = expense.id
-            except Exception as e:
-                logging.error("Expense insert failed (free-form)", exc_info=e)
-                cause = getattr(e, "__cause__", None)
-                if cause:
-                    logging.error("Caused by: %s: %s", type(cause).__name__, cause)
-                continue
-
-            dup_middleware.record(user_id, message.message_id, effective, description, expense.id)
-            lines.append(
-                phrases.EXPENSE_SAVED_LINE.format(
-                    amount=f"{effective:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
-                )
-            )
-
-        if all_silent:
-            return
+    if all_silent:
+        return
 
     if not lines:
         await message.answer(phrases.ERR_EXPENSE_SAVE)
