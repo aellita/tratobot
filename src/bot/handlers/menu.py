@@ -33,6 +33,7 @@ from ...services.categorization import (
 from ...services.expense_service import (
     compute_rounding,
     get_rounding_mode,
+    get_today_expenses_grouped,
     get_today_expenses_sum,
     parse_multi_expense_text,
 )
@@ -331,10 +332,15 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if spent_today > dl_base:
         spent_line += " ⚠️"
 
+    expense_lines = await get_today_expenses_grouped(tg_id)
+    expenses_block = ""
+    if expense_lines:
+        expenses_block = "\n" + "\n".join(expense_lines)
+
     text = (
         f"<b>БАЛАНС</b> · {zone_emoji} {zone_label}\n\n"
         f"<b>Сегодня</b>\n"
-        f"{today_line} · {spent_line}\n\n"
+        f"{today_line} · {spent_line}{expenses_block}\n\n"
         f"<b>Период (до {period_end_str} · {days_left} дн.)</b>\n"
         f"Остаток {int(remaining_period):,} ₽ · Лимит {int(dl_base):,} ₽/день\n\n"
         f"<b>Резервы под охраной</b>\n"
