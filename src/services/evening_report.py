@@ -96,10 +96,14 @@ async def send_evening_teaser(bot: Bot, storage: BaseStorage):
             if not budget or budget.daily_limit <= 0:
                 continue
 
-            msg = await bot.send_message(tg_id, INITIAL_TEXT, reply_markup=EVENING_KB)
-
             storage_key = StorageKey(bot_id=bot.id, chat_id=tg_id, user_id=tg_id)
             state = FSMContext(storage=storage, key=storage_key)
+            current_state = await state.get_state()
+            if current_state is not None:
+                logger.info(f"Пользователь {tg_id} занят в {current_state}, тизер пропущен")
+                continue
+
+            msg = await bot.send_message(tg_id, INITIAL_TEXT, reply_markup=EVENING_KB)
             await state.set_state(EveningState.filling)
             await state.update_data(container_id=msg.message_id, session_expenses=[])
 
@@ -123,19 +127,28 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
             storage_key = StorageKey(bot_id=bot.id, chat_id=tg_id, user_id=tg_id)
             state = FSMContext(storage=storage, key=storage_key)
             current_state = await state.get_state()
-            if current_state != EveningState.filling.state:
+
+            if current_state is None:
                 continue
 
-            data = await state.get_data()
-            container_id = data.get("container_id")
+            is_evening_state = current_state == EveningState.filling.state
 
-            if container_id:
-                try:
-                    await bot.edit_message_reply_markup(
-                        chat_id=tg_id, message_id=container_id, reply_markup=None
-                    )
-                except Exception:
-                    pass
+            if is_evening_state:
+                data = await state.get_data()
+                container_id = data.get("container_id")
+                if container_id:
+                    try:
+                        await bot.edit_message_reply_markup(
+                            chat_id=tg_id, message_id=container_id, reply_markup=None
+                        )
+                    except Exception:
+                        pass
+            else:
+                await state.clear()
+                await bot.send_message(
+                    tg_id,
+                    phrases.EVENING_TIMEOUT,
+                )
 
             total = await get_today_expenses_sum(tg_id)
 

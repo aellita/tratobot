@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 from aiogram import F, Router
@@ -12,6 +11,7 @@ from src.utils.helpers import get_msk_now
 from ...db.database import async_session_maker
 from ...db.models.models import Expense
 from ...services.budget_service import get_active_budget
+from ...services.categorization import detect_category_db, get_category_display
 from ...services.evening_report import (
     EVENING_KB,
     EveningState,
@@ -39,29 +39,37 @@ async def handle_evening_expense(message: Message, state: FSMContext):
     await message.delete()
 
     if not message.text or not message.text.strip():
-        temp = await message.answer(phrases.ERR_EMPTY_EXPENSE)
-        await asyncio.sleep(3)
-        await temp.delete()
+        await message.answer(phrases.ERR_EMPTY_EXPENSE)
         return
 
     parsed = parse_expense_text(message.text)
     if not parsed:
-        temp = await message.answer(phrases.ERR_PARSE_EXPENSE)
-        await asyncio.sleep(3)
-        await temp.delete()
+        await message.answer(phrases.ERR_PARSE_EXPENSE)
         return
 
     amount, description = parsed
+
+    cat, _ = await detect_category_db(description, user_id, amount)
+    cat_id = cat.id if cat else None
+    emoji = ""
+    if cat:
+        emoji_char, _ = get_category_display(cat.name)
+        emoji = f"{emoji_char} "
 
     async with async_session_maker() as session:
         expense = Expense(
             telegram_id=user_id,
             amount=amount,
             description=description,
+            category_id=cat_id,
             date=get_msk_now(),
         )
         session.add(expense)
         await session.commit()
+
+    await message.answer(
+        phrases.EVENING_SAVED.format(emoji=emoji, amount=f"{amount:,.0f}", desc=safe(description))
+    )
 
     data = await state.get_data()
     container_id = data.get("container_id")

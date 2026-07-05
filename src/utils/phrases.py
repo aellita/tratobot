@@ -302,6 +302,12 @@ EVENING_CONTAINER = (
 
 EVENING_LINE_DESC = "  💰 {amount}₽ — {desc}"
 EVENING_LINE = "  💰 {amount}₽"
+EVENING_SAVED = "✅ {emoji}{amount}₽ — {desc} записано!"
+EVENING_TIMEOUT = (
+    "⏱ Время отчёта истекло. Вы не завершили настройку, "
+    "мы сбросили её, чтобы зафиксировать итоги дня.\n\n"
+    "Вот ваши цифры за сегодня:"
+)
 
 # ── Morning report ─────────────────────────────────────────
 MORNING_GREETING = "☀️ Доброе утро, бро!\n\n"

@@ -1,7 +1,7 @@
 # UX4 Audit — Баги сообщений и навигации
 
 > Создан: 2026-07-05 в ходе UX4-аудита всех переходов.
-> Статус: 7/8 закрыто (2026-07-05).
+> Статус: 8/8 закрыто (2026-07-05).
 > Приоритет: по порядку (сверху — самый критичный).
 
 ---
@@ -80,13 +80,17 @@
 
 ---
 
-## Bug #7: Вечерний flow — молчаливое удаление + бесконтрольный FSM (MEDIUM)
+## Bug #7: Вечерний flow — молчаливое удаление + бесконтрольный FSM (MEDIUM) ✅ 2026-07-05
 
 **7а. Молчаливое удаление сообщений пользователя:**
 `handle_evening_expense` делает `message.delete()` для каждого сообщения пользователя. Единственный фидбек — редактирование контейнера. Пользователь может не заметить.
 
 **7б. FSM создаётся через StorageKey напрямую:**
 `send_evening_teaser` создаёт `FSMContext` через `StorageKey(bot_id=bot.id, chat_id=tg_id, user_id=tg_id)`, без проверки, не находится ли пользователь уже в другом FSM-состоянии.
+
+**Решение:**
+- **7а:** `message.delete()` → `message.answer("✅ {emoji}{amount}₽ — {desc} записано!")` (auto-clean middleware-ом). Ошибки — `message.answer()` без таймера. В трату добавлена категория (emoji).
+- **7б (Phase 1):** `send_evening_teaser` — проверка `current_state is not None` → skip. `send_auto_close_reports` — EveningState → normal; other FSM → force clear + timeout message.
 
 **Решение:** проверять текущее состояние перед установкой вечернего FSM.
 

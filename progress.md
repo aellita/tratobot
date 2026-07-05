@@ -171,3 +171,23 @@
 **Файлы:** `src/bot/handlers/menu.py`, `src/utils/phrases.py`
 **bugs_ux4.md:** Bug #5 закрыт. Статус: 7/8 закрыто.
 **329 тестов проходят, 0 новых ruff-ошибок.**
+
+---
+
+### 2026-07-05 — Bug #7 fix: вечерний flow — фидбек + emoji + FSM-проверка
+
+**7а — Фидбек пользователю (evening_flow.py):**
+- После ввода траты: `detect_category_db()` → `message.answer("✅ {emoji}{amount}₽ — {desc} записано!")`, auto-clean middleware-ом
+- Ошибки (пустой/нераспарсенный ввод): `message.answer()` без `asyncio.sleep/temp.delete` — middleware чистит на следующем шаге
+- Убран `import asyncio`
+- Сохранение расходов с `category_id` (раньше было без категории)
+
+**7б — FSM-проверка (evening_report.py):**
+- `send_evening_teaser` (22:00): проверка `current_state is not None` → если пользователь в любом другом FSM — `continue` (тихо пропускаем)
+- `send_auto_close_reports` (23:30):
+  - `EveningState.filling` → обычный авто-отчёт
+  - Любой другой FSM → `state.clear()` + `phrases.EVENING_TIMEOUT` + отчёт
+
+**Файлы:** `src/bot/handlers/evening_flow.py`, `src/services/evening_report.py`, `src/utils/phrases.py`
+**bugs_ux4.md:** Bug #7 закрыт. Статус: 8/8 закрыто.
+
