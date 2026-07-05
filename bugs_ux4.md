@@ -1,7 +1,7 @@
 # UX4 Audit — Баги сообщений и навигации
 
 > Создан: 2026-07-05 в ходе UX4-аудита всех переходов.
-> Статус: 6/8 закрыто (2026-07-05).
+> Статус: 7/8 закрыто (2026-07-05).
 > Приоритет: по порядку (сверху — самый критичный).
 
 ---
@@ -55,7 +55,7 @@
 
 ---
 
-## Bug #5: cancel удаляет сообщение для reset-состояний (MEDIUM)
+## Bug #5: cancel удаляет сообщение для reset-состояний (MEDIUM) ✅ 2026-07-05
 
 `cancel` handler:
 - Для `CriticalReset` / `FreshStart` → `callback.message.delete()` (сообщение **удаляется**)
@@ -65,7 +65,7 @@
 1. Несогласованный UX: в одном месте пропадает сообщение, в другом — остаётся
 2. `_last_keyboard` всё ещё хранит ID удалённого сообщения → следующий `_cleanup_keyboard` пытается edit удалённого → `TelegramBadRequest`
 
-**Решение:** для reset-состояний тоже использовать `edit_text()`.
+**Решение:** заменён `delete()` на `edit_text()` с контекстным текстом (CANCEL_CRITICAL_RESET / CANCEL_FRESH_START) + ReplyKeyboard под SIMPLE_CHECK. `_last_keyboard` теперь обновляется через middleware — TelegramBadRequest устранён.
 
 ---
 

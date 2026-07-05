@@ -1858,7 +1858,17 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
     if current_state and (
         current_state.startswith("CriticalReset.") or current_state.startswith("FreshStart.")
     ):
-        await callback.message.delete()
+        cancel_text = (
+            phrases.CANCEL_CRITICAL_RESET
+            if current_state.startswith("CriticalReset.")
+            else phrases.CANCEL_FRESH_START
+        )
+        await callback.message.edit_text(text=cancel_text)
+        if settings.EXPENSE_SIMPLE_CHECK:
+            await callback.message.answer(
+                text="\u200b",
+                reply_markup=get_main_reply_keyboard(),
+            )
         return
 
     user_name = callback.from_user.first_name or phrases.FALLBACK_NAME

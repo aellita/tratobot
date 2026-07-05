@@ -29,621 +29,84 @@
 
 ## Записи
 
-### 2026-06-03 — Security audit + создание PRD/RULES/progress/README
-
-- **Решение:** Созданы PRD.md, RULES.md, progress.md, обновлён README.md с Implementation Status
-- **Решение:** Стиль бота — ироничный напарник, «бро» разрешён
-- **Решение:** SQLAlchemy оставлена как ORM (не мигрировать на raw SQL)
-- **Решение:** Railway как основной хостинг ($5/мес), VPS не нужен
-- **🧠 Аудит безопасности:** найдено 19 уязвимостей (3 High, 9 Medium, 7 Low). Все исправлены.
-
-### 2026-06-03 — Security fix session (Block 1-3)
-
-- **Сделано:** Все 19 findings закрыты
-  - H1: `.env` удалён
-  - H2: `parse_amount()` — валидация inf/nan/negative/1e12
-  - H3: Миграции — allow-list + params
-  - M1: Проверка владельца категории
-  - M2: Callback data — try/except в 10 местах
-  - M3: RateLimitMiddleware (0.7s, burst 5/3s)
-  - M4: `safe(html.escape())` — 4 файла
-  - M5: ✅ покрыто H2
-  - M6: Автовыход из FSM после 3 ошибок
-  - M7: Финансы убраны из логов
-  - M8: bare `except:` → `except (ValueError, TypeError)`
-  - M9: Лимиты длины (description 500, wishlist_name 255)
-  - L1: extra="allow" → ✅ исправлено (config.py)
-  - L2: _last_keyboard растёт бесконечно — нужен TTLCache или document
-  - L3: setattr без allow-list → ✅ исправлено (budget_service.py)
-  - L4: datetime.utcnow() deprecated — заменить на datetime.now(timezone.utc) во всех файлах (models.py, menu.py, expense_service.py, budget_service.py, goal_service.py, evening_report.py, morning_report.py)
-  - L5: unused import func → ✅ исправлено (keyboards.py)
-  - L6: seed_user_categories вызывается при каждой трате → кеширование или флаг
-  - L7: parse_expense_text суммирует все числа ("500 кофе 300 пирожок" = 800) — брать первое число
+### 2026-06-03 — Security audit + foundation
+- **Решение:** Созданы PRD/RULES/progress/README. Стиль — ироничный напарник. SQLAlchemy оставлена. Railway как хостинг.
+- **Аудит безопасности:** 19 уязвимостей (3H, 9M, 7L) — все закрыты. Ключевое: `.env` удалён, `parse_amount()` с валидацией, миграции с allow-list, RateLimitMiddleware, `safe(html.escape())`, автовыход из FSM после 3 ошибок, лимиты длины (500/255).
 - **Создано:** `src/utils/helpers.py`, `src/bot/middleware.py`
-- **Открыто:** L4 (utcnow), L2 (_last_keyboard), L6 (seed_user_categories), L7 (parse_expense_text)
+- **🧠 Важно:** `--unsafe-fixes` для E712 нельзя применять к коду с SQLAlchemy (ломает `is_deleted == False`).
 
-### План ремедиации (приоритеты)
+### 2026-06-03/04 — Тесты (Очереди 1-3)
+- 133 теста чистых функций (Очередь 1) + 59 с моками БД (Очередь 2) + 77 FSM/integration (Очередь 3). Итого ~269 тестов.
+- BigTech Standard закреплён в RULES.md (9 категорий сценариев).
+- `conftest.py` с in-memory SQLite, фикстурами, monkeypatch `async_session_maker`.
+- Пре-коммит + CI (GitHub Actions) — ruff (lint+format), mypy, pytest.
 
-#### Блок 1 (текущая сессия)
-- [x] H1 — `.env` удалён, `.env.example` создан. Credentials только в Railway Variables
-- [x] H2 — `float()` → `parse_amount()` с `math.isfinite()` + `0 < amount < 1e12` (12 мест в menu.py + history.py)
-- [x] M4 — HTML injection → `safe(html.escape())` обёртка для description, wishlist_name (history.py, menu.py, evening_flow.py, evening_report.py)
-- [x] M8 — Барe `except:` → `except (ValueError, TypeError)` (menu.py + expense_service.py)
+### 2026-06-04 — Queue 4: phrases.py + datetime bugfix
+- Все строки вынесены в `src/utils/phrases.py` (~180 замен в 8 файлах).
+- Production: PostgreSQL не принимал offset-aware datetime → naive UTC (`_utcnow()`).
 
-#### Блок 2 (следующая сессия)
-- [x] M1 — Проверка владельца категории при смене (menu.py:1049-1053)
-- [x] M5 — ✅ Уже исправлено через H2 (parse_amount rejects negative)
-- [x] M2 — Валидация callback data (history.py 5 мест + menu.py: change_cat, set_cat, new_cat, fix_overdraft)
-- [x] M8 — ✅ Уже исправлено в Блоке 1
+### 2026-06-09 — Queue 5: Bugfixes + статус-редизайн
+- Хотелка читала `wishlist_target` вместо `Wishlist.current_amount` — исправлено.
+- menu_daily не находил бюджет при переходе месяца — переведён на `get_active_budget()`.
+- Статус → минималистичный формат. Кнопка «📊 Статус» → «💰 Дневной лимит: X₽».
+- E501: 135 → 27.
 
-#### Блок 3 (ближайшие сессии)
-- [x] M3 — Rate limiting middleware (0.7s между запросами, макс 5 за 3с)
-- [x] M6 — Автовыход из FSM после 3 неудачных попыток (process_expense, process_period_start, save_edit_expense)
-- [x] H3 — Миграции: валидация идентификаторов через allow-list + параметризованные запросы в information_schema
-- [x] M7 — Убраны финданные из логов (morning_report.py — pct_pred/pct_sim/spent)
-- [x] M9 — Лимиты длины: clean_description → 500, wishlist_name → 255
-- [ ] L1-L7 — Низкоприоритетные
+### 2026-06-04 — Feature ideas из RTF
+- Добавлены в PRD.md: стиль «Бро-Дуо», AI-интеграция, геймификация, маскот, режим путешествия, общие бюджеты и др.
 
-#### Низкоприоритетные (L)
-- [x] L1 — `extra="allow"` → убрано из config.py
-- [x] L2 — `_last_keyboard` утечка памяти (menu.py:79) → TTLCache (maxsize=1024, ttl=3600)
-- [x] L3 — `setattr` без allow-list → ALLOWED_FIELDS добавлен
-- [x] L4 — `datetime.utcnow()` → уже отсутствует в коде (использовать `datetime.now(timezone.utc)`)
-- [x] L5 — unused import `func` → удалён из keyboards.py
-- [x] L6 — `seed_user_categories` → уже кешируется через `_seeded_users` set
-- [x] L7 — `parse_expense_text` → уже берёт первое число (break после первого amount > 0)
+### 2026-06-10 — Queue 6: Контекстный скоринг омонимов
+- Stage 1 собирает все совпадения → AVG(amount) последних 10 трат → min(|amount - avg|).
+- Автокоррект описаний через difflib (cutoff 0.85) до записи в БД.
+- 22 новых теста. Итого 292 теста.
 
-### 2026-06-03 — L-task cleanup + tests prep
-- **Сделано:** Все L-задачи закрыты
-- **Сделано:** L2 — `_last_keyboard` заменён на `TTLCache` из `cachetools` (добавлен в requirements.txt)
-- **Проверено:** L4/L6/L7 уже были исправлены в коде, обновлён статус в progress.md
-
-### 2026-06-03 — Тесты: Очередь 1 (чистые функции) + BigTech Standard
-
-**Bug-трекинг завершён.** Все security-фиксы (19/19) и L-задачи (7/7) закрыты.
-
-**Сделано:**
-- `pytest` + `pytest-asyncio` в requirements.txt
-- 133 теста в 3 файлах (Очередь 1)
-- BigTech Standard закреплён в RULES.md раздел 6 (9 категорий сценариев)
-- Каждый модуль покрыт: happy path, empty/null, boundary, overflow, special chars, locale, type/cast, negative/edge
-
-**Файлы:**
-- `tests/test_expense_parser.py` — `parse_expense_text`, `parse_multi_expense_text`, `clean_description`
-- `tests/test_helpers.py` — `parse_amount`, `safe`, `parse_callback`, `extract_callback_id`
-- `tests/test_categorization.py` — `clean_and_normalize`, `get_category_display`, `_parse_keywords`, `_dump_keywords`
-
----
-
-### 2026-06-04 — Тесты: Очередь 2 (с моками БД)
-
-**Сделано:**
-- `tests/conftest.py` — in-memory SQLite engine, `async_session_maker` monkeypatch, фикстуры (test_user, test_budget, test_goal, test_expense, test_settings)
-- `tests/test_budget_service.py` — 21 тест: `get_active_budget` (7), `reconcile_budget_with_reality` (7), `update_budget_field` (7)
-- `tests/test_goal_service.py` — 18 тестов: `add_spare_change_to_goal` (8), `deduct_from_goal` (10)
-- `tests/test_expense_service_db.py` — 20 тестов: `try_apply_round_up` (10), `get_current_period_expenses_sum` (10)
-- Итого: 59 новых тестов (всего 192)
-- Продакшен-код не менялся — багов не найдено
-
-**Отклонено:** `get_today_expenses_sum` — не вошёл в запрос, сделан только по ТЗ
-
----
-
-### 2026-06-04 — Queue 3: FSM/integration tests + ruff fix + pre-commit + CI
-
-**Сделано:**
-- `tests/test_onboarding_fsm.py` — 33 теста: `_parse_wishlist` (9), `process_income` (4), `process_period_start` (5), `process_mandatory` (3), `process_black_day` (3), `process_wishlist_name` (2), `skip_step` (5), `handle_rounding_choice` (3), `handle_period_start_choice` (4)
-- `tests/test_critical_reset.py` — 15 тестов: `trigger_critical_reset` (1), `save_real_balance` green/yellow/red zone (5), `fresh_start_save_mandatory` (3), `fresh_start_save_black_day` (3), `fresh_start_save_balance` (3)
-- `tests/test_history_edit.py` — 10 тестов: `save_edit_expense` (7), `start_edit_expense` (3)
-- `tests/test_expense_service_db.py` — расширен `soft_delete_expense` (4), `restore_expense` (4), `update_expense_amount` (5) — 13 новых тестов
-- Итого: 77 новых тестов (всего 269)
-- `conftest.py` — добавлен `keyboards.py` в `_patch_session_maker` (хендлеры вызывают `get_main_menu_keyboard`, которая уходила в реальную БД)
-
-**Ruff auto-fix incident:**
-- Применила `ruff check --fix --unsafe-fixes`, который заменил `Expense.is_deleted == False` на `not Expense.is_deleted` в SQLAlchemy WHERE-выражениях. В SQLAlchemy `not` над Column выбрасывает `ValueError`.
-- **Решение:** откатила unsafe-изменения в 4 файлах (expense_service.py, goal_service.py, menu.py, history.py), применила только безопасные фиксы (import sorting, f-string, UP017, whitespace).
-- **Вывод:** `--unsafe-fixes` для E712 нельзя применять к коду с SQLAlchemy.
-
-**pre-commit + CI:**
-- `.pre-commit-config.yaml` — ruff (lint+format), mypy, pytest, базовые хуки
-- `.github/workflows/test.yml` — GitHub Actions (ruff check + format, mypy, pytest)
-- `pyproject.toml` — конфиг ruff (line-length=100), mypy
-- `requirements-dev.txt` — ruff, mypy, pre-commit
-
-**Предстоит:**
-- `phrases.py` — вынос строк из хендлеров
-- Пуш на GitHub (ожидает команды пользователя)
-
----
-
-### 2026-06-04 — Queue 4: phrases.py + production datetime bugfix
-
-**Production bugfix (datetime timezone):**
-- Все `DateTime` колонки (PostgreSQL `TIMESTAMP WITHOUT TIME ZONE`) использовали offset-aware `datetime.now(UTC)`, что вызывало `asyncpg.exceptions.DataError` при вставке.
-- **Фикс:** добавила `_utcnow()` в `models.py` (возвращает naive UTC), заменила все 5 column defaults и 3 явных `date=datetime.now(UTC)` в хендлерах на `.replace(tzinfo=None)`.
-- Запушила в main — Railway авто-деплоит.
-
-**phrases.py — вынос строк:**
-- Создан `src/utils/phrases.py` — единый модуль со всеми пользовательскими строками:
-  - ~60 button labels (`BTN_*`)
-  - ~25 error messages (`ERR_*`)
-  - ~50 info/success/prompt messages
-  - ~20 evening/morning report messages
-  - GREETINGS, DEFAULT_CATEGORIES, MENU_KEYWORDS, fallback values
-- Заменены inline-строки на `phrases.*` в 8 файлах:
-  - `menu.py` — 500 строк изменено (~180 замен)
-  - `history.py` — 27 замен
-  - `evening_flow.py` — 6 замен
-  - `keyboards.py` — 23 замены
-  - `morning_report.py` — базовые зоны, приветствие, yesterday_line
-  - `evening_report.py` — все варианты отчётов (zero/green/overdraft/autoclose)
-  - `expense_service.py` — round-up сообщение
-  - `categorization.py` — GREETINGS + DEFAULT_CATEGORIES
-- **Не извлечены** (требуют рефакторинга random.choice): статусные footer'ы (11 групп), menu_daily блок, fresh-start step-тексты, YELLOW_SIM_*/RED_* зоны в morning_report
-- **E501:** 117→144→135 (добавила `per-file-ignores` для тестов)
-- **ruff format:** 20 файлов отформатировано для CI compliance
-- **Все 269 тестов проходят**, ruff — только известные E501 (135) + E712 (20, безопасные для SQLAlchemy)
-
-### 2026-06-09 — Queue 5: Bugfixes + статус-редизайн + удаление menu_daily
-
-**Production bugs:**
-- **Хотелка показывала 0₽**: статус читал `budget.wishlist_target` (цель) вместо `Wishlist.current_amount`. Исправлено — вызывает `get_goal_current_amount()`.
-- **menu_daily писал «нет бюджета»**: искал `WHERE month = текущий`, не находил при периоде через месяц. Переведён на `get_active_budget()` вместе с `_get_daily_limit_text` в keyboards.py. Сама кнопка `menu_daily` и её хендлер удалены.
-
-**UX:**
-- Статус переписан в минималистичный формат:
-  ```
-  БАЛАНС · 🟢 В лимите
-
-  Сегодня
-  Свободно 3 507 ₽ · Потрачено 826 ₽
-
-  Период (до 20-го · 14 дн.)
-  Остаток 49 112 ₽ · Лимит 4 333 ₽/день
-
-  Резервы под охраной
-  Обязательные 40 000 · Кубышка 10 000 · Хотелка 636
-  ```
-- Кнопка «📊 Статус» переименована в «💰 Дневной лимит: X₽» (сумма динамическая, минимум 0).
-- Весёлые зональные фразы возвращены, приходят в том же сообщении после пустой строки.
-- **E501:** 135 → 27 (удалены длинные footer'ы + menu_daily хендлер).
-- **269 тестов проходят**, ruff — только известные E712 (20). Запушено в main.
-
----
-
-## Планы на следующие сессии (приоритет)
-
-### Блок 0: Баги (ASAP)
-
-1. **Б1: Категории не отображаются в пикере смены категории** — починить выбор категории при нажатии «✏️ Сменить категорию». Сортировать: старый порядок неизменен, новые категории — в конец.
-2. **Б2: Дубликаты трат при обрывах соединения** — при задержке ответа Telegram трата создаётся повторно, сообщение пользователя зависает. Нужен recovery: детект дубликатов (amount+description+timestamp), повторная отправка неудалённого сообщения.
-3. **Б3: Округление не вычитает разницу из лимита дня** — при трате 1₽ и rounding_mode=10 лимит дня уменьшается на 1₽ вместо 10₽. Разница 9₽ «улетает» в хотелку, но не списывается с дневного бюджета.
-4. **Б4: Фраза про хотелку при перерасходе вводит в заблуждение** — «Хотелка отодвинулась на N дней» непонятна: хотелка не резерв, а просто число, из неё ничего не вычитается. Нужно либо переформулировать, либо пересмотреть логику.
-
-### Блок 1: UX
-
-5. **UX1: Сообщение «Вернулись, Aelita!» при возврате в меню** — избыточно. Убрать или заменить на нейтральное.
-6. **UX2: Вечерний отчёт удаляет итог вместо teaser'а** — удалять только сообщение «👁 День подошел к концу...», итоговый отчёт оставлять в чате. Кнопку под отчётом удалять.
-7. **UX3: В вечернем отчёте нет списка трат за день** — добавить перечень всех расходов за день в тело отчёта.
-8. **UX4: Аудит переходов между сообщениями** — пройтись по всей цепочке, что удаляется/остаётся/перезаписывается, устранить путаницу.
-
-### Блок 2: Фичи
-
-9. **Проверить production** — убедиться, что Railway авто-деплой подхватил все фиксы
-10. **Добить E501** — 28 ошибок
-11. **Математические выражения в тратах** — поддержка +, -, *, / в сумме («500+300 кофе», «250*2 билет»)
-12. **Гибкий дневной лимит** — разные лимиты на будни и выходные (вручную или авто-предложение после 1-2 недель)
-13. **Кастомные эмодзи категорий** — пользователь меняет иконку категории
-14. **Статистика и мотивация** — кнопка: streak дней, сколько сэкономлено, прогноз к концу периода
-15. **Умный парсинг фраз** — токенизация, приоритет существительных
-16. **Покрыть перерасход из будущего дня** — не пересчёт всего лимита, а вычет разницы из следующего дня (с подтверждением)
-17. **Фиксированный дневной лимит** — задать ₽/день без привязки к доходу за месяц
-18. **Ночные траты (финтех-сутки)** — 00:00-04:59 → предыдущий день, граница отчёта 05:00
-19. **Режим «только расходы»** — без дохода, просто дневной лимит
-20. **Динамическая таймзона** — WebApp-онбординг, поддержка путешествий
-21. **Авто-бэкап PostgreSQL** — ежедневный pg_dump в Telegram или S3
-22. **AI-широкая интеграция:**
-    - ASR-распознавание голосовых сообщений
-    - Распознавание чеков по фото (OCR + API ФНС + GPT-4o Vision)
-    - Естественно-языковые запросы к истории
-    - AI-аналитика (аномалии, инсайты, паттерны)
-    - AI-генерация сводок (умные итоги месяца)
-    - AI-ассистент (без прямого диалога с LLM)
-23. **Режим путешествия** — мультивалютность, конвертация
-24. **Общие бюджеты** — бюджет с партнёром/семьёй
-25. **Геймификация и психология:**
-    - Стрики, ачивки, динамический лимит
-    - «Огоньки» / уровни за регулярность
-    - Челленджи от бота (турбо-экономия, неделя без кофе)
-    - «Фонд факапов» — отдельная заначка на внезапные расходы
-    - Умная кубышка — автооткладывание при остатке выше порога
-26. **Маскот** — персонаж (лис/кот/пингвин/хамелеон), стикеры
-27. **Аналитика выходные vs будни** — паттерны трат
-28. **Рекламная интеграция (Shorts)** — для будущей публичной версии
-
-### 2026-06-04 — Feature ideas из RTF добавлены в документацию
-
-- **Сделано:** Прочитан и проанализирован `описание идей бота.rtfd/TXT.rtf`
-- **Добавлено в PRD.md (раздел 8.2 + 9):**
-  - Описан стиль «Бро-Дуо» — Duolingo-like персонаж: дерзкий, поддерживающий, с геймификацией
-  - AI-широкая интеграция (ASR + OCR чеков + ФНС + GPT-4o Vision + NL-запросы + аналитика)
-  - Режим путешествия с мультивалютностью
-  - Общие бюджеты с партнёром
-  - Геймификация (стрики, ачивки, динамический лимит, челленджи)
-  - Маскот (лис/кот/пингвин/хамелеон)
-  - «Фонд факапов», умная кубышка, аналитика выходные vs будни
-- **Добавлено в README.md:**
-  - Описание трёхуровневой системы бюджета с формулой `daily_limit = (total_income - mandatory_payments - black_day_fund) / days_remaining`
-  - Расширенный список Remaining со всеми feature ideas
-- **Добавлено в progress.md:**
-  - Приоритезированный план на 9 пунктов
-- **Решение:** Все идеи из RTF добавлены в документы; геймификация и маскот вписаны в характер бота (Duolingo-like стиль уже был, теперь закреплён)
-
----
-
-### 2026-06-10 — ✅ Queue 6: Контекстный скоринг омонимов
-
-**Проблема:** Слово «самокат» — омоним (транспорт vs доставка). Stage 1 возвращал первое совпадение без контекста.
-
-**Решение — дистанционный скоринг по среднему чеку:**
-- Stage 1 теперь собирает ВСЕ совпадения ключевого слова
-- Если ровно 1 — быстрый путь (как сейчас)
-- Если >1 — для каждой категории считаем `avg = AVG(amount)` последних 10 трат с этим ключевым словом (WHERE description CONTAINS keyword AND is_deleted=False)
-- Выбираем категорию с min(|amount_текущей_траты - avg|)
-- Если у категории нет истории (avg=NULL) — не участвует в сравнении
-- Если все без истории или ничья — по порядку списка (как сейчас)
-
-**Автокоррект описания (новый этап 0):**
-- После `clean_description()` каждое слово прогоняется через `difflib.get_close_matches(cutoff=0.85)` против всех keywords пользователя
-- Опечатки («самокад» → «самокат») исправляются молча, в памяти, ДО записи в БД
-- В БД сохраняется чистое слово — корректно попадает в расчёт среднего
-
-**Что не меняется:**
-- `add_keyword_to_category` остаётся — создаёт омонимы при ручной смене категории
-- История трат не переписывается
-- Модели БД не меняются (AVG считается live из expenses)
-- SQL AVG подхватывает удаление (is_deleted) и редактирование суммы автоматически
-
-**Файлы изменений:**
-- `categorization.py` — новые функции: `_autocorrect_description`, `_get_keyword_avg`, `_score_by_keyword_avg`. Stage 1 модифицирован
-- `menu.py` — хендлеры передают amount в detect_category_db, используют corrected_description для сохранения
-- `tests/test_categorization.py` — тесты (9 категорий BigTech Standard)
-
-**Done:** `categorization.py` — 3 новые функции + Stage 1 модифицирован. `menu.py` — amount передан в detect_category_db. 22 новых теста (9 BigTech категорий). 292 тестов проходят, ruff — 50 pre-existing, 0 новых.
-
-### 2026-06-11 — Queue 7: Управление категориями (Б1 + рефакторинг + CRUD)
-
-**Б1 (баг — категории пустые в пикере):**
-- Причина: `seed_user_categories()` при повторном вызове возвращала `[]` из-за кеша `_seeded_users`
-- Фикс: вызов `get_user_categories()` вместо `seed_user_categories()` в `change_category`
-
-**Рефакторинг сидирования:**
-- Сидирование 11 дефолтных категорий перенесено в `/start` (новый пользователь) и `reset_budget`
-- Убрано из `detect_category_db` и `change_category`
-- `get_user_categories()` теперь фильтрует `is_archived == False`
-- Добавлена `get_all_categories()` для менеджмента (все, включая архивные)
-- Автокатегоризация не видит архивные категории
-
-**Сортировка категорий:**
-- `.order_by(Category.id)` в `get_user_categories()` и `get_all_categories()`
-- Дефолтные категории — всегда в одном порядке, новые — в конце
-
-**Проверка дубликатов при создании/переименовании:**
-- Точное совпадение после `.strip().capitalize()`
-- Ошибка + возврат в пикер / отмена rename
-
-**CRUD категорий (новый модуль):**
-- `Category.is_archived` (Boolean) — мягкое удаление
-- Миграция БД (SQLite + PostgreSQL)
-- `src/services/category_service.py` — rename, archive/unarchive, move+delete (expenses → Прочее), hard delete (expenses DELETEd)
-- `src/bot/handlers/categories.py` — пагинированный список (5/стр, активные + архивные), детали, rename (FSM), archive/unarchive, delete (4 опции + двухшаговое подтверждение)
-- Точки входа: настройки + пикер смены категории
-- Умный «⬅️ Назад» из списка → обратно в пикер (через `_cat_back_target[user_id]`)
+### 2026-06-11 — Queue 7: Управление категориями (Б1 + CRUD)
+- Б1: `seed_user_categories()` → `get_user_categories()` в пикере.
+- Сидирование вынесено в `/start`. CRUD: `category_service.py` + `categories.py`.
+- `is_archived`, сортировка по id, проверка дубликатов.
 
 ### 2026-06-11 — Queue 8: Детект дубликатов трат (Б2)
+- `DuplicateMiddleware`: in-memory кэш (15s окно), 3 эскалации (success → warn → silence).
+- Защита от Telegram-ретраев по `message_id`. Фоновая очистка раз в сутки.
 
-**Проблема:** При обрыве/таймауте Telegram API расход коммитился в БД, `state.clear()` сбрасывался до `message.answer()`, пользователь не видел ответа и отправлял трату снова — создавался дубликат.
+### 2026-06-13 — Queue 9: Emoji-детекция
+- Библиотека `emoji`, `_extract_emoji()` в helpers.py, fallback `🏷️`. 33 теста. Итого 325.
 
-**Решение — DuplicateMiddleware (`src/bot/middleware.py`):**
-- In-memory `_expenses[user_id]` — список последних трат каждого пользователя (окно 15s)
-- `check()`: 0 совпадений → `'new'`, 1 → `'warn'`, 2+ → `'silent'`
-- При `'warn'`: данные в `_pending`, warning-сообщение с кнопками `[❌ Это дубль] [✅ Да, вторая трата]`
-- При `'silent'`: полная тишина — ни ответа, ни сохранения
-- Защита от Telegram-ретраев: `_last_message_id[user_id]` — при повторном `message_id` middleware пересылает последний ответ
-- Защита от утечки памяти: `_cleanup_old_users()` раз в сутки удаляет неактивных пользователей из всех словарей
-- Зарегистрирован как `dp.message.middleware(dup_middleware)`, singleton доступен хендлерам через импорт
+### 2026-06-15 — Queue 10: Дубль эмодзи в категориях
+- `get_category_display()` везде вместо `cat.name`. Инлайн-кнопки 2/ряд вместо пагинации. Итого 327.
 
-**Callback-хендлеры (menu.py):**
-- `dup_confirm` — подтверждение второй траты: забирает `_pending`, создаёт Expense, показывает `DUP_CONFIRMED` с балансом
-- `dup_del` — отмена дубля: сбрасывает `dup_count`, показывает `DUP_DELETED`
+### 2026-06-15 — Queue 11: B3 — Округление вычитается из лимита
+- `compute_rounding()`: `effective = ceil(amount/mode)*mode`, разница в хотелку. `try_apply_round_up` удалён. Итого 329.
 
-**Попутно:**
-- `state.clear()` теперь выполняется после `message.answer()` (гигиена кода)
-- Фикс `lines.append` вне цикла в `handle_text` — мультилайн-траты в свободном вводе теперь показывают все строки
-- Удалён dead code после `return` в `handle_text`
+### 2026-06-15 — Queue 12: B4 — Переформулировка overdraft
+- Хотелка → «Остаток периода — N дн.». Добавлены F1-F3, UX2-UX3 в бэклог.
 
-**Files:**
-- `src/bot/middleware.py` — DuplicateMiddleware (~100 строк)
-- `src/bot/handlers/menu.py` — duplicate check в process_expense + handle_text + callback handlers
-- `src/bot/keyboards.py` — `get_duplicate_keyboard()`
-- `src/utils/phrases.py` — 5 новых фраз (BTN_DUP_DEL, BTN_DUP_CONFIRM, DUP_WARNING, DUP_CONFIRMED, DUP_DELETED)
-- `src/bot/main.py` — регистрация middleware + cleanup task
+### 2026-06-15 — Queue 13: B5 — Silent drop при офлайн-очереди
+- Убран тихий rate-limit (0.7s между сообщениями), оставлен burst (5/3с).
 
-**Status:** 292 тестов проходят, ruff — 0 новых ошибок. Запушено в main.
+### 2026-06-19 — Queue 14: Morning report recovery
+- Таблица `daily_reports_log`, startup check (05-12 МСК), misfire_grace_time=4ч.
 
----
-
-### 2026-06-13 — Queue 9: Переименование категорий — emoji-детекция + тесты
-
-**Проблема:** `ord(raw[0]) > 0x1F000` не ловил многие emoji (☕, ©, флаги, составные), а fallback `📦` пересекался с «Прочее».
-
-**Решение:**
-- Добавлена библиотека `emoji` в `requirements.txt`
-- Создана `_extract_emoji(text)` в `helpers.py` — использует `emoji.emoji_list()` для поиска первого emoji + `emoji.replace_emoji()` для очистки текста
-- Новый fallback emoji `FALLBACK_EMOJI = "🏷️"` (tag) — не пересекается с существующими категориями
-- `get_category_display()` — fallback `📦` → `🏷️`
-- `process_cat_rename` переписан: `_extract_emoji` вместо `ord()`, цепочка `emoji = new_emoji or old_emoji or FALLBACK_EMOJI`, no-op детекция (то же имя → тихий успех)
-- `conftest.py` — добавлены `category_service` и `categories` хендлер в monkeypatch
-
-**Тесты:** 33 новых теста (14 unit на `_extract_emoji`, 4 service, 13 FSM-хендлера). Итого 325 тестов, 0 новых ruff-ошибок.
-
----
-
-### 2026-06-15 — Queue 10: Дубль эмодзи в списке категорий + кнопки вместо пагинации
-
-**Проблема (двойной эмодзи):** После переименования `"🏷️ 12. гэс"` → `"🚛 гэс"` в списке отображалось `"🚛 12. 🚛 Гэс"` — эмодзи дублировалось, т.к. `get_category_display()` извлекала 🚛 из `cat.name`, а label использовал `cat.name` целиком (уже с 🚛).
-
-**Фикс отображения:** Во всех трёх местах (render_page, detail, menu.py кнопка) заменён `cat.name` на `display_text` из `get_category_display()`. Добавлен тест на отсутствие дубля.
-
-**Редизайн списка категорий:**
-- Вместо пагинированного текстового списка (страницы по 5, номера-кнопки) — инлайн-кнопки с эмодзи+название, 2 в ряд (как в пикере смены категории)
-- Удалены `PAGE_SIZE`, `_build_list_keyboard()`, хендлер `category_page`
-- Кнопки «Назад» и «В меню» — друг под другом (отдельные ряды)
-
-**Тесты:** 327 (было 325), 0 новых ruff-ошибок.
-
----
-
-### 2026-06-15 — Queue 11: B3 — Округление вычитается из дневного лимита
-
-**Проблема:** При `rounding_mode=10` трата 1₽ сохранялась как `amount=1`, разница 9₽ уходила в хотелку «бесплатно» — дневной лимит уменьшался только на 1₽.
-
-**Решение:**
-- Добавлена `compute_rounding(amount, mode)` — чистая функция, возвращает `(effective_amount, spare)`
-- Добавлена `get_rounding_mode(telegram_id)` — читает настройки из БД
-- В обоих хендлерах (FSM `process_expense` и `handle_text`): в цикле считается `effective = ceil(amount/mode)*mode`, сохраняется `Expense(amount=effective)`, аккумулируется `total_spare`
-- После цикла: `add_spare_change_to_goal(total_spare)` вместо `try_apply_round_up(total_amount)`
-- `try_apply_round_up` удалён (не нужен — 1 пользователь)
-- `parse_amount` (поле `effective` для дубликата поменяно с `amount` на `effective`)
-
-**Тесты:** 329 (было 327), 12 новых на `compute_rounding`, 10 удалённых `TestTryApplyRoundUp`. 0 новых ruff-ошибок.
-
----
-
-### 2026-06-15 — Queue 12: B4 — Переформулировка overdraft-сообщения (хотелка → остаток периода)
-
-**Проблема:** `EVENING_OVER_2` писала «{хотелка} отодвинулась на N дн.» — хотелка не резерв, из неё ничего не вычитается, формулировка вводила в заблуждение.
-
-**Решение:** (подход А — только текст)
-- `EVENING_OVER_2` переписана: вместо хотелки и wishlist_delay — «Остаток периода — N дн. — придётся аккуратнее»
-- `get_evening_message()` — удалён параметр `wishlist_name`; удалён расчёт `wishlist_delay`; удалён импорт `safe`
-- `evening_flow.py` — удалена переменная `wishlist_name` и её передача
-
-**Решение:** 3 файла изменено, 7 insertions / 15 deletions. 329 тестов проходят. Запушено в main.
-
-**Добавлены фичи (со слов пользователя):**
-- F1: Push-уведомления (заложить возможность)
-- F2: Переименование категории текстом (без кнопки)
-- F3: Удаление категории — паттерн «удалил + восстановить» (как в истории)
-- UX2 уточнён: отчёты не удалять — только teaser
-- UX3 расширен: список трат за день в статусе (collapsible) + вечерний отчёт в формате «Сегодня, 15 июня»
-
----
-
-### 2026-06-15 — Queue 13: B5 — Silent drop при офлайн-очереди сообщений
-
-**Проблема:** При отправке нескольких сообщений в офлайне (например, «1000 трата1», «1500 трата2») Telegram доставляет их пачкой. RateLimitMiddleware запоминал время первого сообщения (`_last_time[user_id] = now`) и при проверке второго дропал его — `now - last < 0.7s → return` без вызова handler'а. Второе сообщение бесследно исчезало.
-
-**Решение:**
-- Убран тихий rate-limit (0.7s между отдельными сообщениями)
-- Удалена константа `RATE_LIMIT`
-- Оставлен burst-лимит (5 сообщений за 3 секунды) — достаточен для антиспама
-
-**Файлы:** `src/bot/middleware.py`
-**329 тестов проходят. Запушено в main.**
-
----
-
-### 2026-06-19 — Queue 14: Morning report recovery (баг: отчёт не пришёл 18 июня)
-
-**Проблема:** Утренний отчёт не пришёл 18 июня. Диагностика выявила 3 причины:
-1. **Railway перезапустил контейнер** — APScheduler хранит джобы в памяти, при рестарте они теряются. `misfire_grace_time=300` (5 мин) не покрывал время простоя.
-2. **Нет общего try/except** — если падал запрос к БД (select User.telegram_id), вся функция падала без лога.
-3. **Нет startup recovery** — при старте после 08:05 бот не проверял, что утренний отчёт пропущен.
-
-**Решение (3 компонента):**
-
-- **Таблица `daily_reports_log`** — новая модель `DailyReportsLog` (composite PK: telegram_id + report_type + sent_date). При успешной отправке — INSERT, перед отправкой — SELECT для dedup.
-- **Startup check** (`main.py`): при старте в окне 05:00-12:00 МСК → `asyncio.create_task(send_morning_reports(bot))`. Встроенный dedup через таблицу не даёт дублей, если scheduler уже отработал в 08:00.
-- **misfire_grace_time=14400** (4ч) — покрывает стандартное окно деплоя.
-- **Общий try/except** вокруг `send_morning_reports()` с `exc_info=True`.
-
-**Файлы:**
-- `src/db/models/models.py` — `DailyReportsLog` (date, Date)
-- `src/db/database.py` — ALLOWED_TABLES/ALLOWED_COLUMNS
-- `src/services/morning_report.py` — `_has_morning_report_today`, `_log_morning_report`, outer try/except
-- `src/bot/scheduler.py` — misfire_grace_time 300→14400
-- `src/bot/main.py` — startup check (05-12 MSK)
-
-**Решение принято через Ask User Question:**
-- Таблица-лог вместо in-memory флага или колонки в UserSettings
-- misfire_grace_time = 4 часа
-- Общий try/except — да
-
-**329 тестов проходят, 0 новых ruff-ошибок. Запушено в main.**
-
----
-
-### 2026-06-19 — Queue 15: Удаление категории — выбор целевой категории для переноса трат
-
-**Проблема:** При удалении категории кнопка «Перенести в Прочее» автоматически переносила траты в «Прочее» без возможности выбора.
-
-**Решение:**
-- Кнопка переименована в «📦 Перенести в другую категорию»
-- При нажатии — показывается инлайн-пикер со всеми активными категориями (исключая удаляемую), 2 в ряд
-- Пикер использует существующий паттерн (`get_user_categories` + `get_category_display`)
-- Выбор категории → все траты переносятся туда → категория удаляется
-- Сообщение об успехе показывает имя целевой категории вместо «Прочее»
-
-**Файлы:**
-- `src/utils/phrases.py` — обновлены `BTN_CATEGORY_DELETE_MOVE`, `CATEGORY_DELETED_MOVED`, добавлен `CATEGORY_DELETE_MOVE_PROMPT`
-- `src/services/category_service.py` — новая `move_expenses_to_category_and_delete(target_category_id)`
-- `src/bot/handlers/categories.py` — `cat_delete_move` переделан в пикер; новый `cat_delete_move_to`
-
-**329 тестов проходят, 0 новых ruff-ошибок. Запушено в main.**
-
----
+### 2026-06-19 — Queue 15: Удаление категории с выбором целевой
+- Инлайн-пикер активных категорий вместо авто-переноса в «Прочее».
 
 ### 2026-06-19 — Queue 16: Soft Correction + чистые чеки (Phase 1)
+- FSM не сбрасывается при ошибках категории. `EXPENSE_SIMPLE_CHECK=True` — только кнопка смены категории в чеке.
 
-**Soft Correction для ошибок категорий:**
-- `save_new_category` (menu.py) — обе ошибки (`ERR_NAME_LENGTH`, `ERR_CATEGORY_EXISTS`): FSM не сбрасывается, добавлена кнопка «⬅️ Отмена», пользователь может сразу ввести новое имя
-- `process_cat_rename` (categories.py) — 3 ошибки: те же принципы, кнопка «⬅️ Отмена» через `cat_cancel_rename`
-- `ERR_CATEGORY_EXISTS` переписана: «❌ Категория ... уже существует. Напиши другое название или нажми «Отмена»:»
+### 2026-06-19 — Queue 17: Phase 2 — ReplyKeyboard
+- Постоянное меню внизу: Добавить трату, Дневной лимит, Статистика, Настройки, Помощь.
 
-**Убрана кнопка «🗂 Категории» из пикера смены категории:**
-- Пользователь нажимает «✏️ Сменить категорию» → видит категории + «✏️ Новая категория» + «⬅️ Назад»
-- Полный менеджмент категорий доступен из Настроек
+### 2026-06-21 — Queue 18: Inline-меню отключено при SIMPLE_CHECK
+- `get_main_menu_keyboard()` → None. Убраны «👇». Только ReplyKeyboard. 330 тестов.
 
-**Phase 1: Чистые чеки без меню (NX-флаг `EXPENSE_SIMPLE_CHECK`):**
-- `config.py` — новый флаг `EXPENSE_SIMPLE_CHECK: bool = True` (Pydantic Settings)
-- `_build_expense_check_kb()` — helper: при True — только «✏️ Сменить категорию» (одна трата) или без кнопок (мультилайн); при False — старое поведение (меню + назад)
-- `process_expense` — при True очищает FSM после чека; `handle_text` — аналогично
-- Автоочистка клавиатуры предыдущего чека через существующий `_cleanup_keyboard`/`_track_keyboard`
+### 2026-06-23 — Queue 19: Monthly Summary
+- Ежемесячный отчёт с тотемами (6 персонажей + Чебурашка), моноширинной таблицей, навигацией по месяцам. Вместо утреннего отчёта в день после period_start_day. 329 тестов.
 
-**Файлы:**
-- `src/core/config.py` — `EXPENSE_SIMPLE_CHECK`
-- `src/bot/handlers/menu.py` — helper + оба хендлера + `save_new_category` error handling
-- `src/bot/handlers/categories.py` — `process_cat_rename` error handling
-- `src/utils/phrases.py` — `ERR_CATEGORY_EXISTS` переформулирована
+### 2026-07-02 — UX1: Убрано «Вернулись, Aelita!»
+- `BACK_NAV` → `\u200b` (zero-width space). Т-Банк минимализм.
 
-**329 тестов проходят, 0 новых ruff-ошибок.**
-
-**🧠 Решение:** Все последующие фазы редизайна сообщений (Phase 2: ReplyKeyboard, Phase 3: Undo-паттерн удаления и т.д.) — тоже под флаг `EXPENSE_SIMPLE_CHECK`. Флаг остаётся в `src/core/config.py` как Pydantic Settings-переменная, по умолчанию `True`.
-
----
-
-### 2026-06-19 — Queue 17: Phase 2 — ReplyKeyboard (постоянное меню внизу)
-
-**Проблема:** После Phase 1 (чистые чеки без меню) у пользователя не было способа вернуться в навигацию, кроме как нажать «✏️ Сменить категорию» → «⬅️ Назад». ReplyKeyboard решает это — меню всегда внизу.
-
-**Решение — ReplyKeyboardMarkup с persistent=True:**
-- `keyboards.py` — новая `get_main_reply_keyboard()`: 4 кнопки (Добавить трату, Дневной лимит, История, Настройки, Помощь), 2 в ряд
-- `menu.py` — `handle_reply_menu()`: `@router.message(F.text.in_(...))` ловит текст reply-кнопок, чистит FSM, направляет в нужное действие
-- `_build_status()` — выделена из `menu_status` как общая функция для callback и reply-хендлера
-- `cmd_start` (возвращающиеся) и `_finish_onboarding` — отправляют ReplyKeyboard
-- `process_expense` — проверка reply-текстов в начале (если в FSM нажали «📜 История» → чистка FSM + редирект)
-
-**Файлы:**
-- `src/bot/keyboards.py` — `get_main_reply_keyboard()`
-- `src/bot/handlers/menu.py` — `handle_reply_menu`, `_build_status`, `process_expense` guard, `cmd_start`/`_finish_onboarding`
-
-**329 тестов проходят, 0 новых ruff-ошибок.**
-
----
-
-### 2026-06-21 — Queue 18: Phase 2 — полное отключение inline-меню + чистка «👇»
-
-**Проблема:** При `EXPENSE_SIMPLE_CHECK=True` одновременно отображались старое inline-меню (плитка под сообщением) и новое ReplyKeyboard снизу. Дублирование UX. Также в сообщении был эмодзи «👇».
-
-**Решение:**
-- `keyboards.py` — `get_main_menu_keyboard()` возвращает `None` при `EXPENSE_SIMPLE_CHECK=True` (нигде не показывается)
-- `menu.py` — убраны все 6 сообщений с «👇», заменены на отправку `WELCOME_MENU` + ReplyKeyboard под флагом
-- Все «назад в меню» хендлеры (`menu_back`, `open_menu`, `cancel`, `back_from_category_change`, `cmd_start`, `_finish_onboarding`): при флаге True — только ReplyKeyboard, inline-клавиатура не ставится
-
-**Файлы:**
-- `src/bot/keyboards.py` — `get_main_menu_keyboard` conditional return None
-- `src/bot/handlers/menu.py` — 6 хендлеров: убран «👇», добавлен `if settings.EXPENSE_SIMPLE_CHECK:` с `get_main_reply_keyboard()`
-- `README.md` — обновлён статус
-
-**330 тестов проходят, 0 новых ruff-ошибок.**
-
----
-
-## Топ-ASAP после Queue 18 (2026-06-23)
-
-### A. Прогноз в утреннем отчёте — всегда
-Сейчас строка «Идём идеально по графику. Прогноз: X ₽/день» показывается только в зелёной зоне. Нужно: добавить `dl_pred` (прогнозный лимит) в универсальную часть каждого утреннего отчёта — вне зависимости от зоны. Зональный текст остаётся как есть.
-
-### B. Гибкий дневной лимит (будни vs выходные)
-Уже в бэклоге (`README.md:86`, `progress.md:235`). Разные лимиты на будни и выходные — задаётся вручную или предлагается ботом после анализа.
-
-### C. Monthly Summary (итог за месяц)
-Новая фича — красивый ежемесячный отчёт с тотемами, таблицей категорий, навигацией по месяцам. Готово (Queue 19).
-
----
-
-### 2026-06-23 — Queue 19: Monthly Summary (итог за месяц)
-
-**Дизайн (согласован через интервью):**
-- Точка входа: кнопка «История» в ReplyKeyboard переименована в «Статистика». При нажатии — две inline-кнопки: «📜 Посмотреть историю трат» и «🗓️ Отчет за месяц».
-- Авто-рассылка: приходит **вместо утреннего отчёта** в день после `period_start_day` (например, период с 20-го → отчёт 21-го).
-- Тотемы: 6 персонажей (Лягушка-путешественница, Винни-Пух, Золушка, Кот Леопольд, Дядя Стёпа, Домовёнок Кузя) + Чебурашка-универсальный. Текст, без картинок.
-- Структура сообщения: тотем → разделитель → таблица категорий (моноширинная) → collapsible «📂 Детали расчёта» → кнопки навигации.
-- Навигация: все доступные периоды, кнопки [◀️ Пред. месяц] [🔄 Обновить] [След. месяц ▶️].
-- Текущий незавершённый период: тотем-🥚 «ещё формируется».
-- Пустой период: короткое сообщение «нет данных».
-
-**Файлы:**
-- `src/services/monthly_report.py` — сервис (тотемы, период dates, category breakdown, форматирование текста)
-- `src/bot/handlers/monthly_summary.py` — хендлеры (отчёт, навигация, refresh)
-- `src/bot/keyboards.py` — `get_stats_keyboard()`, `get_monthly_nav_keyboard()`
-- `src/utils/phrases.py` — все новые фразы (тотемы, таблица, детали, кнопки)
-- `src/bot/handlers/menu.py` — `BTN_HISTORY` → `BTN_STATS` в ReplyKeyboard
-- `src/bot/main.py` — регистрация `monthly_summary_router`
-- `src/services/morning_report.py` — проверка: если сегодня `period_end + 1d` → monthly summary вместо morning report
-
-**329 тестов проходят, 0 новых ruff-ошибок (только pre-existing E712/E711, принятые).**
-
----
-
-### 2026-07-02 — UX1: Убрано «Вернулись, Aelita!» при возврате в меню
-
-**Проблема:** `BACK_NAV = "⬅️ Вернулись, {name}!"` избыточно — пользователь и так знает, что вернулся.
-
-**Решение:**
-- `phrases.BACK_NAV` → `"\u200b"` (zero-width space) — сообщение невидимо
-- 4 хендлера (`menu_back`, `open_menu`, `back_from_category_change`, `cancel`): в SIMPLE_CHECK-режиме `answer()` с WELCOME_MENU заменён на `"\u200b"` — только ReplyKeyboard без текста
-- Подход: Т-Банк минимализм — никаких лишних сообщений
-
-**Файлы:** `src/utils/phrases.py`, `src/bot/handlers/menu.py`
-**329 тестов проходят, 0 новых ruff-ошибок.**
-
----
-
-### 2026-07-02 — UX1.5: Удалены inline-кнопки «В главное меню» при SIMPLE_CHECK
-
-**Проблема:** После UX1 (BACK_NAV → zero-width space) inline-кнопки «В главное меню» / «В меню» / «Назад» (ведущие в меню) остались — посылали невидимое сообщение, создавали визуальный шум, дублировали ReplyKeyboard.
-
-**Решение (Т-Банк минимализм):**
-- Убраны все inline-кнопки, ведущие в главное меню, при `EXPENSE_SIMPLE_CHECK=True`:
-  - `keyboards.py`: настройки, статистика, monthly nav, start choice
-  - `menu.py`: статус (все зоны), чек траты, пикер категорий, critical reset (жёлтая зона)
-  - `history.py`: список трат
-  - `categories.py`: список категорий
-  - `evening_flow.py`: финальный отчёт
-- Убраны мислидинг-кнопки «💪 Буду экономить» и «💪 Принимаю вызов!» (вели в меню без логики)
-- `menu_back`, `open_menu`, `exp_back_cat` — early return при SIMPLE_CHECK
-
-**Контекстная навигация сохранена:** `exp_back` (история), `cat_back` (категории), `cat_cancel_rename`, `cancel` (FSM)
-
-**Починено:**
-- `back_from_category_change` — добавлен `state.clear()` (не чистил FSM)
-- `category_back_to_list` — добавлен `state.clear()` (не чистил FSM)
-- `nav_buttons` unused variable — удалён в categories.py
-
-**Файлы:** `src/bot/keyboards.py`, `src/bot/handlers/menu.py`, `src/bot/handlers/history.py`, `src/bot/handlers/categories.py`, `src/bot/handlers/evening_flow.py`
-**329 тестов проходят, 0 новых ruff-ошибок.**
+### 2026-07-02 — UX1.5: Удалены inline-кнопки «В меню» при SIMPLE_CHECK
+- Убраны все inline-кнопки, ведущие в меню, во всех хендлерах. Контекстная навигация сохранена.
+- Починено: `back_from_category_change` и `category_back_to_list` не чистили FSM.
 
 ---
 
@@ -652,25 +115,16 @@
 **Контекст:** Проведён аудит всех message-переходов (что удаляется/остаётся/перезаписывается). Найдено 8 багов — задокументированы в `bugs_ux4.md`. Закрыто 4.
 
 **Bug #1: Дубликат кода process_expense / handle_text (HIGH)**
-
-- **Проблема:** ~90 строк идентичного цикла парсинга/сохранения в двух хендлерах. `handle_text` не имел счётчика ретраев.
 - **Решение:** Вынесен общий `_save_expenses_from_parsed_list()`. Каждый хендлер — ~20 строк.
-- **Файл:** `src/bot/handlers/menu.py`
 
 **Bug #3: menu_help не чистит FSM (MEDIUM)**
-- **Проблема:** `menu_help` не принимал `state` и не чистил FSM.
-- **Решение:** Добавлен `state: FSMContext`, `await state.clear()`.
-- **Файл:** `src/bot/handlers/menu.py`
+- **Решение:** Добавлен `await state.clear()`.
 
 **Bug #4: menu_settings не чистит FSM (MEDIUM)**
-- **Проблема:** `menu_settings` не чистил FSM.
-- **Решение:** Добавлен `await state.clear()` перед работой.
-- **Файл:** `src/bot/handlers/menu.py`
+- **Решение:** Добавлен `await state.clear()`.
 
 **Bug #6: Orphaned-клавиатура после save_new_category (LOW)**
-- **Проблема:** Промпт с кнопкой «Отмена» оставался в чате навсегда после создания категории.
-- **Решение:** `_track_keyboard()` в `new_category_prompt` → `_cleanup_keyboard()` в `save_new_category` убирает кнопку.
-- **Файл:** `src/bot/handlers/menu.py`
+- **Решение:** `_track_keyboard()` в промпте → `_cleanup_keyboard()` при успехе.
 
 **Новый файл:** `bugs_ux4.md` — трекер всех найденных UX4-багов (4 open: #2, #5, #7, #8).
 
@@ -678,28 +132,42 @@
 
 ---
 
-### 2026-07-05 — Bug #2 fix: Единая система отслеживания клавиатур (auto-keyboard tracking middleware)
+### 2026-07-05 — Bug #2 fix: Единая система отслеживания клавиатур (AutoCleanKeyboardMiddleware)
 
-**Проблема:** Две независимые системы — `_track_keyboard`/`_cleanup_keyboard` (TTLCache, траты/настройки) и `_save_msg_id`/`_cleanup_old_buttons` (FSM-context, онбординг) — не координировались. `_save_msg_id` не чистила глобальный кеш → `TelegramBadRequest` при edit удалённого сообщения.
+**Проблема:** Две независимые системы — `_track_keyboard`/`_cleanup_keyboard` (TTLCache) и `_save_msg_id`/`_cleanup_old_buttons` (FSM-context) — не координировались → `TelegramBadRequest` при edit удалённого сообщения.
 
 **Решение:** Создан middleware `AutoCleanKeyboardMiddleware` (`src/bot/middleware.py`):
-- Перехватывает **все** `message.answer()`, `message.edit_text()`, `message.edit_caption()` в `Router` (chat_type="private")
-- Автоматически трекает `message_id` каждого отправленного/отредактированного сообщения (с `reply_markup`)
-- При следующей отправке с новой клавиатурой — редактирует предыдущее сообщение: `reply_markup=None`
-- TTLCache: `maxsize=512`, `ttl=600` (10 мин — покрывает любой flow)
-- Зарегистрирован как `outer_middleware` на `MenuRouter` (не глобально)
+- Перехватывает все `message.answer()`, `message.edit_text()`, `message.edit_caption()` на `MenuRouter`
+- Автоматически трекает `message_id` каждого сообщения с `reply_markup`
+- При следующей отправке с новой клавиатурой — редактирует предыдущее: `reply_markup=None`
+- TTLCache: `maxsize=512`, `ttl=600` (10 мин)
 
 **Онбординг переведён на общую систему:**
 - Удалены `_save_msg_id()` / `_cleanup_old_buttons()` из `menu.py`
 - Удалена передача `msg_id` через FSM-контекст в `_finish_onboarding`
-- `_build_status()` — убрал ручной `_cleanup_keyboard` + `_track_keyboard` (теперь автоматически)
-- `cancel` (reset-состояния) — убран ручной `_track_keyboard` / `_cleanup_keyboard`
+- `_build_status()` — убран ручной `_track_keyboard` / `_cleanup_keyboard`
 
 **Файлы:**
 - `src/bot/middleware.py` — новый класс `AutoCleanKeyboardMiddleware`
-- `src/bot/handlers/menu.py` — удалены 2 функции + 6 вызовов, `_finish_onboarding` без msg_id
-- `src/utils/phrases.py` — `BTN_BACK_TO_MENU` → `BTN_BACK` (универсально)
+- `src/bot/handlers/menu.py` — удалены 2 функции + 6 вызовов
 
-**bugs_ux4.md:** Bug #2 закрыт ✅. Статус: 6/8 закрыто.
+**bugs_ux4.md:** Bug #2 закрыт. Статус: 6/8 закрыто.
 
+**329 тестов проходят, 0 новых ruff-ошибок.**
+
+---
+
+### 2026-07-05 — Bug #5 fix: cancel edit_text вместо delete для reset-состояний
+
+**Проблема:** `cancel` делал `message.delete()` для CriticalReset/FreshStart и `edit_text()` для всех остальных — несогласованный UX + `_last_keyboard` хранил ID удалённого → `TelegramBadRequest`.
+
+**Решение:**
+- Заменён `delete()` на `edit_text()` с контекстной фразой:
+  - CriticalReset → `CANCEL_CRITICAL_RESET = "❌ Сброс отменен. Данные не были удалены.\n\nГлавное меню:"`
+  - FreshStart → `CANCEL_FRESH_START = "❌ Настройка заново отменена. Продолжаем работу с текущими лимитами.\n\nГлавное меню:"`
+- Под SIMPLE_CHECK — отправка ReplyKeyboard
+- `edit_text()` проходит через `AutoTrackOutgoingMiddleware` → `_last_keyboard` обновляется, `TelegramBadRequest` устранён
+
+**Файлы:** `src/bot/handlers/menu.py`, `src/utils/phrases.py`
+**bugs_ux4.md:** Bug #5 закрыт. Статус: 7/8 закрыто.
 **329 тестов проходят, 0 новых ruff-ошибок.**
