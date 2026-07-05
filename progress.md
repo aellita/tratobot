@@ -191,3 +191,16 @@
 **Файлы:** `src/bot/handlers/evening_flow.py`, `src/services/evening_report.py`, `src/utils/phrases.py`
 **bugs_ux4.md:** Bug #7 закрыт. Статус: 8/8 закрыто.
 
+---
+
+### 2026-07-05 — Bug #8 fix: response_text в dup_middleware.record()
+
+**Проблема:** `dup_middleware.record()` всегда вызывался с `response_text=""`, из-за чего проверка `last.get("response_text")` в `DuplicateMiddleware.__call__()` никогда не срабатывала — Telegram-ретраи по `message_id` не отбивались, трата повторно обрабатывалась.
+
+**Решение:**
+- `_save_expenses_from_parsed_list()` (menu.py): `EXPENSE_SAVED_LINE` строится до `record()` и передаётся как `response_text`
+- `handle_duplicate_confirm()` (menu.py): `DUP_CONFIRMED` строится до `record()` и передаётся как `response_text`
+
+**Файлы:** `src/bot/handlers/menu.py`, `src/bot/middleware.py`
+**329 тестов проходят, 0 новых ruff-ошибок.**
+

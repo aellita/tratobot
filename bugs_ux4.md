@@ -96,15 +96,8 @@
 
 ---
 
-## Bug #8: dup_middleware.record() response_text = "" (LOW)
+## Bug #8: dup_middleware.record() response_text = "" (LOW) ✅ 2026-07-05
 
-`dup_middleware.record()` всегда вызывается с `response_text=""`. В `DuplicateMiddleware.__call__()` есть проверка:
-```python
-if last.get("response_text"):
-    # перепослать последний ответ вместо повторной обработки
-```
-Она никогда не срабатывает, т.к. `response_text` всегда пустая строка (falsy).
+`dup_middleware.record()` всегда вызывалась с `response_text=""`. В `DuplicateMiddleware.__call__()` проверка `last.get("response_text")` никогда не срабатывала — защита от ретраев по `message_id` была сломана.
 
-**Последствие:** защита от повторной обработки одного и того же `message_id` сломана (но на практике не критично, т.к. Telegram редко шлёт ретраи).
-
-**Решение:** передавать реальный текст ответа в `record()`.
+**Решение:** `_save_expenses_from_parsed_list()` (оба caller'a) и `handle_duplicate_confirm()` передают реальный текст ответа в `record()`.

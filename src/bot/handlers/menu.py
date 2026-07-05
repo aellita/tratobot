@@ -1002,12 +1002,14 @@ async def _save_expenses_from_parsed_list(
             errors += 1
             continue
 
-        dup_middleware.record(user_id, message.message_id, effective, description, expense.id)
-        lines.append(
-            phrases.EXPENSE_SAVED_LINE.format(
-                amount=f"{effective:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
-            )
+        line = phrases.EXPENSE_SAVED_LINE.format(
+            amount=f"{effective:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
         )
+        dup_middleware.record(
+            user_id, message.message_id, effective, description, expense.id,
+            response_text=line,
+        )
+        lines.append(line)
 
     return False, all_silent, lines, total_spare, first_id
 
@@ -1911,9 +1913,6 @@ async def handle_duplicate_confirm(callback: CallbackQuery):
         await callback.message.edit_text(phrases.ERR_EXPENSE_SAVE)
         return
 
-    dup_middleware.record(user_id, 0, pending["amount"], pending["description"], expense.id)
-    dup_middleware.reset_dup_count(user_id, pending["amount"], pending["description"])
-
     spent = await get_today_expenses_sum(user_id)
     balance = "неизвестно"
     try:
@@ -1924,13 +1923,18 @@ async def handle_duplicate_confirm(callback: CallbackQuery):
     except Exception:
         pass
 
-    await callback.message.edit_text(
-        text=phrases.DUP_CONFIRMED.format(
-            amount=f"{pending['amount']:,.0f}",
-            desc=safe(pending["description"]),
-            balance=balance,
-        ),
+    response_text = phrases.DUP_CONFIRMED.format(
+        amount=f"{pending['amount']:,.0f}",
+        desc=safe(pending["description"]),
+        balance=balance,
     )
+    dup_middleware.record(
+        user_id, 0, pending["amount"], pending["description"], expense.id,
+        response_text=response_text,
+    )
+    dup_middleware.reset_dup_count(user_id, pending["amount"], pending["description"])
+
+    await callback.message.edit_text(text=response_text)
 
 
 @router.callback_query(F.data == "dup_del")
