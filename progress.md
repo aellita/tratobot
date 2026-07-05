@@ -644,3 +644,62 @@
 
 **Файлы:** `src/bot/keyboards.py`, `src/bot/handlers/menu.py`, `src/bot/handlers/history.py`, `src/bot/handlers/categories.py`, `src/bot/handlers/evening_flow.py`
 **329 тестов проходят, 0 новых ruff-ошибок.**
+
+---
+
+### 2026-07-05 — UX4 Audit: 4 бага закрыто
+
+**Контекст:** Проведён аудит всех message-переходов (что удаляется/остаётся/перезаписывается). Найдено 8 багов — задокументированы в `bugs_ux4.md`. Закрыто 4.
+
+**Bug #1: Дубликат кода process_expense / handle_text (HIGH)**
+
+- **Проблема:** ~90 строк идентичного цикла парсинга/сохранения в двух хендлерах. `handle_text` не имел счётчика ретраев.
+- **Решение:** Вынесен общий `_save_expenses_from_parsed_list()`. Каждый хендлер — ~20 строк.
+- **Файл:** `src/bot/handlers/menu.py`
+
+**Bug #3: menu_help не чистит FSM (MEDIUM)**
+- **Проблема:** `menu_help` не принимал `state` и не чистил FSM.
+- **Решение:** Добавлен `state: FSMContext`, `await state.clear()`.
+- **Файл:** `src/bot/handlers/menu.py`
+
+**Bug #4: menu_settings не чистит FSM (MEDIUM)**
+- **Проблема:** `menu_settings` не чистил FSM.
+- **Решение:** Добавлен `await state.clear()` перед работой.
+- **Файл:** `src/bot/handlers/menu.py`
+
+**Bug #6: Orphaned-клавиатура после save_new_category (LOW)**
+- **Проблема:** Промпт с кнопкой «Отмена» оставался в чате навсегда после создания категории.
+- **Решение:** `_track_keyboard()` в `new_category_prompt` → `_cleanup_keyboard()` в `save_new_category` убирает кнопку.
+- **Файл:** `src/bot/handlers/menu.py`
+
+**Новый файл:** `bugs_ux4.md` — трекер всех найденных UX4-багов (4 open: #2, #5, #7, #8).
+
+**329 тестов проходят, 0 новых ruff-ошибок.**
+
+---
+
+### 2026-07-05 — Bug #2 fix: Единая система отслеживания клавиатур (auto-keyboard tracking middleware)
+
+**Проблема:** Две независимые системы — `_track_keyboard`/`_cleanup_keyboard` (TTLCache, траты/настройки) и `_save_msg_id`/`_cleanup_old_buttons` (FSM-context, онбординг) — не координировались. `_save_msg_id` не чистила глобальный кеш → `TelegramBadRequest` при edit удалённого сообщения.
+
+**Решение:** Создан middleware `AutoCleanKeyboardMiddleware` (`src/bot/middleware.py`):
+- Перехватывает **все** `message.answer()`, `message.edit_text()`, `message.edit_caption()` в `Router` (chat_type="private")
+- Автоматически трекает `message_id` каждого отправленного/отредактированного сообщения (с `reply_markup`)
+- При следующей отправке с новой клавиатурой — редактирует предыдущее сообщение: `reply_markup=None`
+- TTLCache: `maxsize=512`, `ttl=600` (10 мин — покрывает любой flow)
+- Зарегистрирован как `outer_middleware` на `MenuRouter` (не глобально)
+
+**Онбординг переведён на общую систему:**
+- Удалены `_save_msg_id()` / `_cleanup_old_buttons()` из `menu.py`
+- Удалена передача `msg_id` через FSM-контекст в `_finish_onboarding`
+- `_build_status()` — убрал ручной `_cleanup_keyboard` + `_track_keyboard` (теперь автоматически)
+- `cancel` (reset-состояния) — убран ручной `_track_keyboard` / `_cleanup_keyboard`
+
+**Файлы:**
+- `src/bot/middleware.py` — новый класс `AutoCleanKeyboardMiddleware`
+- `src/bot/handlers/menu.py` — удалены 2 функции + 6 вызовов, `_finish_onboarding` без msg_id
+- `src/utils/phrases.py` — `BTN_BACK_TO_MENU` → `BTN_BACK` (универсально)
+
+**bugs_ux4.md:** Bug #2 закрыт ✅. Статус: 6/8 закрыто.
+
+**329 тестов проходят, 0 новых ruff-ошибок.**

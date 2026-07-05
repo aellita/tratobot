@@ -15,7 +15,12 @@ from .handlers.history import router as history_router
 from .handlers.menu import router as menu_router
 from .handlers.monthly_summary import router as monthly_summary_router
 from .handlers.test_commands import router as test_router
-from .middleware import RateLimitMiddleware, dup_middleware
+from .middleware import (
+    AutoTrackOutgoingMiddleware,
+    KeyboardCleanupMiddleware,
+    RateLimitMiddleware,
+    dup_middleware,
+)
 from .scheduler import setup_scheduler, stop_scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -25,9 +30,12 @@ bot = Bot(
     token=settings.BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
 )
+bot.session.middleware(AutoTrackOutgoingMiddleware())
 dp = Dispatcher()
+dp.message.middleware(KeyboardCleanupMiddleware())
 dp.message.middleware(RateLimitMiddleware())
 dp.message.middleware(dup_middleware)
+dp.callback_query.middleware(KeyboardCleanupMiddleware())
 dp.callback_query.middleware(RateLimitMiddleware())
 
 dp.include_router(categories_router)

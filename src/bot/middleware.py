@@ -1,9 +1,84 @@
 import asyncio
+import logging
 import time
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiogram import BaseMiddleware
-from aiogram.types import CallbackQuery, Message
+from aiogram.client.session.middlewares.base import BaseRequestMiddleware
+from aiogram.methods.base import Response, TelegramMethod, TelegramType
+from aiogram.types import CallbackQuery, Message, TelegramObject
+from cachetools import TTLCache
+
+logger = logging.getLogger(__name__)
+
+# ── Global keyboard tracking cache (chat_id → message_id) ──────────────
+
+_last_keyboard: TTLCache = TTLCache(maxsize=1024, ttl=3600)
+
+
+class KeyboardCleanupMiddleware(BaseMiddleware):
+    """Cleans up previous inline keyboard on incoming user action.
+
+    Runs before every message / callback handler — pops the last tracked
+    message_id from the global cache and removes its inline keyboard.
+    """
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
+    ) -> Any:
+        bot = data.get("bot")
+        chat_id: int | None = None
+        if isinstance(event, Message):
+            chat_id = event.chat.id
+        elif isinstance(event, CallbackQuery) and event.message:
+            chat_id = event.message.chat.id
+
+        if chat_id is not None:
+            msg_id = _last_keyboard.pop(chat_id, None)
+            if msg_id is not None:
+                try:
+                    await bot.edit_message_reply_markup(
+                        chat_id=chat_id, message_id=msg_id, reply_markup=None
+                    )
+                except Exception:
+                    pass
+
+        return await handler(event, data)
+
+
+class AutoTrackOutgoingMiddleware(BaseRequestMiddleware):
+    """Tracks outgoing bot messages that carry an inline keyboard.
+
+    Intercepts every API call the bot makes — if it is a successful
+    SendMessage / EditMessageText / EditMessageReplyMarkup containing
+    inline buttons, the message_id is stored in the global cache so that
+    the next *inbound* middleware can clean it up.
+    """
+
+    async def __call__(
+        self,
+        make_request: Callable[..., Awaitable[Response[TelegramType]]],
+        bot: Any,
+        method: TelegramMethod[TelegramType],
+    ) -> Response[TelegramType]:
+        response = await make_request(bot, method)
+
+        if not response.ok:
+            return response
+
+        msg = response.result
+        if isinstance(msg, Message) and msg.reply_markup:
+            inline_kb = getattr(msg.reply_markup, "inline_keyboard", None)
+            if inline_kb:
+                _last_keyboard[msg.chat.id] = msg.message_id
+
+        return response
+
 
 BURST_LIMIT = 5
 BURST_WINDOW = 3.0

@@ -2,12 +2,11 @@ import logging
 import random
 import re
 
-from aiogram import Bot, F, Router
+from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
-from cachetools import TTLCache
 from sqlalchemy import func, select
 
 from ...core.config import settings
@@ -104,37 +103,6 @@ async def get_budget_or_none(telegram_id: int) -> Budget | None:
     return await get_active_budget(telegram_id)
 
 
-_last_keyboard: TTLCache = TTLCache(maxsize=1024, ttl=3600)  # chat_id -> message_id
-
-
-async def _cleanup_keyboard(bot: Bot, chat_id: int):
-    msg_id = _last_keyboard.pop(chat_id, None)
-    if msg_id:
-        try:
-            await bot.edit_message_reply_markup(
-                chat_id=chat_id, message_id=msg_id, reply_markup=None
-            )
-        except Exception:
-            pass
-
-
-def _track_keyboard(chat_id: int, message_id: int):
-    _last_keyboard[chat_id] = message_id
-
-
-async def _cleanup_old_buttons(state: FSMContext, bot: Bot):
-    data = await state.get_data()
-    msg_id = data.get("_last_msg_id")
-    chat_id = data.get("_last_chat_id")
-    if msg_id and chat_id:
-        try:
-            await bot.edit_message_reply_markup(
-                chat_id=chat_id, message_id=msg_id, reply_markup=None
-            )
-        except Exception:
-            pass
-
-
 def _build_expense_check_kb(first_id: int | None, line_count: int) -> InlineKeyboardMarkup | None:
     if not settings.EXPENSE_SIMPLE_CHECK:
         if line_count == 1:
@@ -168,10 +136,6 @@ def _build_expense_check_kb(first_id: int | None, line_count: int) -> InlineKeyb
     return None
 
 
-async def _save_msg_id(state: FSMContext, msg: Message):
-    await state.update_data(_last_msg_id=msg.message_id, _last_chat_id=msg.chat.id)
-
-
 # ============ MENU HANDLERS ============
 
 
@@ -186,7 +150,6 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
         text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "menu_help")
@@ -198,13 +161,11 @@ async def menu_help(callback: CallbackQuery, state: FSMContext):
         text=phrases.HELP_TEXT.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
-    await _cleanup_keyboard(message.bot, message.chat.id)
     telegram_id = message.from_user.id
     user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
@@ -220,10 +181,7 @@ async def cmd_start(message: Message, state: FSMContext):
         greeting = random.choice(GREETINGS)
         await message.answer(text=greeting)
 
-        sent = await message.answer(
-            text=phrases.ONBOARDING_START, reply_markup=get_onboarding_keyboard()
-        )
-        await _save_msg_id(state, sent)
+        await message.answer(text=phrases.ONBOARDING_START, reply_markup=get_onboarding_keyboard())
         await state.set_state(BudgetSetup.waiting_for_income)
     else:
         await message.answer(
@@ -248,7 +206,6 @@ async def open_menu(callback: CallbackQuery, state: FSMContext):
         text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "reset_budget")
@@ -268,10 +225,9 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
     greeting = random.choice(GREETINGS)
     await callback.message.edit_text(text=greeting)
 
-    sent = await callback.message.answer(
+    await callback.message.answer(
         text=phrases.ONBOARDING_RESTART, reply_markup=get_onboarding_keyboard()
     )
-    await _save_msg_id(state, sent)
     await state.set_state(BudgetSetup.waiting_for_income)
 
 
@@ -796,14 +752,12 @@ async def process_income(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
         return
 
-    await _cleanup_old_buttons(state, message.bot)
     await state.update_data(income=amount)
     await state.set_state(BudgetSetup.waiting_for_period_start)
-    sent = await message.answer(
+    await message.answer(
         text=f"✅ Принял!\n\n{phrases.PERIOD_START_CHOICE}",
         reply_markup=get_period_start_keyboard(),
     )
-    await _save_msg_id(state, sent)
 
 
 @router.callback_query(F.data.in_(["period_today", "period_first", "period_other"]))
@@ -858,11 +812,10 @@ async def process_period_start(message: Message, state: FSMContext):
         await state.update_data(_retry_count=retries)
         if retries >= 3:
             await state.clear()
-            sent = await message.answer(
+            await message.answer(
                 phrases.ERR_TOO_MANY_RETRIES,
                 reply_markup=await get_main_menu_keyboard(message.from_user.id),
             )
-            _track_keyboard(message.chat.id, sent.message_id)
             return
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="25"))
         return
@@ -876,13 +829,9 @@ async def process_period_start(message: Message, state: FSMContext):
     if day > days_in_month:
         day = days_in_month
 
-    await _cleanup_old_buttons(state, message.bot)
     await state.update_data(period_start_day=day)
     await state.set_state(BudgetSetup.waiting_for_mandatory)
-    sent = await message.answer(
-        text=phrases.INCOME_SAVED_PERIOD, reply_markup=get_onboarding_keyboard()
-    )
-    await _save_msg_id(state, sent)
+    await message.answer(text=phrases.INCOME_SAVED_PERIOD, reply_markup=get_onboarding_keyboard())
 
 
 @router.message(BudgetSetup.waiting_for_mandatory)
@@ -893,13 +842,11 @@ async def process_mandatory(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="15000"))
         return
 
-    await _cleanup_old_buttons(state, message.bot)
     await state.update_data(mandatory=amount)
     await state.set_state(BudgetSetup.waiting_for_black_day)
-    sent = await message.answer(
+    await message.answer(
         text=phrases.ONBOARDING_MANDATORY_PROMPT, reply_markup=get_onboarding_keyboard()
     )
-    await _save_msg_id(state, sent)
 
 
 @router.message(BudgetSetup.waiting_for_black_day)
@@ -910,13 +857,11 @@ async def process_black_day(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="5000"))
         return
 
-    await _cleanup_old_buttons(state, message.bot)
     await state.update_data(black_day=amount)
     await state.set_state(BudgetSetup.waiting_for_wishlist_name)
-    sent = await message.answer(
+    await message.answer(
         text=phrases.ONBOARDING_WISHLIST_PROMPT, reply_markup=get_onboarding_keyboard()
     )
-    await _save_msg_id(state, sent)
 
 
 def _parse_wishlist(text: str) -> tuple[str, float]:
@@ -939,7 +884,6 @@ def _parse_wishlist(text: str) -> tuple[str, float]:
 
 @router.message(BudgetSetup.waiting_for_wishlist_name)
 async def process_wishlist_name(message: Message, state: FSMContext):
-    await _cleanup_old_buttons(state, message.bot)
     name, price = _parse_wishlist(message.text.strip())
     await state.update_data(wishlist_name=name, wishlist_price=price)
     await _advance_onboarding(message, state)
@@ -987,7 +931,6 @@ async def menu_add(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.ADD_EXPENSE_PROMPT.format(name=user_name), reply_markup=get_cancel_keyboard()
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 async def _save_expenses_from_parsed_list(
@@ -1030,12 +973,10 @@ async def _save_expenses_from_parsed_list(
             dup_middleware.set_pending(
                 user_id, effective, description, cat_id, description, emoji, cat_name
             )
-            await _cleanup_keyboard(message.bot, message.chat.id)
-            msg = await message.answer(
+            await message.answer(
                 phrases.DUP_WARNING.format(amount=f"{effective:,.0f}", desc=safe(description)),
                 reply_markup=get_duplicate_keyboard(),
             )
-            _track_keyboard(message.chat.id, msg.message_id)
             return True, True, [], 0.0, None
 
         all_silent = False
@@ -1092,12 +1033,10 @@ async def process_expense(message: Message, state: FSMContext):
         await state.update_data(_retry_count=retries)
         if retries >= 3:
             await state.clear()
-            await _cleanup_keyboard(message.bot, message.chat.id)
-            sent = await message.answer(
+            await message.answer(
                 phrases.ERR_TOO_MANY_RETRIES,
                 reply_markup=await get_main_menu_keyboard(message.from_user.id),
             )
-            _track_keyboard(message.chat.id, sent.message_id)
             return
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="500 кофе"))
         return
@@ -1124,12 +1063,10 @@ async def process_expense(message: Message, state: FSMContext):
             dup_middleware.set_pending(
                 user_id, amount, description, cat_id, description, emoji, cat_name
             )
-            await _cleanup_keyboard(message.bot, message.chat.id)
-            msg = await message.answer(
+            await message.answer(
                 phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
                 reply_markup=get_duplicate_keyboard(),
             )
-            _track_keyboard(message.chat.id, msg.message_id)
             return
 
     sent_dup, all_silent, lines, total_spare, first_id = await _save_expenses_from_parsed_list(
@@ -1154,16 +1091,12 @@ async def process_expense(message: Message, state: FSMContext):
             amount=int(total_spare), goal=goal_name, total=int(new_total)
         )
 
-    await _cleanup_keyboard(message.bot, message.chat.id)
-
     kb = _build_expense_check_kb(first_id, len(lines))
 
     response_text = phrases.EXPENSE_SAVED_ALL.format(
         name=user_name, lines="\n".join(lines), round_up=total_round_up
     )
-    msg = await message.answer(text=response_text, reply_markup=kb)
-    if kb:
-        _track_keyboard(message.chat.id, msg.message_id)
+    await message.answer(text=response_text, reply_markup=kb)
 
     if settings.EXPENSE_SIMPLE_CHECK:
         await state.clear()
@@ -1303,7 +1236,6 @@ async def back_from_category_change(callback: CallbackQuery, state: FSMContext):
         text=phrases.BACK_NAV.format(name=user_name),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data.startswith("new_cat:"))
@@ -1327,7 +1259,6 @@ async def new_category_prompt(callback: CallbackQuery, state: FSMContext):
             ]
         ),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.message(CustomCategory.waiting_for_name)
@@ -1393,14 +1324,12 @@ async def save_new_category(message: Message, state: FSMContext):
 
     user_name = message.from_user.first_name or phrases.FALLBACK_NAME
     await state.clear()
-    await _cleanup_keyboard(message.bot, message.chat.id)
-    msg = await message.answer(
+    await message.answer(
         text=phrases.CATEGORY_CREATED.format(
             name=name, user_name=user_name, desc=expense.description
         ),
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
-    _track_keyboard(message.chat.id, msg.message_id)
 
 
 # ============ OVERDRAFT / MORNING HANDLERS ============
@@ -1473,7 +1402,7 @@ async def handle_fix_overdraft(callback: CallbackQuery):
 async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(CriticalReset.waiting_for_real_balance)
-    msg = await callback.message.answer(
+    await callback.message.answer(
         text=phrases.FRESH_START_PROMPT,
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
@@ -1481,7 +1410,6 @@ async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
             ]
         ),
     )
-    _track_keyboard(callback.message.chat.id, msg.message_id)
 
 
 @router.message(CriticalReset.waiting_for_real_balance)
@@ -1497,14 +1425,12 @@ async def save_real_balance(message: Message, state: FSMContext):
         message.from_user.id, total_balance
     )
 
-    await _cleanup_keyboard(message.bot, message.chat.id)
-
     # 🟢 Зона 1: Всё ок (лимит > 500₽)
     if new_limit > 500:
         await apply_reconciliation(message.from_user.id, money_for_life)
         cubyshka_note = phrases.CUBYSHKA_NOTE.format(amount=int(cubyshka)) if cubyshka > 0 else ""
         await state.clear()
-        msg = await message.answer(
+        await message.answer(
             text=phrases.FRESH_START_GREEN.format(
                 name=user_name,
                 limit=int(new_limit),
@@ -1514,7 +1440,6 @@ async def save_real_balance(message: Message, state: FSMContext):
             ),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
-        _track_keyboard(message.chat.id, msg.message_id)
         return
 
     # 🟡 Зона 2: Турбо-экономия (лимит 100–500₽)
@@ -1537,7 +1462,7 @@ async def save_real_balance(message: Message, state: FSMContext):
                     )
                 ],
             )
-        msg = await message.answer(
+        await message.answer(
             text=phrases.FRESH_START_YELLOW.format(
                 name=user_name,
                 cubyshka=int(cubyshka),
@@ -1547,12 +1472,11 @@ async def save_real_balance(message: Message, state: FSMContext):
             ),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=yellow_buttons),
         )
-        _track_keyboard(message.chat.id, msg.message_id)
         return
 
     # 🔴 Зона 3: Тотальный фреш-старт (лимит < 100₽ или в минусе)
     await state.set_state(FreshStart.waiting_for_mandatory)
-    msg = await message.answer(
+    await message.answer(
         text=phrases.FRESH_START_RED,
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
@@ -1565,7 +1489,6 @@ async def save_real_balance(message: Message, state: FSMContext):
             ]
         ),
     )
-    _track_keyboard(message.chat.id, msg.message_id)
 
 
 # ============ FRESH START (RE-ONBOARDING) ============
@@ -1661,7 +1584,6 @@ async def fresh_start_save_balance(message: Message, state: FSMContext):
 
     user_name = message.from_user.first_name or phrases.FALLBACK_NAME
     await state.clear()
-    await _cleanup_keyboard(message.bot, message.chat.id)
 
     zone_note = ""
     if new_limit < 100:
@@ -1669,7 +1591,7 @@ async def fresh_start_save_balance(message: Message, state: FSMContext):
     elif new_limit <= 500:
         zone_note = "\n\n💪 Режим Турбо-экономии включён — лимит меньше 500₽."
 
-    msg = await message.answer(
+    await message.answer(
         text=f"Идеально, {user_name}! Новые настройки применились.\n\n"
         f"📌 {int(new_mandatory)} ₽ — забронировал на оставшиеся обязательные платежи.\n"
         f"🏦 {int(new_cubyshka)} ₽ — упаковал обратно в твою Кубышку.\n"
@@ -1679,7 +1601,6 @@ async def fresh_start_save_balance(message: Message, state: FSMContext):
         f"Держимся, Бро! В этот раз мы справимся! ✊",
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
-    _track_keyboard(message.chat.id, msg.message_id)
 
 
 # ============ SETTINGS ============
@@ -1726,7 +1647,6 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
         f"{period_info}",
         reply_markup=get_settings_keyboard(),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "edit_income")
@@ -1736,7 +1656,6 @@ async def edit_income(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.INCOME_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "add_income")
@@ -1746,7 +1665,6 @@ async def add_income(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.INCOME_ADD_PROMPT, reply_markup=get_cancel_keyboard()
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "edit_mandatory")
@@ -1756,7 +1674,6 @@ async def edit_mandatory(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.MANDATORY_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "edit_black_day")
@@ -1766,7 +1683,6 @@ async def edit_black_day(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.SAVINGS_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "edit_wishlist")
@@ -1776,7 +1692,6 @@ async def edit_wishlist(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.WISHLIST_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.callback_query(F.data == "edit_period_start")
@@ -1786,7 +1701,6 @@ async def edit_period_start(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.PERIOD_EDIT_PROMPT, reply_markup=get_period_start_keyboard()
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 @router.message(EditBudget.waiting_for_income)
@@ -1799,11 +1713,7 @@ async def save_income(message: Message, state: FSMContext):
         else:
             await update_budget_field(message.from_user.id, "total_income", amount)
 
-        await _cleanup_keyboard(message.bot, message.chat.id)
-        sent = await message.answer(
-            text=phrases.INCOME_UPDATED, reply_markup=get_period_start_keyboard()
-        )
-        _track_keyboard(message.chat.id, sent.message_id)
+        await message.answer(text=phrases.INCOME_UPDATED, reply_markup=get_period_start_keyboard())
         await state.set_state(EditBudget.waiting_for_period_start)
     except ValueError:
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
@@ -1832,12 +1742,10 @@ async def save_edit_period_start(message: Message, state: FSMContext):
     await update_budget_field(message.from_user.id, "period_start_day", day)
     user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
-    await _cleanup_keyboard(message.bot, message.chat.id)
-    msg = await message.answer(
+    await message.answer(
         text=phrases.PERIOD_UPDATED.format(name=user_name, day=day),
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
-    _track_keyboard(message.chat.id, msg.message_id)
     await state.clear()
 
 
@@ -1858,14 +1766,12 @@ async def save_add_income(message: Message, state: FSMContext):
             await update_budget_field(message.from_user.id, "total_income", new_total)
         user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
-        await _cleanup_keyboard(message.bot, message.chat.id)
-        msg = await message.answer(
+        await message.answer(
             text=phrases.INCOME_ADDED.format(
                 name=user_name, amount=f"{amount:,.0f}", total=f"{new_total:,.0f}"
             ),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
-        _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
     except ValueError:
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="10000"))
@@ -1878,12 +1784,10 @@ async def save_mandatory(message: Message, state: FSMContext):
         await update_budget_field(message.from_user.id, "mandatory_payments", amount)
         user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
-        await _cleanup_keyboard(message.bot, message.chat.id)
-        msg = await message.answer(
+        await message.answer(
             text=phrases.MANDATORY_UPDATED.format(name=user_name, amount=f"{amount:,.0f}"),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
-        _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
     except ValueError:
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="15000"))
@@ -1896,12 +1800,10 @@ async def save_black_day(message: Message, state: FSMContext):
         await update_budget_field(message.from_user.id, "black_day_fund", amount)
         user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
-        await _cleanup_keyboard(message.bot, message.chat.id)
-        msg = await message.answer(
+        await message.answer(
             text=phrases.SAVINGS_UPDATED.format(name=user_name, amount=f"{amount:,.0f}"),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
-        _track_keyboard(message.chat.id, msg.message_id)
         await state.clear()
     except ValueError:
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="5000"))
@@ -1917,12 +1819,10 @@ async def save_wishlist(message: Message, state: FSMContext):
 
     user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
-    await _cleanup_keyboard(message.bot, message.chat.id)
-    msg = await message.answer(
+    await message.answer(
         text=f"✅ Готово, {user_name}! Хотелка: {name} — {price:,.0f}₽",
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
-    _track_keyboard(message.chat.id, msg.message_id)
     await state.clear()
 
 
@@ -1944,7 +1844,6 @@ async def edit_rounding(callback: CallbackQuery, state: FSMContext):
         text=phrases.ROUNDING_SETTINGS.format(label=label),
         reply_markup=get_rounding_mode_keyboard(),
     )
-    _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 # ============ CANCEL / BACK ============
@@ -1972,8 +1871,6 @@ async def cancel(callback: CallbackQuery, state: FSMContext):
             text="\u200b",
             reply_markup=get_main_reply_keyboard(),
         )
-    else:
-        _track_keyboard(callback.message.chat.id, callback.message.message_id)
 
 
 # ============ DUPLICATE DETECTION CALLBACKS ============
@@ -2133,12 +2030,10 @@ async def handle_text(message: Message, state: FSMContext):
     menu_keywords = phrases.MENU_KEYWORDS
     if text.lower() in menu_keywords:
         user_name = message.from_user.first_name or phrases.FALLBACK_NAME
-        await _cleanup_keyboard(message.bot, message.chat.id)
-        msg = await message.answer(
+        await message.answer(
             text=phrases.UNRECOGNIZED.format(name=user_name),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
-        _track_keyboard(message.chat.id, msg.message_id)
         return
 
     parsed_list = parse_multi_expense_text(text)
@@ -2174,13 +2069,9 @@ async def handle_text(message: Message, state: FSMContext):
             amount=int(total_spare), goal=goal_name, total=int(new_total)
         )
 
-    await _cleanup_keyboard(message.bot, message.chat.id)
-
     kb = _build_expense_check_kb(first_id, len(lines))
 
     response_text = phrases.EXPENSE_SAVED_ALL.format(
         name=user_name, lines="\n".join(lines), round_up=total_round_up
     )
-    msg = await message.answer(text=response_text, reply_markup=kb)
-    if kb:
-        _track_keyboard(message.chat.id, msg.message_id)
+    await message.answer(text=response_text, reply_markup=kb)
