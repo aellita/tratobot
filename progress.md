@@ -276,3 +276,15 @@
 **Файлы:** `src/bot/rich_api.py`, `src/bot/handlers/monthly_summary.py`
 **329 тестов проходят, 0 новых ruff-ошибок.**
 
+---
+
+### 2026-07-06 — Teaser: `_last_keyboard.pop()` перед `bot.delete_message()` в автозакрытии
+
+**Проблема:** `send_auto_close_reports()` (23:30) удалял teaser-контейнер через `bot.delete_message()`, но его `message_id` оставался в `_last_keyboard`. Следующий `KeyboardCleanupMiddleware` пытался `edit_message_reply_markup` на удалённом → `TelegramBadRequest`.
+
+**Фикс:**
+- `evening_report.py`: перед `bot.delete_message(container_id)` — `_last_keyboard.pop(tg_id, None)`
+
+**Файлы:** `src/services/evening_report.py`
+**329 тестов проходят, 0 новых ruff-ошибок, ruff format clean.**
+

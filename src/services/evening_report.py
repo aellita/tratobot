@@ -9,6 +9,7 @@ from aiogram.fsm.storage.base import BaseStorage, StorageKey
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 
+from ..bot.middleware import _last_keyboard
 from ..db.database import async_session_maker
 from ..db.models.models import User, UserSettings
 from ..utils import phrases
@@ -75,9 +76,18 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
 
 
 _MONTH_NAMES_RU = {
-    1: "января", 2: "февраля", 3: "марта", 4: "апреля",
-    5: "мая", 6: "июня", 7: "июля", 8: "августа",
-    9: "сентября", 10: "октября", 11: "ноября", 12: "декабря",
+    1: "января",
+    2: "февраля",
+    3: "марта",
+    4: "апреля",
+    5: "мая",
+    6: "июня",
+    7: "июля",
+    8: "августа",
+    9: "сентября",
+    10: "октября",
+    11: "ноября",
+    12: "декабря",
 }
 
 
@@ -173,6 +183,7 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
             total = await get_today_expenses_sum(tg_id)
 
             if is_evening_state:
+                _last_keyboard.pop(tg_id, None)
                 try:
                     await bot.delete_message(chat_id=tg_id, message_id=container_id)
                 except Exception:
