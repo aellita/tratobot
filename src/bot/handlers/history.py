@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
@@ -19,6 +21,8 @@ from ...services.expense_service import (
 )
 from ...utils.helpers import parse_amount, safe
 from ..keyboards import get_cancel_keyboard, get_main_menu_keyboard
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -327,7 +331,7 @@ async def start_edit_expense(callback: CallbackQuery, state: FSMContext):
     try:
         await callback.message.edit_text(text=prompt, reply_markup=get_cancel_keyboard())
     except TelegramBadRequest:
-        await callback.message.delete()
+        logger.warning("edit_text failed on history edit prompt — fallback to answer")
         await callback.message.answer(text=prompt, reply_markup=get_cancel_keyboard())
 
 

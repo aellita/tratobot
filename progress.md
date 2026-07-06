@@ -288,3 +288,22 @@
 **Файлы:** `src/services/evening_report.py`
 **329 тестов проходят, 0 новых ruff-ошибок, ruff format clean.**
 
+---
+
+### 2026-07-06 — Устранение оставшихся delete (history.py + evening_flow.py)
+
+**1. history.py:330 — callback.message.delete() fallback**
+
+**Проблема:** При `TelegramBadRequest` в `edit_text()` хендлер делал `delete()` + `answer()`. Нарушение § 12.2.1.
+
+**Фикс:** `delete()` → лог + `answer()`. Старое сообщение остаётся в чате, новое появляется ниже.
+
+**2. evening_flow.py:39 — message.delete() на пользовательскую трату**
+
+**Проблема:** Бот удалял сообщение пользователя после ввода траты в вечернем флоу. Нарушение § 12.3 и § 12.4.
+
+**Фикс:** строка `await message.delete()` удалена. Сообщение пользователя остаётся в чате.
+
+**Файлы:** `src/bot/handlers/history.py`, `src/bot/handlers/evening_flow.py`
+**329 тестов проходят, 0 новых ruff-ошибок.**
+

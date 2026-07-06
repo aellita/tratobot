@@ -36,8 +36,6 @@ router = Router()
 async def handle_evening_expense(message: Message, state: FSMContext):
     user_id = message.from_user.id
 
-    await message.delete()
-
     if not message.text or not message.text.strip():
         await message.answer(phrases.ERR_EMPTY_EXPENSE)
         return
