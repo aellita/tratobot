@@ -262,3 +262,17 @@
 **Файлы:** `RULES.md`, `README.md`, `progress.md`
 **329 тестов проходят, 0 новых ruff-ошибок.**
 
+---
+
+### 2026-07-06 — Rich API: ручной трекинг `_last_keyboard` + fix delete
+
+**Проблема:** `send_rich_message()`/`edit_rich_message()` шли raw HTTP, минуя `AutoTrackOutgoingMiddleware`. Клавиатуры Monthly Summary и Morning Report никогда не чистились.
+
+**Фикс:**
+- `rich_api.py`: импортирован `_last_keyboard`, добавлен ручной трекинг `message_id` после каждого успешного запроса с inline-клавиатурой
+- `monthly_summary.py:90-92`: `send_rich_message()` + `bot.delete_message()` → `edit_rich_message()` по callback-сообщению. Устранено нарушение п. 12.3 Конституции (delete на callback)
+- `morning_report.py:175`: `send_rich_message()` без reply_markup — безопасно, без изменений
+
+**Файлы:** `src/bot/rich_api.py`, `src/bot/handlers/monthly_summary.py`
+**329 тестов проходят, 0 новых ruff-ошибок.**
+

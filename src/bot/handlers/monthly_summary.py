@@ -13,7 +13,7 @@ from ...services.monthly_report import (
 )
 from ...utils import phrases
 from ..keyboards import get_main_menu_keyboard, get_monthly_nav_keyboard
-from ..rich_api import edit_rich_message, send_rich_message
+from ..rich_api import edit_rich_message
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +87,13 @@ async def cmd_monthly_report(callback: CallbackQuery, state: FSMContext, bot: Bo
             tg_id, active_idx
         )
         kb = get_monthly_nav_keyboard(has_prev, has_next, prev_label, next_label)
-        sent = await send_rich_message(bot, callback.message.chat.id, text, kb)
-        if sent:
-            await bot.delete_message(callback.message.chat.id, callback.message.message_id)
+        await edit_rich_message(
+            bot,
+            callback.message.chat.id,
+            callback.message.message_id,
+            text,
+            kb,
+        )
     except Exception as e:
         logger.error(f"Monthly report error: {e}", exc_info=True)
 
