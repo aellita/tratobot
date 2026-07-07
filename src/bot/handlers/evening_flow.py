@@ -41,11 +41,17 @@ async def handle_evening_expense(message: Message, state: FSMContext):
         return
 
     parsed = parse_expense_text(message.text)
-    if not parsed:
-        await message.answer(phrases.ERR_PARSE_EXPENSE)
+    if not parsed.is_valid:
+        if parsed.error_type == "MATH_ERROR":
+            await message.answer(
+                phrases.ERR_MATH_ERROR.format(detail=parsed.error_detail or parsed.raw_text)
+            )
+        else:
+            await message.answer(phrases.ERR_PARSE_EXPENSE)
         return
 
-    amount, description = parsed
+    amount = parsed.amount
+    description = parsed.description
 
     cat, _ = await detect_category_db(description, user_id, amount)
     cat_id = cat.id if cat else None
@@ -65,9 +71,16 @@ async def handle_evening_expense(message: Message, state: FSMContext):
         session.add(expense)
         await session.commit()
 
-    await message.answer(
-        phrases.EVENING_SAVED.format(emoji=emoji, amount=f"{amount:,.0f}", desc=safe(description))
-    )
+    response_parts = [
+        phrases.EVENING_SAVED.format(
+            emoji=emoji, amount=f"{amount:,.0f}", desc=safe(description)
+        )
+    ]
+    if parsed.was_corrected:
+        response_parts.append(
+            phrases.ERR_MATH_CORRECTED.format(hint=parsed.correction_hint or "")
+        )
+    await message.answer("\n".join(response_parts))
 
     data = await state.get_data()
     container_id = data.get("container_id")

@@ -31,6 +31,7 @@ from ...services.categorization import (
     seed_user_categories,
 )
 from ...services.expense_service import (
+    ExpenseParseReport,
     compute_rounding,
     get_rounding_mode,
     get_today_expenses_grouped,
@@ -104,36 +105,47 @@ async def get_budget_or_none(telegram_id: int) -> Budget | None:
     return await get_active_budget(telegram_id)
 
 
-def _build_expense_check_kb(first_id: int | None, line_count: int) -> InlineKeyboardMarkup | None:
+def _build_expense_check_kb(
+    first_id: int | None, line_count: int, corrected_ids: list[int] | None = None
+) -> InlineKeyboardMarkup | None:
+    fix_id = (corrected_ids or [None])[0]
     if not settings.EXPENSE_SIMPLE_CHECK:
         if line_count == 1:
-            return InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text=phrases.BTN_CHANGE_CATEGORY,
-                            callback_data=f"change_cat:{first_id}",
-                        )
-                    ],
-                    [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
+            buttons = []
+            if fix_id is not None:
+                buttons.append(
+                    [InlineKeyboardButton(text=phrases.BTN_FIX_AMOUNT, callback_data=f"exp_edit:{fix_id}")]
+                )
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_CHANGE_CATEGORY,
+                        callback_data=f"change_cat:{first_id}",
+                    )
                 ]
             )
+            buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")])
+            return InlineKeyboardMarkup(inline_keyboard=buttons)
         return InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
             ]
         )
     if line_count == 1 and first_id:
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_CHANGE_CATEGORY,
-                        callback_data=f"change_cat:{first_id}",
-                    )
-                ],
+        buttons = []
+        if fix_id is not None:
+            buttons.append(
+                [InlineKeyboardButton(text=phrases.BTN_FIX_AMOUNT, callback_data=f"exp_edit:{fix_id}")]
+            )
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_CHANGE_CATEGORY,
+                    callback_data=f"change_cat:{first_id}",
+                )
             ]
         )
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
     return None
 
 
@@ -954,19 +966,22 @@ async def menu_add(callback: CallbackQuery, state: FSMContext):
 
 async def _save_expenses_from_parsed_list(
     user_id: int,
-    parsed_list: list[tuple[float, str]],
+    reports: list[ExpenseParseReport],
     message: Message,
-) -> tuple[bool, bool, list[str], float, int | None]:
+) -> tuple[bool, bool, list[str], float, int | None, list[int]]:
     rounding_mode = await get_rounding_mode(user_id)
     lines = []
     total_spare = 0.0
     first_id = None
     errors = 0
     all_silent = True
+    corrected_ids: list[int] = []
 
-    for amount, description in parsed_list:
-        if not description:
-            description = phrases.FALLBACK_DESC
+    for report in reports:
+        if not report.is_valid:
+            continue
+        amount = report.amount
+        description = report.description or phrases.FALLBACK_DESC
 
         effective = amount
         if rounding_mode > 0:
@@ -996,7 +1011,7 @@ async def _save_expenses_from_parsed_list(
                 phrases.DUP_WARNING.format(amount=f"{effective:,.0f}", desc=safe(description)),
                 reply_markup=get_duplicate_keyboard(),
             )
-            return True, True, [], 0.0, None
+            return True, True, [], 0.0, None, []
 
         all_silent = False
 
@@ -1024,13 +1039,18 @@ async def _save_expenses_from_parsed_list(
         line = phrases.EXPENSE_SAVED_LINE.format(
             amount=f"{effective:,.0f}", desc=safe(description), emoji=emoji, cat=cat_name
         )
+        if report.was_corrected:
+            correction_msg = phrases.ERR_MATH_CORRECTED.format(hint=report.correction_hint or "")
+            line = f"{line}\n{correction_msg}"
+            corrected_ids.append(expense.id)
+
         dup_middleware.record(
             user_id, message.message_id, effective, description, expense.id,
             response_text=line,
         )
         lines.append(line)
 
-    return False, all_silent, lines, total_spare, first_id
+    return False, all_silent, lines, total_spare, first_id, corrected_ids
 
 
 @router.message(AddExpense.waiting_for_amount)
@@ -1047,51 +1067,62 @@ async def process_expense(message: Message, state: FSMContext):
         username=message.from_user.username,
     )
 
-    parsed_list = parse_multi_expense_text(text)
-    if not parsed_list:
-        data = await state.get_data()
-        retries = data.get("_retry_count", 0) + 1
-        await state.update_data(_retry_count=retries)
-        if retries >= 3:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="500 кофе"))
+    result = parse_multi_expense_text(text)
+    if not result.reports:
         return
 
     user_id = message.from_user.id
 
-    if len(parsed_list) == 1:
-        amount, description = parsed_list[0]
-        dup_status = dup_middleware.check(user_id, amount, description)
+    if not result.is_fully_valid:
+        invalid = next((r for r in result.reports if not r.is_valid), None)
+        if invalid and invalid.error_type == "MATH_ERROR":
+            data = await state.get_data()
+            retries = data.get("_retry_count", 0) + 1
+            await state.update_data(_retry_count=retries)
+            if retries >= 3:
+                await state.clear()
+                await message.answer(
+                    phrases.ERR_TOO_MANY_RETRIES,
+                    reply_markup=await get_main_menu_keyboard(message.from_user.id),
+                )
+                return
+            await message.answer(
+                phrases.ERR_MATH_ERROR.format(detail=invalid.error_detail or invalid.raw_text)
+            )
+            return
+        return
+
+    if len(result.reports) == 1:
+        report = result.reports[0]
+        dup_status = dup_middleware.check(user_id, report.amount, report.description)
         if dup_status != "new":
             if dup_status == "silent":
                 await state.clear()
                 return
+            description = report.description or phrases.FALLBACK_DESC
             if description == phrases.FALLBACK_DESC:
                 cat = None
             else:
                 try:
-                    cat, _ = await detect_category_db(description, user_id, amount)
+                    cat, _ = await detect_category_db(description, user_id, report.amount)
                 except Exception as e:
                     logging.error("Category detection failed", exc_info=e)
                     cat = None
             cat_id = cat.id if cat else None
             emoji, cat_name = get_category_display(cat.name) if cat else phrases.DEFAULT_CATEGORY
             dup_middleware.set_pending(
-                user_id, amount, description, cat_id, description, emoji, cat_name
+                user_id, report.amount, description, cat_id, description, emoji, cat_name
             )
             await message.answer(
-                phrases.DUP_WARNING.format(amount=f"{amount:,.0f}", desc=safe(description)),
+                phrases.DUP_WARNING.format(
+                    amount=f"{report.amount:,.0f}", desc=safe(description)
+                ),
                 reply_markup=get_duplicate_keyboard(),
             )
             return
 
-    sent_dup, all_silent, lines, total_spare, first_id = await _save_expenses_from_parsed_list(
-        user_id, parsed_list, message
+    sent_dup, all_silent, lines, total_spare, first_id, corrected_ids = await _save_expenses_from_parsed_list(
+        user_id, result.reports, message
     )
     if sent_dup:
         return
@@ -1112,7 +1143,7 @@ async def process_expense(message: Message, state: FSMContext):
             amount=int(total_spare), goal=goal_name, total=int(new_total)
         )
 
-    kb = _build_expense_check_kb(first_id, len(lines))
+    kb = _build_expense_check_kb(first_id, len(lines), corrected_ids)
 
     response_text = phrases.EXPENSE_SAVED_ALL.format(
         name=user_name, lines="\n".join(lines), round_up=total_round_up
@@ -2069,8 +2100,11 @@ async def handle_text(message: Message, state: FSMContext):
         )
         return
 
-    parsed_list = parse_multi_expense_text(text)
-    if not parsed_list:
+    result = parse_multi_expense_text(text)
+    if not result.reports:
+        return
+
+    if not result.is_fully_valid:
         return
 
     await get_or_create_user(
@@ -2080,8 +2114,8 @@ async def handle_text(message: Message, state: FSMContext):
     )
 
     user_id = message.from_user.id
-    sent_dup, all_silent, lines, total_spare, first_id = await _save_expenses_from_parsed_list(
-        user_id, parsed_list, message
+    sent_dup, all_silent, lines, total_spare, first_id, corrected_ids = await _save_expenses_from_parsed_list(
+        user_id, result.reports, message
     )
     if sent_dup:
         return
@@ -2102,7 +2136,7 @@ async def handle_text(message: Message, state: FSMContext):
             amount=int(total_spare), goal=goal_name, total=int(new_total)
         )
 
-    kb = _build_expense_check_kb(first_id, len(lines))
+    kb = _build_expense_check_kb(first_id, len(lines), corrected_ids)
 
     response_text = phrases.EXPENSE_SAVED_ALL.format(
         name=user_name, lines="\n".join(lines), round_up=total_round_up

@@ -1,14 +1,44 @@
 import math
+import re
+from dataclasses import dataclass, field
 from datetime import datetime, time
 
 from sqlalchemy import func, select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Expense, UserSettings
-from ..utils.helpers import get_msk_now
+from ..utils.helpers import _parse_math_prefix, _preprocess_math, _split_math_prefix, get_msk_now
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
+
+
+@dataclass
+class ExpenseParseReport:
+    amount: float = 0.0
+    description: str = ""
+    is_valid: bool = False
+    raw_text: str = ""
+    line_number: int = 0
+    error_type: str | None = None
+    error_detail: str | None = None
+    was_corrected: bool = False
+    correction_hint: str | None = None
+
+
+@dataclass
+class MultiExpenseParseResult:
+    reports: list[ExpenseParseReport] = field(default_factory=list)
+    is_fully_valid: bool = False
+
+
+def _detect_math_error(text: str) -> str:
+    if re.search(r"/\s*0(?:\D|$)", text):
+        return "деление на ноль"
+    parts = _split_math_prefix(text)
+    if parts and re.search(r"[+\-*/]+\s*$", parts[0]):
+        return "не хватает числа после знака"
+    return "не могу разобрать формулу"
 
 
 def compute_rounding(amount: float, mode: int) -> tuple[float, float]:
@@ -27,8 +57,6 @@ async def get_rounding_mode(telegram_id: int) -> int:
 
 
 def clean_description(text: str) -> str:
-    import re
-
     pattern = r"\b(" + "|".join(re.escape(w) for w in IGNORE_WORDS) + r")\b"
     text = re.sub(pattern, "", text, flags=re.IGNORECASE)
     text = re.sub(r"\bр\b", "", text, flags=re.IGNORECASE)
@@ -36,9 +64,8 @@ def clean_description(text: str) -> str:
     return text[:500]
 
 
-def parse_expense_text(text: str) -> tuple[float, str] | None:
-    import re
-
+def _fallback_first_number(text: str) -> ExpenseParseReport | None:
+    """Try to extract first number as amount. Returns report or None if no numbers."""
     numbers = re.findall(r"\d+(?:[,\.]\d+)?", text)
     total = 0.0
     first_num = None
@@ -52,29 +79,89 @@ def parse_expense_text(text: str) -> tuple[float, str] | None:
                 break
         except (ValueError, TypeError):
             continue
-
     if total <= 0:
         return None
-
     description = text
     if first_num:
         description = description.replace(first_num, "", 1)
-    description = clean_description(description)
+    return ExpenseParseReport(
+        amount=total,
+        description=clean_description(description),
+        is_valid=True,
+        raw_text=text,
+    )
 
-    return total, description
+
+def parse_expense_text(text: str, line_number: int = 0) -> ExpenseParseReport:
+    if not text.strip():
+        return ExpenseParseReport(
+            raw_text=text, line_number=line_number, error_type="EMPTY"
+        )
+
+    has_math = bool(re.search(r"[+\-*/()]", text))
+
+    math_result = _parse_math_prefix(text)
+    if math_result is not None:
+        total, rest = math_result
+        if total > 0:
+            rest = re.sub(r'\s*[+\-*/()]+\s*', ' ', rest).strip()
+            return ExpenseParseReport(
+                amount=total,
+                description=clean_description(rest),
+                is_valid=True,
+                raw_text=text,
+                line_number=line_number,
+            )
+
+    if has_math:
+        fixed, was_corrected, hint = _preprocess_math(text)
+        if was_corrected:
+            math_result = _parse_math_prefix(fixed)
+            if math_result is not None:
+                total, rest = math_result
+                if total > 0:
+                    return ExpenseParseReport(
+                        amount=total,
+                        description=clean_description(rest),
+                        is_valid=True,
+                        raw_text=text,
+                        line_number=line_number,
+                        was_corrected=True,
+                        correction_hint=hint,
+                    )
+            fallback = _fallback_first_number(fixed)
+            if fallback is not None:
+                fallback.line_number = line_number
+                fallback.was_corrected = True
+                fallback.correction_hint = hint
+                return fallback
+        return ExpenseParseReport(
+            raw_text=text,
+            line_number=line_number,
+            error_type="MATH_ERROR",
+            error_detail=_detect_math_error(text),
+        )
+
+    fallback = _fallback_first_number(text)
+    if fallback is not None:
+        fallback.line_number = line_number
+        return fallback
+
+    return ExpenseParseReport(
+        raw_text=text, line_number=line_number, error_type="NO_NUMBER"
+    )
 
 
-def parse_multi_expense_text(text: str) -> list[tuple[float, str]]:
+def parse_multi_expense_text(text: str) -> MultiExpenseParseResult:
     lines = text.strip().split("\n")
-    results = []
-    for line in lines:
+    reports = []
+    for i, line in enumerate(lines):
         line = line.strip()
-        if not line:
+        if not line or not re.search(r"\d", line):
             continue
-        parsed = parse_expense_text(line)
-        if parsed:
-            results.append(parsed)
-    return results
+        reports.append(parse_expense_text(line, line_number=i + 1))
+    is_fully_valid = all(r.is_valid for r in reports)
+    return MultiExpenseParseResult(reports=reports, is_fully_valid=is_fully_valid)
 
 
 async def get_expense_page(telegram_id: int, page: int = 0) -> tuple[list[Expense], int, int]:

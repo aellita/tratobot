@@ -290,20 +290,49 @@
 
 ---
 
-### 2026-07-06 — Устранение оставшихся delete (history.py + evening_flow.py)
+### 2026-07-08 — Feature: Math expressions in expenses + UX error handling
 
-**1. history.py:330 — callback.message.delete() fallback**
+**Контекст:** Пользователь хочет писать `500+300 такси`, `(1000-200)*2` и т.д. в одной строке с описанием. Без `eval()`, с BigTech-паттернами ошибок.
 
-**Проблема:** При `TelegramBadRequest` в `edit_text()` хендлер делал `delete()` + `answer()`. Нарушение § 12.2.1.
+**Архитектура:**
+- Кастомный рекурсивный парсер `_MathParser` (helpers.py): recursive descent, токены NUMBER/PLUS/MINUS/MUL/DIV/LPAREN/RPAREN, унарный минус и плюс, PEMDAS, `_MathParseError` и `ZeroDivisionError`
+- `parse_amount()` → `_eval_math()` — полный разбор (без остатка)
+- `parse_expense_text()` → `_parse_math_prefix()` — разбор до первого не-математического символа → (total, rest)
+- `_preprocess_math()`: баланс скобок, удаление хвостовых операторов, схлопывание двойных знаков
+- Новые датаклассы: `ExpenseParseReport` (is_valid, amount, description, raw_text, etc.) и `MultiExpenseParseResult`
 
-**Фикс:** `delete()` → лог + `answer()`. Старое сообщение остаётся в чате, новое появляется ниже.
+**BigTech-паттерны (без FSM):**
+- **Pattern 2 (MATH_ERROR):** деление на ноль, непоправимая каша → блок траты, `ERR_MATH_ERROR` с `<code>`, retry count (3 → clear state)
+- **Pattern 1 упрощённый (was_corrected):** закрыта скобка, убран хвостовой оператор → трата сохраняется, предупреждение в чеке + кнопка «✏️ Исправить сумму»
 
-**2. evening_flow.py:39 — message.delete() на пользовательскую трату**
+**Кнопка «✏️ Исправить сумму»:**
+- `_save_expenses_from_parsed_list` возвращает `corrected_ids: list[int]`
+- `_build_expense_check_kb` рендерит `exp_edit:{id}` для первого corrected
+- Переиспользует существующий `start_edit_expense` хендлер (history.py) — DRY
 
-**Проблема:** Бот удалял сообщение пользователя после ввода траты в вечернем флоу. Нарушение § 12.3 и § 12.4.
+**Callback data:** только ID (`exp_edit:{id}`, `change_cat:{id}`). Никогда сырой текст. Лимит 64 байта соблюдён.
 
-**Фикс:** строка `await message.delete()` удалена. Сообщение пользователя остаётся в чате.
+**Отклонено:**
+- Использовать `eval()` — уязвимость
+- FSM для редактирования — избыточно, callback data + существующий edit_exp
+- Хендлер-тесты — code reuse >80%, неоправданно сложны
 
-**Файлы:** `src/bot/handlers/history.py`, `src/bot/handlers/evening_flow.py`
-**329 тестов проходят, 0 новых ruff-ошибок.**
+**Файлы:**
+- `src/utils/helpers.py` — `_MathParser`, `_eval_math`, `_parse_math_prefix`, `_split_math_prefix`, `_preprocess_math`, unary plus/minus
+- `src/services/expense_service.py` — `ExpenseParseReport`, `MultiExpenseParseResult`, `_detect_math_error`, `_fallback_first_number`, `parse_expense_text`, `parse_multi_expense_text`
+- `src/utils/phrases.py` — `ERR_MATH_ERROR`, `ERR_MATH_CORRECTED`, `BTN_FIX_AMOUNT`
+- `src/bot/handlers/menu.py` — обновлены `_save_expenses_from_parsed_list`, `process_expense`, `handle_text`, `_build_expense_check_kb`
+- `src/bot/handlers/evening_flow.py` — обновлён `handle_evening_expense`
+- `tests/test_expense_parser.py` — 63 теста (переписаны под новые типы)
+
+**Аудит безопасности:**
+- RecursionError на >950 скобок → ловится, MATH_ERROR
+- Деление на ноль → ловится, MATH_ERROR
+- Unicode минус `−` → не оператор, regex fallback (pres-existing)
+- Научная нотация `1e5` → пре-экзистинг, не поддерживается
+- ReDoS на regex `[+\-*/]+$` — проверено (10000× за 4ms)
+- Overflow (inf/nan/1e12) → `math.isfinite` + границы в parse_amount
+- Двойные `++`, `+-`, `-+` → preprocess чинит. `--` → корректная математика
+
+**337 тестов проходят, 0 новых ruff-ошибок.**
 
