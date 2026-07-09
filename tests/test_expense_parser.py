@@ -138,6 +138,12 @@ class TestParseExpenseText:
         assert result.amount == 2.0
         assert result.was_corrected
 
+    def test_math_stray_paren_with_continuation(self):
+        result = parse_expense_text("7+2)-20")
+        assert not result.is_valid
+        assert result.error_type == "MATH_ERROR"
+        assert "отрицательная" in result.error_detail
+
     def test_math_trailing_op_corrected(self):
         result = parse_expense_text("500+300+ кофе")
         assert result.is_valid

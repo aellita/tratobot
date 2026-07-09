@@ -104,29 +104,32 @@ def parse_expense_text(text: str, line_number: int = 0) -> ExpenseParseReport:
     if math_result is not None:
         total, rest = math_result
         if total > 0:
-            raw_rest = rest
-            rest = re.sub(r'\s*[+\-*/()]+\s*', ' ', rest).strip()
-            was_corrected = rest != raw_rest.strip()
+            if not re.search(r"[+\-*/]\s*\d", rest):
+                raw_rest = rest
+                rest = re.sub(r'\s*[+\-*/()]+\s*', ' ', rest).strip()
+                was_corrected = rest != raw_rest.strip()
+                return ExpenseParseReport(
+                    amount=total,
+                    description=clean_description(rest),
+                    is_valid=True,
+                    raw_text=text,
+                    line_number=line_number,
+                    was_corrected=was_corrected,
+                    correction_hint="убрал лишний знак" if was_corrected else None,
+                )
+            has_math = True
+        else:
+            err_detail = (
+                "выражение дало 0₽ — нулевая сумма"
+                if total == 0
+                else f"выражение дало {total:,.0f}₽ — отрицательная сумма"
+            )
             return ExpenseParseReport(
-                amount=total,
-                description=clean_description(rest),
-                is_valid=True,
                 raw_text=text,
                 line_number=line_number,
-                was_corrected=was_corrected,
-                correction_hint="убрал лишний знак" if was_corrected else None,
+                error_type="MATH_ERROR",
+                error_detail=err_detail,
             )
-        err_detail = (
-            "выражение дало 0₽ — нулевая сумма"
-            if total == 0
-            else f"выражение дало {total:,.0f}₽ — отрицательная сумма"
-        )
-        return ExpenseParseReport(
-            raw_text=text,
-            line_number=line_number,
-            error_type="MATH_ERROR",
-            error_detail=err_detail,
-        )
 
     if has_math:
         fixed, was_corrected, hint = _preprocess_math(text)
@@ -144,6 +147,17 @@ def parse_expense_text(text: str, line_number: int = 0) -> ExpenseParseReport:
                         was_corrected=True,
                         correction_hint=hint,
                     )
+                err_detail = (
+                    "выражение дало 0₽ — нулевая сумма"
+                    if total == 0
+                    else f"выражение дало {total:,.0f}₽ — отрицательная сумма"
+                )
+                return ExpenseParseReport(
+                    raw_text=text,
+                    line_number=line_number,
+                    error_type="MATH_ERROR",
+                    error_detail=err_detail,
+                )
             fallback = _fallback_first_number(fixed)
             if fallback is not None:
                 fallback.line_number = line_number
