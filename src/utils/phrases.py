@@ -79,6 +79,17 @@ ERR_PARSE_EXPENSE = "❌ Не понял сумму. Напиши числом, 
 ERR_EMPTY_EXPENSE = "❓ Напиши трату текстом, например: «500 такси»"
 ERR_MATH_ERROR = "❌ Не могу разобрать формулу: <code>{detail}</code>\n\nПопробуй написать проще, например: <code>300 + 200 кофе</code>"
 ERR_MATH_CORRECTED = "⚠️ Я поправил формулу: {hint}"
+ERR_NEGATIVE_RESULT = "выражение дало {total:,.0f}₽ — отрицательная сумма"
+ERR_ZERO_RESULT = "выражение дало 0₽ — нулевая сумма"
+ERR_DIV_BY_ZERO = "деление на ноль"
+ERR_MISSING_NUMBER = "не хватает числа после знака"
+ERR_CANNOT_PARSE = "не могу разобрать формулу"
+
+HINT_TRAILING_OP = "убрал лишний знак в конце"
+HINT_CLOSED_PAREN = "закрыл скобку за тебя"
+HINT_REMOVED_PAREN = "убрал лишнюю скобку"
+HINT_DOUBLE_OPS = "поправил двойные знаки"
+HINT_JUNK_CHARS = "убрал лишний знак"
 ERR_WISHLIST_EMPTY = "❌ В Хотелке пока пусто. Попробуй другой вариант."
 
 # ── Success / Info messages ────────────────────────────────

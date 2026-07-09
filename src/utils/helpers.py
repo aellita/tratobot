@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 
 import emoji
 
+from . import phrases
+
 MAX_RETRIES = 3
 MSK_TZ = ZoneInfo("Europe/Moscow")
 
@@ -155,21 +157,21 @@ def _preprocess_math(text: str) -> tuple[str, bool, str | None]:
     trailing_ops = re.search(r"[+\-*/]+$", fixed_math.rstrip())
     if trailing_ops:
         fixed_math = fixed_math[: trailing_ops.start()].rstrip()
-        hint = "убрал лишний знак в конце"
+        hint = phrases.HINT_TRAILING_OP
 
     # 2. Balance parentheses
     opens = fixed_math.count("(")
     closes = fixed_math.count(")")
     if opens > closes:
         fixed_math += ")" * (opens - closes)
-        hint = "закрыл скобку за тебя"
+        hint = phrases.HINT_CLOSED_PAREN
     elif closes > opens:
         extra = closes - opens
         for _ in range(extra):
             idx = fixed_math.rfind(")")
             if idx >= 0:
                 fixed_math = fixed_math[:idx] + fixed_math[idx + 1:]
-                hint = "убрал лишнюю скобку"
+                hint = phrases.HINT_REMOVED_PAREN
 
     # 3. Collapse double operators (++ → +, +- → -, -+ → -)
     cleaned_ops = re.sub(r"\+\+", "+", fixed_math)
@@ -177,7 +179,7 @@ def _preprocess_math(text: str) -> tuple[str, bool, str | None]:
     cleaned_ops = re.sub(r"-\+", "-", cleaned_ops)
     if cleaned_ops != fixed_math:
         fixed_math = cleaned_ops
-        hint = "поправил двойные знаки"
+        hint = phrases.HINT_DOUBLE_OPS
 
     fixed = fixed_math + desc_part
     if fixed == text:

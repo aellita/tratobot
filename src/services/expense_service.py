@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Expense, UserSettings
+from ..utils import phrases
 from ..utils.helpers import _parse_math_prefix, _preprocess_math, _split_math_prefix, get_msk_now
 
 PAGE_SIZE = 5
@@ -34,11 +35,11 @@ class MultiExpenseParseResult:
 
 def _detect_math_error(text: str) -> str:
     if re.search(r"/\s*0(?:\D|$)", text):
-        return "деление на ноль"
+        return phrases.ERR_DIV_BY_ZERO
     parts = _split_math_prefix(text)
     if parts and re.search(r"[+\-*/]+\s*$", parts[0]):
-        return "не хватает числа после знака"
-    return "не могу разобрать формулу"
+        return phrases.ERR_MISSING_NUMBER
+    return phrases.ERR_CANNOT_PARSE
 
 
 def compute_rounding(amount: float, mode: int) -> tuple[float, float]:
@@ -115,14 +116,14 @@ def parse_expense_text(text: str, line_number: int = 0) -> ExpenseParseReport:
                     raw_text=text,
                     line_number=line_number,
                     was_corrected=was_corrected,
-                    correction_hint="убрал лишний знак" if was_corrected else None,
+                    correction_hint=phrases.HINT_JUNK_CHARS if was_corrected else None,
                 )
             has_math = True
         else:
             err_detail = (
-                "выражение дало 0₽ — нулевая сумма"
+                phrases.ERR_ZERO_RESULT
                 if total == 0
-                else f"выражение дало {total:,.0f}₽ — отрицательная сумма"
+                else phrases.ERR_NEGATIVE_RESULT.format(total=total)
             )
             return ExpenseParseReport(
                 raw_text=text,
@@ -148,9 +149,9 @@ def parse_expense_text(text: str, line_number: int = 0) -> ExpenseParseReport:
                         correction_hint=hint,
                     )
                 err_detail = (
-                    "выражение дало 0₽ — нулевая сумма"
+                    phrases.ERR_ZERO_RESULT
                     if total == 0
-                    else f"выражение дало {total:,.0f}₽ — отрицательная сумма"
+                    else phrases.ERR_NEGATIVE_RESULT.format(total=total)
                 )
                 return ExpenseParseReport(
                     raw_text=text,
