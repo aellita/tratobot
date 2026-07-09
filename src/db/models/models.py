@@ -89,9 +89,10 @@ class Budget(Base):
     def daily_limit(self) -> float:
         if self.free_money > 0:
             available = self.free_money
+            total = max(self.days_remaining, 1)
         else:
             available = self.total_income - self.mandatory_payments - self.black_day_fund
-        total = max(self._period_total_days, 1)
+            total = max(self._period_total_days, 1)
         return max(available / total, 0)
 
 

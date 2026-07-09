@@ -66,8 +66,7 @@ async def _get_daily_limit_label(telegram_id: int) -> str | None:
 
 def get_settings_keyboard():
     buttons = [
-        [InlineKeyboardButton(text=phrases.BTN_UPDATE_INCOME, callback_data="edit_income")],
-        [InlineKeyboardButton(text=phrases.BTN_ADD_INCOME, callback_data="add_income")],
+        [InlineKeyboardButton(text=phrases.BTN_CHANGE_BUDGET, callback_data="change_budget")],
         [InlineKeyboardButton(text=phrases.BTN_MANDATORY, callback_data="edit_mandatory")],
         [InlineKeyboardButton(text=phrases.BTN_SAVINGS, callback_data="edit_black_day")],
         [InlineKeyboardButton(text=phrases.BTN_WISHLIST, callback_data="edit_wishlist")],
@@ -78,6 +77,22 @@ def get_settings_keyboard():
     if not settings.EXPENSE_SIMPLE_CHECK:
         buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_change_budget_choice_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_CHANGE_BUDGET_ADD, callback_data="change_budget_add"
+                ),
+                InlineKeyboardButton(
+                    text=phrases.BTN_CHANGE_BUDGET_RECALC, callback_data="change_budget_recalc"
+                ),
+            ],
+            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")],
+        ]
+    )
 
 
 def get_period_start_keyboard():

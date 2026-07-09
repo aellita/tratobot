@@ -1,338 +1,150 @@
-# progress.md — Журнал сессий и решений
+# progress.md — Архитектура и ключевые решения
 
-> Сюда записываются ключевые решения, отклонённые подходы, открытые вопросы и заметки, влияющие на разработку. Не дублирует PRD и README.
-
----
-
-## Когда писать
-
-- ✅ Принято архитектурное решение (почему выбрали X, а не Y)
-- ❌ Попробовали подход, но отказались (почему не подошёл)
-- ❓ Открытый вопрос, который нужно решить в будущем
-- 🧠 Инсайт или наблюдение, важное для следующих сессий
-- 📌 Договорённость с пользователем о нейминге, стиле, подходах
+> Не хронология commit'ов, а каркас системы и почему код именно такой.
 
 ---
 
-## Формат записи
+## Текущий статус и фокус
 
+**Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг, округление, математические выражения в тратах.  
+**Активно:** —  
+**Ближайшее:** —
+
+---
+
+## Decision Log (ADR)
+
+### UX-рефакторинг бюджета: замена Critical Reset на «Пересчитать лимит» (2026-07-10)
+**Проблема:** пользователь запуталась между «Добавить доход», «Обновить доход» и «Начать с чистого листа». Первые два распределяли сумму на ВСЕ дни периода, третий (Critical Reset) — на оставшиеся, но был спрятан за 3 зонами и назывался устрашающе. Плюс баг: `daily_limit` в модели делил `free_money` на `_period_total_days`, а не на `days_remaining`.
+
+**Что сделано:**
+1. **Settings:** две кнопки схлопнуты в одну «Изменить бюджет» → выбор: «Дополнительный доход» (add_income) или «Остаток на карте» (recalc).
+2. **Morning Report:** кнопки «🚀 Начать с чистого листа» / «🔄 С чистого листа» → «🔄 Пересчитать лимит». Без зон — сразу запрос суммы → применение.
+3. **Статус:** все кнопки пересчёта убраны. Оставлены только кнопки «Использовать Кубышку».
+4. **Баг `daily_limit`:** при `free_money > 0` теперь делит на `max(self.days_remaining, 1)`, а не на `_period_total_days`.
+5. **Удалены:** `CriticalReset`, `FreshStart` (FSM-классы и хендлеры), 3-зонная логика, `FRESH_START_PROMPT/GREEN/YELLOW/RED`, `CANCEL_CRITICAL_RESET/FRESH_START`.
+
+**Почему:** пользовательский сценарий «вот сколько денег на карте, пересчитай на оставшиеся дни» — основной. 3-зонный ре-онбординг (FreshStart) был избыточен и пугал. Единый flow без ветвления проще и предсказуемее.
+
+## Архитектура
+
+### Стек
+- **Python 3.11+**, **Aiogram 3.x**, **SQLAlchemy 2.x** (async), **SQLite** (dev) / **PostgreSQL** (prod)
+- **Middleware:** `AutoCleanKeyboard` (трекинг клавиатур), `RateLimit`, `DuplicateMiddleware`
+- **Tests:** pytest + in-memory SQLite + monkeypatch `async_session_maker`
+
+### Карта проекта
 ```
-### YYYY-MM-DD — краткая тема сессии
-
-- **Решение:** ... (почему)
-- **Отклонено:** ... (причина)
-- **Открыто:** ...
-- **Заметки:** ...
-```
-
----
-
-## Записи
-
-### 2026-06-03 — Security audit + foundation
-- **Решение:** Созданы PRD/RULES/progress/README. Стиль — ироничный напарник. SQLAlchemy оставлена. Railway как хостинг.
-- **Аудит безопасности:** 19 уязвимостей (3H, 9M, 7L) — все закрыты. Ключевое: `.env` удалён, `parse_amount()` с валидацией, миграции с allow-list, RateLimitMiddleware, `safe(html.escape())`, автовыход из FSM после 3 ошибок, лимиты длины (500/255).
-- **Создано:** `src/utils/helpers.py`, `src/bot/middleware.py`
-- **🧠 Важно:** `--unsafe-fixes` для E712 нельзя применять к коду с SQLAlchemy (ломает `is_deleted == False`).
-
-### 2026-06-03/04 — Тесты (Очереди 1-3)
-- 133 теста чистых функций (Очередь 1) + 59 с моками БД (Очередь 2) + 77 FSM/integration (Очередь 3). Итого ~269 тестов.
-- BigTech Standard закреплён в RULES.md (9 категорий сценариев).
-- `conftest.py` с in-memory SQLite, фикстурами, monkeypatch `async_session_maker`.
-- Пре-коммит + CI (GitHub Actions) — ruff (lint+format), mypy, pytest.
-
-### 2026-06-04 — Queue 4: phrases.py + datetime bugfix
-- Все строки вынесены в `src/utils/phrases.py` (~180 замен в 8 файлах).
-- Production: PostgreSQL не принимал offset-aware datetime → naive UTC (`_utcnow()`).
-
-### 2026-06-09 — Queue 5: Bugfixes + статус-редизайн
-- Хотелка читала `wishlist_target` вместо `Wishlist.current_amount` — исправлено.
-- menu_daily не находил бюджет при переходе месяца — переведён на `get_active_budget()`.
-- Статус → минималистичный формат. Кнопка «📊 Статус» → «💰 Дневной лимит: X₽».
-- E501: 135 → 27.
-
-### 2026-06-04 — Feature ideas из RTF
-- Добавлены в PRD.md: стиль «Бро-Дуо», AI-интеграция, геймификация, маскот, режим путешествия, общие бюджеты и др.
-
-### 2026-06-10 — Queue 6: Контекстный скоринг омонимов
-- Stage 1 собирает все совпадения → AVG(amount) последних 10 трат → min(|amount - avg|).
-- Автокоррект описаний через difflib (cutoff 0.85) до записи в БД.
-- 22 новых теста. Итого 292 теста.
-
-### 2026-06-11 — Queue 7: Управление категориями (Б1 + CRUD)
-- Б1: `seed_user_categories()` → `get_user_categories()` в пикере.
-- Сидирование вынесено в `/start`. CRUD: `category_service.py` + `categories.py`.
-- `is_archived`, сортировка по id, проверка дубликатов.
-
-### 2026-06-11 — Queue 8: Детект дубликатов трат (Б2)
-- `DuplicateMiddleware`: in-memory кэш (15s окно), 3 эскалации (success → warn → silence).
-- Защита от Telegram-ретраев по `message_id`. Фоновая очистка раз в сутки.
-
-### 2026-06-13 — Queue 9: Emoji-детекция
-- Библиотека `emoji`, `_extract_emoji()` в helpers.py, fallback `🏷️`. 33 теста. Итого 325.
-
-### 2026-06-15 — Queue 10: Дубль эмодзи в категориях
-- `get_category_display()` везде вместо `cat.name`. Инлайн-кнопки 2/ряд вместо пагинации. Итого 327.
-
-### 2026-06-15 — Queue 11: B3 — Округление вычитается из лимита
-- `compute_rounding()`: `effective = ceil(amount/mode)*mode`, разница в хотелку. `try_apply_round_up` удалён. Итого 329.
-
-### 2026-06-15 — Queue 12: B4 — Переформулировка overdraft
-- Хотелка → «Остаток периода — N дн.». Добавлены F1-F3, UX2-UX3 в бэклог.
-
-### 2026-06-15 — Queue 13: B5 — Silent drop при офлайн-очереди
-- Убран тихий rate-limit (0.7s между сообщениями), оставлен burst (5/3с).
-
-### 2026-06-19 — Queue 14: Morning report recovery
-- Таблица `daily_reports_log`, startup check (05-12 МСК), misfire_grace_time=4ч.
-
-### 2026-06-19 — Queue 15: Удаление категории с выбором целевой
-- Инлайн-пикер активных категорий вместо авто-переноса в «Прочее».
-
-### 2026-06-19 — Queue 16: Soft Correction + чистые чеки (Phase 1)
-- FSM не сбрасывается при ошибках категории. `EXPENSE_SIMPLE_CHECK=True` — только кнопка смены категории в чеке.
-
-### 2026-06-19 — Queue 17: Phase 2 — ReplyKeyboard
-- Постоянное меню внизу: Добавить трату, Дневной лимит, Статистика, Настройки, Помощь.
-
-### 2026-06-21 — Queue 18: Inline-меню отключено при SIMPLE_CHECK
-- `get_main_menu_keyboard()` → None. Убраны «👇». Только ReplyKeyboard. 330 тестов.
-
-### 2026-06-23 — Queue 19: Monthly Summary
-- Ежемесячный отчёт с тотемами (6 персонажей + Чебурашка), моноширинной таблицей, навигацией по месяцам. Вместо утреннего отчёта в день после period_start_day. 329 тестов.
-
-### 2026-07-02 — UX1: Убрано «Вернулись, Aelita!»
-- `BACK_NAV` → `\u200b` (zero-width space). Т-Банк минимализм.
-
-### 2026-07-02 — UX1.5: Удалены inline-кнопки «В меню» при SIMPLE_CHECK
-- Убраны все inline-кнопки, ведущие в меню, во всех хендлерах. Контекстная навигация сохранена.
-- Починено: `back_from_category_change` и `category_back_to_list` не чистили FSM.
-
----
-
-### 2026-07-05 — UX4 Audit: 4 бага закрыто
-
-**Контекст:** Проведён аудит всех message-переходов (что удаляется/остаётся/перезаписывается). Найдено 8 багов — задокументированы в `bugs_ux4.md`. Закрыто 4.
-
-**Bug #1: Дубликат кода process_expense / handle_text (HIGH)**
-- **Решение:** Вынесен общий `_save_expenses_from_parsed_list()`. Каждый хендлер — ~20 строк.
-
-**Bug #3: menu_help не чистит FSM (MEDIUM)**
-- **Решение:** Добавлен `await state.clear()`.
-
-**Bug #4: menu_settings не чистит FSM (MEDIUM)**
-- **Решение:** Добавлен `await state.clear()`.
-
-**Bug #6: Orphaned-клавиатура после save_new_category (LOW)**
-- **Решение:** `_track_keyboard()` в промпте → `_cleanup_keyboard()` при успехе.
-
-**Новый файл:** `bugs_ux4.md` — трекер всех найденных UX4-багов (4 open: #2, #5, #7, #8).
-
-**329 тестов проходят, 0 новых ruff-ошибок.**
-
----
-
-### 2026-07-05 — Bug #2 fix: Единая система отслеживания клавиатур (AutoCleanKeyboardMiddleware)
-
-**Проблема:** Две независимые системы — `_track_keyboard`/`_cleanup_keyboard` (TTLCache) и `_save_msg_id`/`_cleanup_old_buttons` (FSM-context) — не координировались → `TelegramBadRequest` при edit удалённого сообщения.
-
-**Решение:** Создан middleware `AutoCleanKeyboardMiddleware` (`src/bot/middleware.py`):
-- Перехватывает все `message.answer()`, `message.edit_text()`, `message.edit_caption()` на `MenuRouter`
-- Автоматически трекает `message_id` каждого сообщения с `reply_markup`
-- При следующей отправке с новой клавиатурой — редактирует предыдущее: `reply_markup=None`
-- TTLCache: `maxsize=512`, `ttl=600` (10 мин)
-
-**Онбординг переведён на общую систему:**
-- Удалены `_save_msg_id()` / `_cleanup_old_buttons()` из `menu.py`
-- Удалена передача `msg_id` через FSM-контекст в `_finish_onboarding`
-- `_build_status()` — убран ручной `_track_keyboard` / `_cleanup_keyboard`
-
-**Файлы:**
-- `src/bot/middleware.py` — новый класс `AutoCleanKeyboardMiddleware`
-- `src/bot/handlers/menu.py` — удалены 2 функции + 6 вызовов
-
-**bugs_ux4.md:** Bug #2 закрыт. Статус: 6/8 закрыто.
-
-**329 тестов проходят, 0 новых ruff-ошибок.**
-
----
-
-### 2026-07-05 — Bug #5 fix: cancel edit_text вместо delete для reset-состояний
-
-**Проблема:** `cancel` делал `message.delete()` для CriticalReset/FreshStart и `edit_text()` для всех остальных — несогласованный UX + `_last_keyboard` хранил ID удалённого → `TelegramBadRequest`.
-
-**Решение:**
-- Заменён `delete()` на `edit_text()` с контекстной фразой:
-  - CriticalReset → `CANCEL_CRITICAL_RESET = "❌ Сброс отменен. Данные не были удалены.\n\nГлавное меню:"`
-  - FreshStart → `CANCEL_FRESH_START = "❌ Настройка заново отменена. Продолжаем работу с текущими лимитами.\n\nГлавное меню:"`
-- Под SIMPLE_CHECK — отправка ReplyKeyboard
-- `edit_text()` проходит через `AutoTrackOutgoingMiddleware` → `_last_keyboard` обновляется, `TelegramBadRequest` устранён
-
-**Файлы:** `src/bot/handlers/menu.py`, `src/utils/phrases.py`
-**bugs_ux4.md:** Bug #5 закрыт. Статус: 7/8 закрыто.
-**329 тестов проходят, 0 новых ruff-ошибок.**
-
----
-
-### 2026-07-05 — Bug #7 fix: вечерний flow — фидбек + emoji + FSM-проверка
-
-**7а — Фидбек пользователю (evening_flow.py):**
-- После ввода траты: `detect_category_db()` → `message.answer("✅ {emoji}{amount}₽ — {desc} записано!")`, auto-clean middleware-ом
-- Ошибки (пустой/нераспарсенный ввод): `message.answer()` без `asyncio.sleep/temp.delete` — middleware чистит на следующем шаге
-- Убран `import asyncio`
-- Сохранение расходов с `category_id` (раньше было без категории)
-
-**7б — FSM-проверка (evening_report.py):**
-- `send_evening_teaser` (22:00): проверка `current_state is not None` → если пользователь в любом другом FSM — `continue` (тихо пропускаем)
-- `send_auto_close_reports` (23:30):
-  - `EveningState.filling` → обычный авто-отчёт
-  - Любой другой FSM → `state.clear()` + `phrases.EVENING_TIMEOUT` + отчёт
-
-**Файлы:** `src/bot/handlers/evening_flow.py`, `src/services/evening_report.py`, `src/utils/phrases.py`
-**bugs_ux4.md:** Bug #7 закрыт. Статус: 8/8 закрыто.
-
----
-
-### 2026-07-05 — Bug #8 fix: response_text в dup_middleware.record()
-
-**Проблема:** `dup_middleware.record()` всегда вызывался с `response_text=""`, из-за чего проверка `last.get("response_text")` в `DuplicateMiddleware.__call__()` никогда не срабатывала — Telegram-ретраи по `message_id` не отбивались, трата повторно обрабатывалась.
-
-**Решение:**
-- `_save_expenses_from_parsed_list()` (menu.py): `EXPENSE_SAVED_LINE` строится до `record()` и передаётся как `response_text`
-- `handle_duplicate_confirm()` (menu.py): `DUP_CONFIRMED` строится до `record()` и передаётся как `response_text`
-
-**Файлы:** `src/bot/handlers/menu.py`, `src/bot/middleware.py`
-**329 тестов проходят, 0 новых ruff-ошибок.**
-
----
-
-### 2026-07-05 — UX2: отчёты не удалять + список трат в teaser'е
-
-**Проблема:** У отчётов не было единой политики жизни сообщений в чате. Teaser (22:00) — только клавиатура убиралась, текст оставался. Кнопки «В меню» на отчётах делали `edit_text()`, заменяя отчёт меню.
-
-**Решение (4 изменения):**
-1. **Новый хендлер `report_back`** (`menu.py`): отправляет меню новым сообщением, не трогая отчёт.
-2. **Утро (08:00):** кнопка «В меню» → `report_back`. Отчёт остаётся в чате.
-3. **Teaser (22:00):** в текст добавлен блок расходов за today под цитатой (`> Сегодня, 5 июля:\n> ☕ Кофе — 450₽`). Новая функция `get_today_expenses_grouped()`.
-4. **Автозакрытие (23:30):** teaser целиком удаляется; кнопка «В меню» → `report_back`.
-
-**Файлы:** `src/bot/handlers/menu.py`, `src/services/evening_report.py`, `src/services/morning_report.py`, `src/services/expense_service.py`
-**329 тестов проходят, 0 новых ruff-ошибок.**
-
----
-
-### 2026-07-05 — UX3: Список трат за сегодня в статусе
-
-**Проблема:** В статусе показывалась только общая сумма `spent_today`, без разбивки по отдельным тратам.
-
-**Решение:**
-- В `_build_status()` добавлен вызов `get_today_expenses_grouped(tg_id)`
-- Если есть траты за сегодня — выводятся построчно после строки итога (`Свободно X₽ · Потрачено Y₽`)
-- При пустом списке — поведение не меняется
-
-**Пример:**
-```
-<b>Сегодня</b>
-Свободно 1 200 ₽ · Потрачено 800 ₽
-☕ Кофе — 300₽
-🍔 Еда — 500₽
+src/
+├── bot/
+│   ├── handlers/       # menu.py, evening_flow.py, history.py, categories.py ...
+│   ├── middleware.py    # AutoCleanKeyboard, RateLimit, Duplicates
+│   └── rich_api.py     # Rich-отправка через raw HTTP (для Monthly Summary, Morning)
+├── services/
+│   ├── expense_service.py  # Парсинг, CRUD трат, parse_expense_text()
+│   ├── categorization.py   # Детект категорий по описанию
+│   ├── evening_report.py   # Вечерний flow
+│   └── morning_report.py   # Утренний отчёт
+├── db/
+│   └── models/         # Expense, Budget, Category, Wishlist, etc.
+└── utils/
+    ├── helpers.py       # _MathParser, _preprocess_math, parse_amount, _extract_emoji
+    └── phrases.py       # Все строки пользовательского UI
 ```
 
-**Файлы:** `src/bot/handlers/menu.py`
-**329 тестов проходят, 0 новых ruff-ошибок.**
+### Ключевые сущности
+- **Expense**: amount, description, category_id, date, is_deleted
+- **ExpenseParseReport**: is_valid, amount, description, was_corrected, correction_hint, error_type, error_detail (не ORM, датакласс)
+- **MultiExpenseParseResult**: reports: list[ExpenseParseReport], is_fully_valid
+- **Category**: name, emoji, telegram_id, is_archived
+- **DuplicateMiddleware**: in-memory кэш (15s окно), 3 escalation (success → warn → silence)
 
 ---
 
-### 2026-07-06 — UX4: Message Lifecycle Policy («Конституция интерфейса»)
+## Decision Log (ADR)
 
-**Проблема:** Не было единой политики — что удаляется, что остаётся, что перезаписывается. Каждый хендлер решал сам.
+### Математические выражения в тратах (2026-07-08)
+**Что сделано:** кастомный рекурсивный парсер `_MathParser` в `helpers.py`, который разбирает `500+300 такси` → сумма 800, описание «такси». Без `eval()`.
 
-**Решение:**
-- Проведён полный аудит всех message-переходов (11 файлов, ~170+ вызовов answer/edit_text/delete)
-- Найдены системные проблемы: Rich API bypass middleware, stale `_last_keyboard` после delete, нет письменной политики
-- Разработан и утверждён раздел 12 в RULES.md — Message Lifecycle Policy
+**Почему не eval:**
+`eval("500+300")` — встроенная Python-функция, выполняющая строку как код. Если пользователь напишет `__import__('os').system('rm -rf /')+500`, eval выполнит это. Наш парсер видит только числа и операторы — всё остальное вызывает `_MathParseError`. Безопасность на уровне дизайна, не костыля.
 
-**Ключевые решения:**
-- Callback → только `edit_text()`, никогда `delete()`
-- User message → только `answer()`, не редактировать и не удалять
-- Teaser (22:00) — единственное исключение на delete, с обязательным `_last_keyboard.pop()`
-- Rich API обязан трекать `message_id` в `_last_keyboard` вручную
-- Баги UX4 закрыты: все 8 — в соответствии с политикой
+**Архитектура парсера (recursive descent):**
+```
+parse_expr → parse_term → parse_factor
+```
+- `parse_expr` обрабатывает `+`/`-` (низший приоритет)
+- `parse_term` обрабатывает `*`/`/` (средний приоритет)  
+- `parse_factor` обрабатывает числа, скобки, унарный `+`/`-` (высший приоритет)
+- Токены: NUMBER / PLUS / MINUS / MUL / DIV / LPAREN / RPAREN / EOF
 
-**Файлы:** `RULES.md`, `README.md`, `progress.md`
-**329 тестов проходят, 0 новых ruff-ошибок.**
+**Два режима:**
+- `_eval_math(text)` — полный разбор, всё строка — математика. Используется в `parse_amount()` (онбординг, редактирование бюджета).
+- `_parse_math_prefix(text)` — разбор до первого не-математического символа, возвращает `(total, rest)`. Rest идёт в описание. Используется в `parse_expense_text()`.
+
+**Авто-коррекция (`_preprocess_math`):** три правила, применяются последовательно:
+1. Хвостовой оператор → `500+300+` → `500+300`
+2. Баланс скобок → `(500+300` → `(500+300)`, `500+300)` → `500+300`
+3. Двойные знаки → `500++300` → `500+300`, `500+-300` → `500-300`
+
+**Edge cases (все закрыты):**
+- Скобки: `(500+300)*2`, `(500+300)`, `1+1)`, `7+2)-20`
+- Унарный +/–: `-5`, `+5`, `5+-3`, `5*-3`
+- Научная нотация: `1e5+2e5`, `5e-3`, `2E5`
+- Ноль из math: `5-5` → «нулевая сумма», `(7+2)-20` → «отрицательная сумма»
+- RecursionError на >950 скобок → MATH_ERROR
+
+**Объём:** ~300 строк ядра (токенизатор + парсер + препроцессор + валидация) + ~120 строк изменений в хендлерах + ~50 строк новых тестов.
+
+### BigTech-паттерны ошибок
+- **Pattern 2 (MATH_ERROR):** блок траты, `<code>` для копирования, 3 retry → clear state. Для: деление на ноль, отрицательная/нулевая сумма, неисправимая каша
+- **Pattern 1 (was_corrected):** авто-коррекция (скобки, хвостовые операторы, двойные знаки), трата сохраняется, предупреждение + кнопка «✏️ Исправить» (через `exp_edit:{id}`, DRY). Для: лишняя скобка, хвостовой `+`, двойные знаки
+
+### Callback data — только ID
+- **Почему:** Telegram лимит 64 байта, защита от инъекций
+- **Формат:** `exp_edit:{id}`, `change_cat:{id}`. Никогда сырой текст
+
+### Научная нотация (1e5) — добавлена в NUMBER regex
+- **Почему:** `1e5+1e5` до фикса давало 1.0 + мусор как описание (`e5+1e5`)
+- **Что:** `\d+(?:[.,]\d+)?(?:[eE][+-]?\d+)?` — в _TOKEN_SPEC и _fallback_first_number
+
+### Zero / negative из math — прямой error вместо fallback
+- **Почему:** `7+2)-20` → коррекция `7+2-20` → -11. Раньше выдёргивало первое число (7), теперь честно: «отрицательная сумма»
+
+### current_text_end — возвращает start, а не end
+- **Почему:** `1+1)` — RPAREN был включён в «съеденный» диапазон, скобка бесшумно исчезала. Фикс: `tokens[self.pos][2]` вместо `[3]`
+
+### Message Lifecycle Policy («Конституция интерфейса»)
+- **Callback:** только `edit_text()`, никогда `delete()`
+- **User message:** только `answer()`, не редактировать и не удалять
+- **Teaser (22:00):** единственное исключение на delete, с `_last_keyboard.pop()`
+- **Rich API:** ручной трекинг `message_id` в `_last_keyboard` (обходит middleware)
+
+### AutoCleanKeyboardMiddleware вместо двух систем
+- **Почему:** `_track_keyboard` (TTLCache) и `_save_msg_id` (FSM) не координировались → `TelegramBadRequest` на edit удалённого
+- **Решение:** единый middleware, перехватывает `message.answer()`/`edit_text()` на MenuRouter, чистит предыдущую клавиатуру
+
+### Единый _save_expenses_from_parsed_list
+- **Почему:** `process_expense` + `handle_text` дублировали ~90 строк
+- **Решение:** вынесено в сервис, каждый хендлер — ~20 строк
 
 ---
 
-### 2026-07-06 — Rich API: ручной трекинг `_last_keyboard` + fix delete
+## Правила и ограничения
 
-**Проблема:** `send_rich_message()`/`edit_rich_message()` шли raw HTTP, минуя `AutoTrackOutgoingMiddleware`. Клавиатуры Monthly Summary и Morning Report никогда не чистились.
-
-**Фикс:**
-- `rich_api.py`: импортирован `_last_keyboard`, добавлен ручной трекинг `message_id` после каждого успешного запроса с inline-клавиатурой
-- `monthly_summary.py:90-92`: `send_rich_message()` + `bot.delete_message()` → `edit_rich_message()` по callback-сообщению. Устранено нарушение п. 12.3 Конституции (delete на callback)
-- `morning_report.py:175`: `send_rich_message()` без reply_markup — безопасно, без изменений
-
-**Файлы:** `src/bot/rich_api.py`, `src/bot/handlers/monthly_summary.py`
-**329 тестов проходят, 0 новых ruff-ошибок.**
+- **Все UI-строки** — только в `src/utils/phrases.py`, никогда хардкод
+- **Тесты бизнес-логики** — обязательны. Покрытие: парсинг, helpers, категории, сервисы
+- **SQLAlchemy `== False`** — не менять на `not` (ruff E712); `--unsafe-fixes` ломает код
+- **Нет FSM для редактирования** — контекст в callback data (до 64 байт)
+- **Отрицательные суммы** — не сохраняются, возвращают `MATH_ERROR` с деталью
+- **Callback → delete запрещён** (Message Lifecycle Policy, п. 12.3 RULES.md)
 
 ---
 
-### 2026-07-06 — Teaser: `_last_keyboard.pop()` перед `bot.delete_message()` в автозакрытии
+## Известные проблемы и костыли
 
-**Проблема:** `send_auto_close_reports()` (23:30) удалял teaser-контейнер через `bot.delete_message()`, но его `message_id` оставался в `_last_keyboard`. Следующий `KeyboardCleanupMiddleware` пытался `edit_message_reply_markup` на удалённом → `TelegramBadRequest`.
-
-**Фикс:**
-- `evening_report.py`: перед `bot.delete_message(container_id)` — `_last_keyboard.pop(tg_id, None)`
-
-**Файлы:** `src/services/evening_report.py`
-**329 тестов проходят, 0 новых ruff-ошибок, ruff format clean.**
-
----
-
-### 2026-07-08 — Feature: Math expressions in expenses + UX error handling
-
-**Контекст:** Пользователь хочет писать `500+300 такси`, `(1000-200)*2` и т.д. в одной строке с описанием. Без `eval()`, с BigTech-паттернами ошибок.
-
-**Архитектура:**
-- Кастомный рекурсивный парсер `_MathParser` (helpers.py): recursive descent, токены NUMBER/PLUS/MINUS/MUL/DIV/LPAREN/RPAREN, унарный минус и плюс, PEMDAS, `_MathParseError` и `ZeroDivisionError`
-- `parse_amount()` → `_eval_math()` — полный разбор (без остатка)
-- `parse_expense_text()` → `_parse_math_prefix()` — разбор до первого не-математического символа → (total, rest)
-- `_preprocess_math()`: баланс скобок, удаление хвостовых операторов, схлопывание двойных знаков
-- Новые датаклассы: `ExpenseParseReport` (is_valid, amount, description, raw_text, etc.) и `MultiExpenseParseResult`
-
-**BigTech-паттерны (без FSM):**
-- **Pattern 2 (MATH_ERROR):** деление на ноль, непоправимая каша → блок траты, `ERR_MATH_ERROR` с `<code>`, retry count (3 → clear state)
-- **Pattern 1 упрощённый (was_corrected):** закрыта скобка, убран хвостовой оператор → трата сохраняется, предупреждение в чеке + кнопка «✏️ Исправить сумму»
-
-**Кнопка «✏️ Исправить сумму»:**
-- `_save_expenses_from_parsed_list` возвращает `corrected_ids: list[int]`
-- `_build_expense_check_kb` рендерит `exp_edit:{id}` для первого corrected
-- Переиспользует существующий `start_edit_expense` хендлер (history.py) — DRY
-
-**Callback data:** только ID (`exp_edit:{id}`, `change_cat:{id}`). Никогда сырой текст. Лимит 64 байта соблюдён.
-
-**Отклонено:**
-- Использовать `eval()` — уязвимость
-- FSM для редактирования — избыточно, callback data + существующий edit_exp
-- Хендлер-тесты — code reuse >80%, неоправданно сложны
-
-**Файлы:**
-- `src/utils/helpers.py` — `_MathParser`, `_eval_math`, `_parse_math_prefix`, `_split_math_prefix`, `_preprocess_math`, unary plus/minus
-- `src/services/expense_service.py` — `ExpenseParseReport`, `MultiExpenseParseResult`, `_detect_math_error`, `_fallback_first_number`, `parse_expense_text`, `parse_multi_expense_text`
-- `src/utils/phrases.py` — `ERR_MATH_ERROR`, `ERR_MATH_CORRECTED`, `BTN_FIX_AMOUNT`
-- `src/bot/handlers/menu.py` — обновлены `_save_expenses_from_parsed_list`, `process_expense`, `handle_text`, `_build_expense_check_kb`
-- `src/bot/handlers/evening_flow.py` — обновлён `handle_evening_expense`
-- `tests/test_expense_parser.py` — 63 теста (переписаны под новые типы)
-
-**Аудит безопасности:**
-- RecursionError на >950 скобок → ловится, MATH_ERROR
-- Деление на ноль → ловится, MATH_ERROR
-- Unicode минус `−` → не оператор, regex fallback (pres-existing)
-- Научная нотация `1e5` → пре-экзистинг, не поддерживается
-- ReDoS на regex `[+\-*/]+$` — проверено (10000× за 4ms)
-- Overflow (inf/nan/1e12) → `math.isfinite` + границы в parse_amount
-- Двойные `++`, `+-`, `-+` → preprocess чинит. `--` → корректная математика
-
-**337 тестов проходят, 0 новых ruff-ошибок.**
-
+- **Rich API (Monthly Summary, Morning):** идёт raw HTTP, минуя `AutoCleanKeyboardMiddleware`. Ручной трекинг в `_last_keyboard` — источник рассинхронизации
+- **Overflow в math-парсере:** `huge*big` может дать `inf`. `math.isfinite` есть только в `parse_amount()`; `parse_expense_text` не проверяет
+- **Парсинг multiline:** строки без цифр игнорируются, но атомарность только по MATH_ERROR (если хоть одна строка MATH_ERROR — не сохраняется ничего). Другие ошибки не блокируют
+- **`duplicate_middleware`:** защита по `message_id` работает, но 15s окно — эвристика; долгая ручная отправка одной и той же траты через >15s пройдёт как новый дубликат
+- **`_fallback_first_number` в corrected path:** вызывается, только если `_parse_math_prefix(fixed)` вернул None (нет math-токенов в corrected). Если есть числа, но нет операторов — вытаскивает первое число, что может не совпадать с ожиданием

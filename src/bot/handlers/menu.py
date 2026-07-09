@@ -44,6 +44,7 @@ from ...utils import phrases
 from ...utils.helpers import get_msk_now, parse_amount, safe
 from ..keyboards import (
     get_cancel_keyboard,
+    get_change_budget_choice_keyboard,
     get_duplicate_keyboard,
     get_main_menu_keyboard,
     get_main_reply_keyboard,
@@ -68,12 +69,12 @@ class BudgetSetup(StatesGroup):
 
 
 class EditBudget(StatesGroup):
-    waiting_for_income = State()
     waiting_for_add_income = State()
     waiting_for_period_start = State()
     waiting_for_mandatory = State()
     waiting_for_black_day = State()
     waiting_for_wishlist = State()
+    waiting_for_recalc_balance = State()
 
 
 class AddExpense(StatesGroup):
@@ -82,16 +83,6 @@ class AddExpense(StatesGroup):
 
 class CustomCategory(StatesGroup):
     waiting_for_name = State()
-
-
-class CriticalReset(StatesGroup):
-    waiting_for_real_balance = State()
-
-
-class FreshStart(StatesGroup):
-    waiting_for_mandatory = State()
-    waiting_for_black_day = State()
-    waiting_for_balance = State()
 
 
 async def get_user_or_none(telegram_id: int) -> User | None:
@@ -371,7 +362,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
                     "Последние метры, денег нет. Но мы доползём без кредитов!",
                 ]
             )
-            btns = "FRESH_START"
+            btns = "REGULAR"
         else:
             footer = random.choice(
                 [
@@ -429,11 +420,11 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             footer = random.choice(
                 [
                     "Пробили дно! Деньги кончились. Пора пересобрать бюджет.",
-                    "Дальше ехать некуда. Давай начнём с чистого листа?",
+                    "Дальше ехать некуда. Пора пересчитать лимит?",
                     "Математика не бьётся с картой. Пора обнулить месяц!",
                 ]
             )
-            btns = "FRESH_START"
+            btns = "REGULAR"
 
     kb = _build_status_keyboard(btns, tg_id)
     return text + "\n\n" + footer if footer else text, kb
@@ -443,16 +434,6 @@ def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
     if settings.EXPENSE_SIMPLE_CHECK:
         if btn_type == "REGULAR":
             return InlineKeyboardMarkup(inline_keyboard=[])
-        if btn_type == "FRESH_START":
-            return InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text=phrases.BTN_FRESH_START, callback_data="trigger_critical_reset"
-                        )
-                    ],
-                ]
-            )
         if btn_type in ("FROM_YELLOW_TO_GREEN", "FROM_YELLOW_TO_BLUE"):
             label = (
                 phrases.BTN_USE_SAVINGS_COMFORT
@@ -477,11 +458,6 @@ def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
                             callback_data="use_savings",
                         )
                     ],
-                    [
-                        InlineKeyboardButton(
-                            text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
-                        )
-                    ],
                 ]
             )
         return InlineKeyboardMarkup(inline_keyboard=[])
@@ -489,17 +465,6 @@ def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
     if btn_type == "REGULAR":
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-            ]
-        )
-    if btn_type == "FRESH_START":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_FRESH_START, callback_data="trigger_critical_reset"
-                    )
-                ],
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
             ]
         )
@@ -533,11 +498,6 @@ def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
                         text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings"
                     )
                 ],
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
-                    )
-                ],
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
             ]
         )
@@ -549,11 +509,6 @@ def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
                         text=phrases.BTN_EXIT_CRISIS_GREEN, callback_data="use_savings"
                     )
                 ],
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
-                    )
-                ],
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
             ]
         )
@@ -563,11 +518,6 @@ def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
                 [
                     InlineKeyboardButton(
                         text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
                     )
                 ],
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
@@ -1450,12 +1400,12 @@ async def handle_fix_overdraft(callback: CallbackQuery):
         )
 
 
-@router.callback_query(F.data == "trigger_critical_reset")
-async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data == "recalc_limit")
+async def recalc_limit(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    await state.set_state(CriticalReset.waiting_for_real_balance)
+    await state.set_state(EditBudget.waiting_for_recalc_balance)
     await callback.message.answer(
-        text=phrases.FRESH_START_PROMPT,
+        text=phrases.RECALC_LIMIT_PROMPT,
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
@@ -1464,8 +1414,40 @@ async def trigger_critical_reset(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@router.message(CriticalReset.waiting_for_real_balance)
-async def save_real_balance(message: Message, state: FSMContext):
+@router.callback_query(F.data == "change_budget")
+async def change_budget(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.edit_text(
+        text=phrases.CHANGE_BUDGET_CHOICE,
+        reply_markup=get_change_budget_choice_keyboard(),
+    )
+
+
+@router.callback_query(F.data == "change_budget_add")
+async def change_budget_add(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(EditBudget.waiting_for_add_income)
+    await callback.message.edit_text(
+        text=phrases.INCOME_ADD_PROMPT, reply_markup=get_cancel_keyboard()
+    )
+
+
+@router.callback_query(F.data == "change_budget_recalc")
+async def change_budget_recalc(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(EditBudget.waiting_for_recalc_balance)
+    await callback.message.edit_text(
+        text=phrases.RECALC_LIMIT_PROMPT,
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
+            ]
+        ),
+    )
+
+
+@router.message(EditBudget.waiting_for_recalc_balance)
+async def save_recalc_balance(message: Message, state: FSMContext):
     try:
         total_balance = parse_amount(message.text, allow_zero=True)
     except ValueError:
@@ -1476,181 +1458,15 @@ async def save_real_balance(message: Message, state: FSMContext):
     new_limit, days_left, money_for_life, mandatory, cubyshka = await reconcile_budget_with_reality(
         message.from_user.id, total_balance
     )
-
-    # 🟢 Зона 1: Всё ок (лимит > 500₽)
-    if new_limit > 500:
-        await apply_reconciliation(message.from_user.id, money_for_life)
-        cubyshka_note = phrases.CUBYSHKA_NOTE.format(amount=int(cubyshka)) if cubyshka > 0 else ""
-        await state.clear()
-        await message.answer(
-            text=phrases.FRESH_START_GREEN.format(
-                name=user_name,
-                limit=int(new_limit),
-                days=days_left,
-                money=int(money_for_life),
-                note=cubyshka_note,
-            ),
-            reply_markup=await get_main_menu_keyboard(message.from_user.id),
-        )
-        return
-
-    # 🟡 Зона 2: Турбо-экономия (лимит 100–500₽)
-    if new_limit >= 100:
-        await apply_reconciliation(message.from_user.id, money_for_life)
-        await state.clear()
-        yellow_buttons = [
-            [
-                InlineKeyboardButton(
-                    text=phrases.BTN_TAKE_FROM_SAVINGS, callback_data="edit_black_day"
-                )
-            ],
-        ]
-        if not settings.EXPENSE_SIMPLE_CHECK:
-            yellow_buttons.insert(
-                0,
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_ACCEPT_CHALLENGE, callback_data="menu_back"
-                    )
-                ],
-            )
-        await message.answer(
-            text=phrases.FRESH_START_YELLOW.format(
-                name=user_name,
-                cubyshka=int(cubyshka),
-                mandatory=int(mandatory),
-                money=int(money_for_life),
-                limit=int(new_limit),
-            ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=yellow_buttons),
-        )
-        return
-
-    # 🔴 Зона 3: Тотальный фреш-старт (лимит < 100₽ или в минусе)
-    await state.set_state(FreshStart.waiting_for_mandatory)
-    await message.answer(
-        text=phrases.FRESH_START_RED,
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_RESET_ALL, callback_data="fresh_start_begin"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-            ]
-        ),
-    )
-
-
-# ============ FRESH START (RE-ONBOARDING) ============
-
-
-@router.callback_query(F.data == "fresh_start_begin")
-async def fresh_start_step1(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.set_state(FreshStart.waiting_for_mandatory)
-    await callback.message.edit_text(
-        text="📌 <b>Шаг 1.</b> Давай пересчитаем твои обязательные платежи "
-        "(аренда, кредиты, подписки) с сегодняшнего дня и до конца периода.\n\n"
-        "Сколько тебе <b>ЕЩЁ</b> предстоит обязательно заплатить "
-        "в этом месяце?\n"
-        "Если всё уже оплачено, просто напиши <b>0</b>.",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-            ]
-        ),
-    )
-
-
-@router.message(FreshStart.waiting_for_mandatory)
-async def fresh_start_save_mandatory(message: Message, state: FSMContext):
-    try:
-        mandatory = parse_amount(message.text, allow_zero=True)
-    except ValueError:
-        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="15000"))
-        return
-    await state.update_data(fresh_mandatory=mandatory)
-    await state.set_state(FreshStart.waiting_for_black_day)
-    await message.answer(
-        text="🏦 <b>Шаг 2.</b> Что делаем с Кубышкой?\n\n"
-        "Сколько денег ты РЕАЛЬНО готова откладывать "
-        "и неприкосновенно хранить прямо сейчас?\n"
-        "Если пока нечего — напиши <b>0</b>, "
-        "это нормально, сначала выберемся из кризиса.",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-            ]
-        ),
-    )
-
-
-@router.message(FreshStart.waiting_for_black_day)
-async def fresh_start_save_black_day(message: Message, state: FSMContext):
-    try:
-        cubyshka = parse_amount(message.text, allow_zero=True)
-    except ValueError:
-        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="5000"))
-        return
-    await state.update_data(fresh_black_day=cubyshka)
-    await state.set_state(FreshStart.waiting_for_balance)
-    await message.answer(
-        text="💰 <b>Шаг 3.</b> И финальный шаг.\n\n"
-        "Какая <b>ОБЩАЯ</b> сумма прямо сейчас лежит "
-        "на твоей карте? (Какую видишь в приложении банка).",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
-            ]
-        ),
-    )
-
-
-@router.message(FreshStart.waiting_for_balance)
-async def fresh_start_save_balance(message: Message, state: FSMContext):
-    try:
-        total_balance = parse_amount(message.text, allow_zero=True)
-    except ValueError:
-        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
-        return
-
-    data = await state.get_data()
-    new_mandatory = data.get("fresh_mandatory", 0)
-    new_cubyshka = data.get("fresh_black_day", 0)
-
-    money_for_life = max(total_balance - new_mandatory - new_cubyshka, 0)
-    days_left_budget = await get_budget_or_none(message.from_user.id)
-    days_left = days_left_budget.days_remaining if days_left_budget else 1
-    if days_left <= 0:
-        days_left = 1
-    new_limit = max(money_for_life / days_left, 0)
-
-    await apply_reconciliation(
-        message.from_user.id,
-        free_money=money_for_life,
-        new_mandatory=new_mandatory,
-        new_black_day=new_cubyshka,
-    )
-
-    user_name = message.from_user.first_name or phrases.FALLBACK_NAME
+    await apply_reconciliation(message.from_user.id, money_for_life)
     await state.clear()
-
-    zone_note = ""
-    if new_limit < 100:
-        zone_note = "\n\n⚠️ Режим Турбо-экономии включён автоматически — лимит меньше 100₽."
-    elif new_limit <= 500:
-        zone_note = "\n\n💪 Режим Турбо-экономии включён — лимит меньше 500₽."
-
     await message.answer(
-        text=f"Идеально, {user_name}! Новые настройки применились.\n\n"
-        f"📌 {int(new_mandatory)} ₽ — забронировал на оставшиеся обязательные платежи.\n"
-        f"🏦 {int(new_cubyshka)} ₽ — упаковал обратно в твою Кубышку.\n"
-        f"📊 На жизнь осталось: <b>{int(money_for_life)} ₽</b>.\n"
-        f"💰 Твой новый честный лимит на сегодня: <b>{int(new_limit)} ₽</b>."
-        f"{zone_note}\n\n"
-        f"Держимся, Бро! В этот раз мы справимся! ✊",
+        text=phrases.RECALC_LIMIT_DONE.format(
+            name=user_name,
+            limit=int(new_limit),
+            money=int(money_for_life),
+            days=days_left,
+        ),
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
 
@@ -1701,15 +1517,6 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(F.data == "edit_income")
-async def edit_income(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.set_state(EditBudget.waiting_for_income)
-    await callback.message.edit_text(
-        text=phrases.INCOME_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
-    )
-
-
 @router.callback_query(F.data == "add_income")
 async def add_income(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -1753,22 +1560,6 @@ async def edit_period_start(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.PERIOD_EDIT_PROMPT, reply_markup=get_period_start_keyboard()
     )
-
-
-@router.message(EditBudget.waiting_for_income)
-async def save_income(message: Message, state: FSMContext):
-    try:
-        amount = parse_amount(message.text)
-        budget = await get_budget_or_none(message.from_user.id)
-        if budget and budget.free_money > 0:
-            await update_budget_field(message.from_user.id, "free_money", amount)
-        else:
-            await update_budget_field(message.from_user.id, "total_income", amount)
-
-        await message.answer(text=phrases.INCOME_UPDATED, reply_markup=get_period_start_keyboard())
-        await state.set_state(EditBudget.waiting_for_period_start)
-    except ValueError:
-        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
 
 
 @router.message(EditBudget.waiting_for_period_start)
@@ -1904,28 +1695,9 @@ async def edit_rounding(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "cancel")
 async def cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    current_state = await state.get_state()
     await state.clear()
-
-    if current_state and (
-        current_state.startswith("CriticalReset.") or current_state.startswith("FreshStart.")
-    ):
-        cancel_text = (
-            phrases.CANCEL_CRITICAL_RESET
-            if current_state.startswith("CriticalReset.")
-            else phrases.CANCEL_FRESH_START
-        )
-        await callback.message.edit_text(text=cancel_text)
-        if settings.EXPENSE_SIMPLE_CHECK:
-            await callback.message.answer(
-                text="\u200b",
-                reply_markup=get_main_reply_keyboard(),
-            )
-        return
-
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
-        text=phrases.BACK_NAV.format(name=user_name),
+        text=phrases.BACK_NAV,
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
     if settings.EXPENSE_SIMPLE_CHECK:

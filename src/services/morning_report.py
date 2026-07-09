@@ -28,7 +28,7 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text=phrases.BTN_FRESH_START, callback_data="trigger_critical_reset"
+                        text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit"
                     )
                 ],
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
@@ -66,7 +66,7 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
                 ],
                 [
                     InlineKeyboardButton(
-                        text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
+                        text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit"
                     )
                 ],
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
@@ -82,7 +82,7 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
                 ],
                 [
                     InlineKeyboardButton(
-                        text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
+                        text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit"
                     )
                 ],
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
@@ -98,7 +98,7 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
                 ],
                 [
                     InlineKeyboardButton(
-                        text=phrases.BTN_FROM_SLATE, callback_data="trigger_critical_reset"
+                        text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit"
                     )
                 ],
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
@@ -341,8 +341,8 @@ async def send_morning_reports(bot: Bot):
                     # TODO: extract to phrases.py
                     zone_text = random.choice(
                         [
-                            "🔴 Мы пробили дно. Денег нет. 🚀 Нужен фреш-старт.",
-                            "🔴 Катастрофа! Бюджет исчерпан. Пора начинать с чистого листа.",
+                            "🔴 Мы пробили дно. Денег нет. 🚀 Нужен пересчёт лимита.",
+                            "🔴 Катастрофа! Бюджет исчерпан. Пора пересчитать лимит.",
                         ]
                     )
 

@@ -1,18 +1,13 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.bot.handlers.menu import (
-    CriticalReset,
-    FreshStart,
-    fresh_start_save_balance,
-    fresh_start_save_black_day,
-    fresh_start_save_mandatory,
-    save_real_balance,
-    trigger_critical_reset,
+    EditBudget,
+    change_budget,
+    change_budget_add,
+    change_budget_recalc,
+    recalc_limit,
+    save_recalc_balance,
 )
-
-# =============================================================================
-# Вспомогательные моки
-# =============================================================================
 
 
 def _make_message(text: str, user_id: int = 99999, first_name: str = "Test") -> MagicMock:
@@ -53,29 +48,19 @@ def _make_state(**initial_data) -> AsyncMock:
     return state
 
 
-# =============================================================================
-# trigger_critical_reset
-# =============================================================================
-
-
-class TestTriggerCriticalReset:
+class TestRecalcLimit:
     async def test_sets_state_and_prompts(self):
-        cb = _make_callback("trigger_critical_reset")
+        cb = _make_callback("recalc_limit")
         state = _make_state()
 
-        await trigger_critical_reset(cb, state)
+        await recalc_limit(cb, state)
 
-        state.set_state.assert_awaited_with(CriticalReset.waiting_for_real_balance)
+        state.set_state.assert_awaited_with(EditBudget.waiting_for_recalc_balance)
         cb.message.answer.assert_awaited()
 
 
-# =============================================================================
-# save_real_balance — 3 зоны
-# =============================================================================
-
-
-class TestSaveRealBalanceGreen:
-    async def test_green_zone_limit_above_500(self):
+class TestSaveRecalcBalance:
+    async def test_valid_balance_applies_and_clears(self):
         msg = _make_message("100000")
         state = _make_state()
 
@@ -87,71 +72,37 @@ class TestSaveRealBalanceGreen:
             patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()),
             patch("src.bot.handlers.menu.get_main_menu_keyboard", AsyncMock()),
         ):
-            await save_real_balance(msg, state)
+            await save_recalc_balance(msg, state)
 
         state.clear.assert_awaited()
         msg.answer.assert_awaited()
-
-
-class TestSaveRealBalanceYellow:
-    async def test_yellow_zone_limit_100_to_500(self):
-        msg = _make_message("100000")
-        state = _make_state()
-
-        with (
-            patch(
-                "src.bot.handlers.menu.reconcile_budget_with_reality",
-                AsyncMock(return_value=(300.0, 20, 6000.0, 50000.0, 44000.0)),
-            ),
-            patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()),
-        ):
-            await save_real_balance(msg, state)
-
-        state.clear.assert_awaited()
-        msg.answer.assert_awaited()
-
-
-class TestSaveRealBalanceRed:
-    async def test_red_zone_limit_below_100_sets_fresh_start(self):
-        msg = _make_message("50000")
-        state = _make_state()
-
-        with (
-            patch(
-                "src.bot.handlers.menu.reconcile_budget_with_reality",
-                AsyncMock(return_value=(50.0, 20, 1000.0, 30000.0, 19000.0)),
-            ),
-            patch("src.bot.handlers.menu.apply_reconciliation"),
-        ):
-            await save_real_balance(msg, state)
-
-        state.set_state.assert_awaited_with(FreshStart.waiting_for_mandatory)
-        msg.answer.assert_awaited()
-
-    async def test_red_zone_zero_limit(self):
-        msg = _make_message("10000")
-        state = _make_state()
-
-        with (
-            patch(
-                "src.bot.handlers.menu.reconcile_budget_with_reality",
-                AsyncMock(return_value=(0.0, 20, 0.0, 8000.0, 2000.0)),
-            ),
-            patch("src.bot.handlers.menu.apply_reconciliation"),
-        ):
-            await save_real_balance(msg, state)
-
-        state.set_state.assert_awaited_with(FreshStart.waiting_for_mandatory)
 
     async def test_invalid_amount_returns_error(self):
         msg = _make_message("abc")
         state = _make_state()
 
-        await save_real_balance(msg, state)
+        await save_recalc_balance(msg, state)
 
         msg.answer.assert_awaited()
         state.set_state.assert_not_called()
         state.clear.assert_not_called()
+
+    async def test_zero_balance_allowed(self):
+        msg = _make_message("0")
+        state = _make_state()
+
+        with (
+            patch(
+                "src.bot.handlers.menu.reconcile_budget_with_reality",
+                AsyncMock(return_value=(0.0, 20, 0.0, 0.0, 0.0)),
+            ),
+            patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()),
+            patch("src.bot.handlers.menu.get_main_menu_keyboard", AsyncMock()),
+        ):
+            await save_recalc_balance(msg, state)
+
+        state.clear.assert_awaited()
+        msg.answer.assert_awaited()
 
     async def test_no_budget_handled_gracefully(self):
         msg = _make_message("50000")
@@ -164,104 +115,34 @@ class TestSaveRealBalanceRed:
             ),
             patch("src.bot.handlers.menu.apply_reconciliation"),
         ):
-            await save_real_balance(msg, state)
+            await save_recalc_balance(msg, state)
 
 
-# =============================================================================
-# FreshStart FSM
-# =============================================================================
-
-
-class TestFreshStartSaveMandatory:
-    async def test_valid_mandatory_sets_state(self):
-        msg = _make_message("15000")
+class TestChangeBudget:
+    async def test_shows_choice_keyboard(self):
+        cb = _make_callback("change_budget")
         state = _make_state()
 
-        await fresh_start_save_mandatory(msg, state)
+        with patch("src.bot.handlers.menu.get_change_budget_choice_keyboard"):
+            await change_budget(cb, state)
 
-        state.update_data.assert_awaited_with(fresh_mandatory=15000.0)
-        state.set_state.assert_awaited_with(FreshStart.waiting_for_black_day)
+        cb.message.edit_text.assert_awaited()
 
-    async def test_zero_allowed(self):
-        msg = _make_message("0")
+    async def test_add_income_sets_state(self):
+        cb = _make_callback("change_budget_add")
         state = _make_state()
 
-        await fresh_start_save_mandatory(msg, state)
+        with patch("src.bot.handlers.menu.get_cancel_keyboard"):
+            await change_budget_add(cb, state)
 
-        state.update_data.assert_awaited_with(fresh_mandatory=0.0)
+        state.set_state.assert_awaited_with(EditBudget.waiting_for_add_income)
+        cb.message.edit_text.assert_awaited()
 
-    async def test_invalid_returns_error(self):
-        msg = _make_message("abc")
+    async def test_recalc_sets_state(self):
+        cb = _make_callback("change_budget_recalc")
         state = _make_state()
 
-        await fresh_start_save_mandatory(msg, state)
+        await change_budget_recalc(cb, state)
 
-        state.set_state.assert_not_called()
-
-
-class TestFreshStartSaveBlackDay:
-    async def test_valid_amount_sets_state(self):
-        msg = _make_message("5000")
-        state = _make_state()
-
-        await fresh_start_save_black_day(msg, state)
-
-        state.update_data.assert_awaited_with(fresh_black_day=5000.0)
-        state.set_state.assert_awaited_with(FreshStart.waiting_for_balance)
-
-    async def test_zero_allowed(self):
-        msg = _make_message("0")
-        state = _make_state()
-
-        await fresh_start_save_black_day(msg, state)
-
-        state.update_data.assert_awaited_with(fresh_black_day=0.0)
-
-    async def test_invalid_returns_error(self):
-        msg = _make_message("abc")
-        state = _make_state()
-
-        await fresh_start_save_black_day(msg, state)
-
-        state.set_state.assert_not_called()
-
-
-class TestFreshStartSaveBalance:
-    async def test_valid_balance_completes_flow(self):
-        msg = _make_message("60000")
-        state = _make_state(fresh_mandatory=15000.0, fresh_black_day=5000.0)
-
-        with (
-            patch(
-                "src.bot.handlers.menu.get_budget_or_none",
-                AsyncMock(return_value=MagicMock(days_remaining=15)),
-            ),
-            patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()),
-            patch("src.bot.handlers.menu.get_main_menu_keyboard", AsyncMock()),
-        ):
-            await fresh_start_save_balance(msg, state)
-
-        state.clear.assert_awaited()
-        msg.answer.assert_awaited()
-
-    async def test_invalid_input_returns_error(self):
-        msg = _make_message("abc")
-        state = _make_state()
-
-        await fresh_start_save_balance(msg, state)
-
-        state.clear.assert_not_called()
-        state.set_state.assert_not_called()
-
-    async def test_no_budget_fallback_days(self):
-        msg = _make_message("50000")
-        state = _make_state(fresh_mandatory=10000.0, fresh_black_day=5000.0)
-
-        with (
-            patch("src.bot.handlers.menu.get_budget_or_none", AsyncMock(return_value=None)),
-            patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()),
-            patch("src.bot.handlers.menu.get_main_menu_keyboard", AsyncMock()),
-        ):
-            await fresh_start_save_balance(msg, state)
-
-        state.clear.assert_awaited()
+        state.set_state.assert_awaited_with(EditBudget.waiting_for_recalc_balance)
+        cb.message.edit_text.assert_awaited()
