@@ -66,7 +66,7 @@ def clean_description(text: str) -> str:
 
 def _fallback_first_number(text: str) -> ExpenseParseReport | None:
     """Try to extract first number as amount. Returns report or None if no numbers."""
-    numbers = re.findall(r"\d+(?:[,\.]\d+)?", text)
+    numbers = re.findall(r"\d+(?:[,\.]\d+)?(?:[eE][+-]?\d+)?", text)
     total = 0.0
     first_num = None
     for num_str in numbers:
@@ -104,14 +104,29 @@ def parse_expense_text(text: str, line_number: int = 0) -> ExpenseParseReport:
     if math_result is not None:
         total, rest = math_result
         if total > 0:
+            raw_rest = rest
             rest = re.sub(r'\s*[+\-*/()]+\s*', ' ', rest).strip()
+            was_corrected = rest != raw_rest.strip()
             return ExpenseParseReport(
                 amount=total,
                 description=clean_description(rest),
                 is_valid=True,
                 raw_text=text,
                 line_number=line_number,
+                was_corrected=was_corrected,
+                correction_hint="убрал лишний знак" if was_corrected else None,
             )
+        err_detail = (
+            "выражение дало 0₽ — нулевая сумма"
+            if total == 0
+            else f"выражение дало {total:,.0f}₽ — отрицательная сумма"
+        )
+        return ExpenseParseReport(
+            raw_text=text,
+            line_number=line_number,
+            error_type="MATH_ERROR",
+            error_detail=err_detail,
+        )
 
     if has_math:
         fixed, was_corrected, hint = _preprocess_math(text)

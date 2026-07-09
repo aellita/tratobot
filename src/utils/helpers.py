@@ -14,7 +14,7 @@ FALLBACK_EMOJI = "🏷️"
 # --- Math expression evaluator (recursive descent, no eval) ---
 
 _TOKEN_SPEC = [
-    ("NUMBER", r"\d+(?:[.,]\d+)?"),
+    ("NUMBER", r"\d+(?:[.,]\d+)?(?:[eE][+-]?\d+)?"),
     ("PLUS", r"\+"),
     ("MINUS", r"-"),
     ("MUL", r"\*"),
@@ -81,7 +81,7 @@ class _MathParser:
         return self.peek() == "EOF"
 
     def current_text_end(self) -> int:
-        return self.tokens[self.pos][3]
+        return self.tokens[self.pos][2]
 
     def parse_expr(self) -> float:
         if self.peek() == "MINUS":

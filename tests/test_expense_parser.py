@@ -124,12 +124,19 @@ class TestParseExpenseText:
         assert result.was_corrected
         assert result.correction_hint is not None
 
-    def test_math_extra_paren_cleaned(self):
+    def test_math_extra_paren_corrected(self):
         result = parse_expense_text("500+300) кофе")
         assert result.is_valid
         assert result.amount == 800.0
         assert "кофе" in result.description
         assert ")" not in result.description
+        assert result.was_corrected
+
+    def test_math_stray_paren_corrected(self):
+        result = parse_expense_text("1+1)")
+        assert result.is_valid
+        assert result.amount == 2.0
+        assert result.was_corrected
 
     def test_math_trailing_op_corrected(self):
         result = parse_expense_text("500+300+ кофе")
@@ -137,7 +144,68 @@ class TestParseExpenseText:
         assert result.amount == 800.0
         assert result.was_corrected
 
-    def test_math_div_by_zero_returns_invalid(self):
+    def test_math_negative_result_returns_invalid(self):
+        result = parse_expense_text("(7+2)-20")
+        assert not result.is_valid
+        assert result.error_type == "MATH_ERROR"
+        assert "отрицательная" in result.error_detail
+
+    def test_math_negative_result_with_desc_returns_invalid(self):
+        result = parse_expense_text("(7+2)-20 кофе")
+        assert not result.is_valid
+        assert result.error_type == "MATH_ERROR"
+        assert "отрицательная" in result.error_detail
+
+    def test_math_zero_result_returns_invalid(self):
+        result = parse_expense_text("5-5")
+        assert not result.is_valid
+        assert result.error_type == "MATH_ERROR"
+        assert "нулевая" in result.error_detail
+
+    def test_math_zero_result_mul_returns_invalid(self):
+        result = parse_expense_text("5*0")
+        assert not result.is_valid
+        assert result.error_type == "MATH_ERROR"
+        assert "нулевая" in result.error_detail
+
+    def test_sci_notation_standalone(self):
+        result = parse_expense_text("1e5")
+        assert result.is_valid
+        assert result.amount == 100000.0
+
+    def test_sci_notation_with_desc(self):
+        result = parse_expense_text("1e5 кофе")
+        assert result.is_valid
+        assert result.amount == 100000.0
+        assert "кофе" in result.description
+
+    def test_sci_notation_in_math(self):
+        result = parse_expense_text("1e5+2e5")
+        assert result.is_valid
+        assert result.amount == 300000.0
+
+    def test_sci_notation_in_math_with_desc(self):
+        result = parse_expense_text("1e5+2e5 донат")
+        assert result.is_valid
+        assert result.amount == 300000.0
+        assert "донат" in result.description
+
+    def test_sci_notation_negative_exponent(self):
+        result = parse_expense_text("5e-3")
+        assert result.is_valid
+        assert result.amount == 0.005
+
+    def test_sci_notation_capital_e(self):
+        result = parse_expense_text("2E5")
+        assert result.is_valid
+        assert result.amount == 200000.0
+
+    def test_sci_notation_plus_exponent(self):
+        result = parse_expense_text("3e+4")
+        assert result.is_valid
+        assert result.amount == 30000.0
+
+    def test_div_by_zero_returns_invalid(self):
         result = parse_expense_text("500/0 халява")
         assert not result.is_valid
         assert result.error_type == "MATH_ERROR"

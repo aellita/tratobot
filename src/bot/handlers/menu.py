@@ -2105,6 +2105,11 @@ async def handle_text(message: Message, state: FSMContext):
         return
 
     if not result.is_fully_valid:
+        invalid = next((r for r in result.reports if not r.is_valid), None)
+        if invalid and invalid.error_type == "MATH_ERROR":
+            await message.answer(
+                phrases.ERR_MATH_ERROR.format(detail=safe(invalid.error_detail or invalid.raw_text))
+            )
         return
 
     await get_or_create_user(
