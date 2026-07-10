@@ -90,10 +90,9 @@ HINT_JUNK_CHARS = "убрал лишний знак"
 ERR_WISHLIST_EMPTY = "❌ В Хотелке пока пусто. Попробуй другой вариант."
 
 # ── Success / Info messages ────────────────────────────────
-WELCOME_MENU = "👋 {name}, выбери действие:"
+WELCOME_MENU = "👋 Выбери действие:"
 
 HELP_TEXT = (
-    "👋 Привет, {name}!\n\n"
     "📋 <b>Что я умею:</b>\n\n"
     "💸 <b>Добавить трату</b> — записать расход\n"
     "📈 <b>Статус</b> — сколько осталось\n"
@@ -116,12 +115,12 @@ ONBOARDING_RESTART = (
     "Введи общую сумму (например: 50000)"
 )
 
-WELCOME_BACK = "👋 Рад видеть тебя снова, {name}!\n\nТы уже настроил свой бюджет. Кубышка и Хотелка в безопасности.\nЧто хочешь сделать?"
+WELCOME_BACK = "👋 Рад видеть тебя снова!\n\nТы уже настроил свой бюджет. Кубышка и Хотелка в безопасности.\nЧто хочешь сделать?"
 
-NO_BUDGET = "👋 Привет, {name}!\n\nУ тебя нет бюджета на этот месяц. Нажми /start!"
-NO_BUDGET_SHORT = "👋 {name}, у тебя пока нет бюджета. Нажми /start!"
-NO_BUDGET_MONTH = "👋 {name}, нет бюджета на этот месяц. Нажми /start!"
-NO_BUDGET_SETTINGS = "👋 Привет, {name}!\nТы ещё не настраивал бюджет. Нажми /start!"
+NO_BUDGET = "👋 Привет!\n\nУ тебя нет бюджета на этот месяц. Нажми /start!"
+NO_BUDGET_SHORT = "👋 У тебя пока нет бюджета. Нажми /start!"
+NO_BUDGET_MONTH = "👋 Нет бюджета на этот месяц. Нажми /start!"
+NO_BUDGET_SETTINGS = "👋 Привет!\nТы ещё не настраивал бюджет. Нажми /start!"
 
 STATUS_REMAINING_OK = "🟢 <b>Осталось на сегодня:</b> {amount} ₽"
 STATUS_REMAINING_STOP = "🛑 <b>Осталось на сегодня:</b> 0 ₽ (Траты на сегодня стоп!)"
@@ -132,12 +131,12 @@ STATUS_PERIOD_POSITIVE = "💵 <b>Остаток на жизнь:</b> {amount} �
 STATUS_PERIOD_ZERO = "💵 <b>Остаток на жизнь:</b> 0 ₽ 💸"
 
 EXPENSE_SAVED_LINE = "💰 {amount}₽ — {desc} {emoji}{cat}"
-EXPENSE_SAVED_ALL = "✅ Записано, {name}!\n\n{lines}{round_up}"
+EXPENSE_SAVED_ALL = "✅ Записано!\n\n{lines}{round_up}"
 CATEGORY_CHANGED = "✅ Категория изменена!\n\n💰 {amount}₽ — {desc}\n{emoji} {cat}"
 BACK_NAV = "\u200b"
 CANCEL_RECALC = "❌ Отменено. Возвращаю в меню."
 NEW_CATEGORY_PROMPT = "✏️ Напиши название новой категории:\n\nНапример: Книги, Алкоголь, Животные"
-CATEGORY_CREATED = "✅ Новая категория «{name}» создана, {user_name}!\nЯ запомнил слово «{desc}» для этой категории."
+CATEGORY_CREATED = "✅ Новая категория «{name}» создана!\nЯ запомнил слово «{desc}» для этой категории."
 CATEGORY_PICKER = "📂 Выбери категорию:"
 
 CHANGE_BUDGET_CHOICE = (
@@ -153,7 +152,7 @@ RECALC_LIMIT_PROMPT = (
 )
 
 RECALC_LIMIT_DONE = (
-    "✅ Готово, {name}! Новый лимит на оставшиеся дни: "
+    "✅ Готово! Новый лимит на оставшиеся дни: "
     "<b>{limit} ₽</b>/день\n\n"
     "💰 На жизнь: {money} ₽\n"
     "📅 Осталось дней: {days}"
@@ -161,14 +160,12 @@ RECALC_LIMIT_DONE = (
 
 NEW_CATEGORY_PROMPT = "✏️ Напиши название новой категории:\n\nНапример: Книги, Алкоголь, Животные"
 
-REDUCE_LIMIT_ACCEPTED = (
-    "✅ Принято, {name}! Остаток месяца проживём с урезанным лимитом. Я пересчитал бюджет."
-)
+REDUCE_LIMIT_ACCEPTED = "✅ Принято! Остаток месяца проживём с урезанным лимитом. Я пересчитал бюджет."
 
 COVERED_FROM_WISHLIST = "🎯 Покрыли {amount}₽ из Хотелки! Остаток: {remain}₽"
 TAKEN_FROM_SAVINGS = "🆘 Взяли из Кубышки! Остаток в заначке: {amount}₽"
 
-ADD_EXPENSE_PROMPT = "💸 Добавить трату, {name}!\n\nВведи сумму и описание:\nНапример: 500 кофе"
+ADD_EXPENSE_PROMPT = "💸 Добавить трату!\n\nВведи сумму и описание:\nНапример: 500 кофе"
 
 ONBOARDING_PERIOD_DONE = (
     "✅ Хорошо, период = с 1-го числа.\n\n"
@@ -196,7 +193,7 @@ ONBOARDING_ROUNDING_PROMPT = (
 )
 
 BUDGET_COMPLETE = (
-    "🎉 <b>Готово!</b> {name}!\n\n"
+    "🎉 <b>Готово!</b>\n\n"
     "📊 Бюджет на {month}:\n"
     "• Общий доход: {income}₽\n"
     "• Обязательные: {mandatory}₽\n"
@@ -215,11 +212,11 @@ INCOME_SAVED_PERIOD = (
     "Сколько у нас уходит на обязательные платежи?"
 )
 
-PERIOD_UPDATED = "✅ Готово, {name}! Период обновлён — с {day}-го числа."
+PERIOD_UPDATED = "✅ Готово! Период обновлён — с {day}-го числа."
 PERIOD_SET_PERIOD = "✅ Запомнил!\n\n{mandatory_prompt}"
 
 ROUNDING_LABEL_OFF = "выключено"
-ROUNDING_SAVED = "✅ Готово, {name}! Округление: <b>{label}</b>"
+ROUNDING_SAVED = "✅ Готово! Округление: <b>{label}</b>"
 
 INCOME_ADD_PROMPT = "➕ Введи сумму, которую хочешь добавить к текущему доходу:"
 MANDATORY_EDIT_PROMPT = "📌 Введи новую сумму обязательных:"
@@ -229,20 +226,19 @@ PERIOD_EDIT_PROMPT = (
     "📅 А какого числа у тебя начинается финансовый месяц?\n(Когда приходит основная зарплата)"
 )
 
-INCOME_ADDED = "✅ Готово, {name}! Доход увеличен на {amount}₽\n💰 Текущий доход: {total}₽"
-MANDATORY_UPDATED = "✅ Готово, {name}! Обязательные: {amount}₽"
-SAVINGS_UPDATED = "✅ Готово, {name}! Кубышка: {amount}₽"
-WISHLIST_UPDATED = "✅ Готово, {name}! Хотелка: {name} — {price}₽"
+INCOME_ADDED = "✅ Готово! Доход увеличен на {amount}₽\n💰 Текущий доход: {total}₽"
+MANDATORY_UPDATED = "✅ Готово! Обязательные: {amount}₽"
+SAVINGS_UPDATED = "✅ Готово! Кубышка: {amount}₽"
 
 ROUNDING_SETTINGS = (
     "🐖 Сейчас округление: <b>{label}</b>\n\n"
     "Мне округлять твои траты, а сдачу закидывать в копилку?"
 )
 
-UNRECOGNIZED = "👋 {name}, воспользуйся кнопками в меню!"
+UNRECOGNIZED = "👋 Воспользуйся кнопками в меню!"
 
 UNRECOGNIZED_TEXT = (
-    "👋 {name}, не поняла...\n\n"
+    "👋 Не поняла...\n\n"
     "Напиши сумму и описание, например:\n"
     '"500 кофе" или нажми кнопку в меню'
 )
@@ -552,7 +548,6 @@ DUP_DELETED = (
 )
 
 # ── Fallback values ────────────────────────────────────────
-FALLBACK_NAME = "друг"
 FALLBACK_DESC = "трата"
 DEFAULT_WISHLIST_NAME = "Хотелка"
 DEFAULT_CATEGORY = ("📦", "Прочее")

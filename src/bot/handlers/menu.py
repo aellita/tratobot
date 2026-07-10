@@ -149,9 +149,8 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
     if settings.EXPENSE_SIMPLE_CHECK:
         return
     await state.clear()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
-        text=phrases.BACK_NAV.format(name=user_name),
+        text=phrases.BACK_NAV,
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
 
@@ -160,9 +159,8 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
 async def menu_help(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
-        text=phrases.HELP_TEXT.format(name=user_name),
+        text=phrases.HELP_TEXT,
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
 
@@ -171,7 +169,6 @@ async def menu_help(callback: CallbackQuery, state: FSMContext):
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     telegram_id = message.from_user.id
-    user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
     user = await get_user_or_none(telegram_id)
 
@@ -189,12 +186,12 @@ async def cmd_start(message: Message, state: FSMContext):
         await state.set_state(BudgetSetup.waiting_for_income)
     else:
         await message.answer(
-            text=phrases.WELCOME_BACK.format(name=user_name),
+            text=phrases.WELCOME_BACK,
             reply_markup=get_start_choice_keyboard(),
         )
         if settings.EXPENSE_SIMPLE_CHECK:
             await message.answer(
-                text=phrases.WELCOME_MENU.format(name=user_name),
+                text=phrases.WELCOME_MENU,
                 reply_markup=get_main_reply_keyboard(),
             )
 
@@ -205,9 +202,8 @@ async def open_menu(callback: CallbackQuery, state: FSMContext):
     if settings.EXPENSE_SIMPLE_CHECK:
         return
     await state.clear()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
-        text=phrases.BACK_NAV.format(name=user_name),
+        text=phrases.BACK_NAV,
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
 
@@ -218,9 +214,8 @@ async def report_back(callback: CallbackQuery, state: FSMContext):
     if settings.EXPENSE_SIMPLE_CHECK:
         return
     await state.clear()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.answer(
-        text=phrases.BACK_NAV.format(name=user_name),
+        text=phrases.BACK_NAV,
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
 
@@ -256,12 +251,11 @@ async def menu_status(callback: CallbackQuery):
 
 
 async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
-    user_name = "user"
     tg_id = telegram_id
 
     budget = await get_budget_or_none(tg_id)
     if not budget:
-        return phrases.NO_BUDGET.format(name=user_name), await get_main_menu_keyboard(tg_id)
+        return phrases.NO_BUDGET, await get_main_menu_keyboard(tg_id)
 
     async with async_session_maker() as session:
         today_start = get_msk_now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -686,11 +680,8 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         days_remaining = clamped_start - today.day
     daily_limit = max(available / max(days_remaining, 1), 0)
 
-    user_name = source.from_user.first_name or phrases.FALLBACK_NAME
-
     period_note = f"📅 Период: с {period_start_day}-го числа\n" if period_start_day != 1 else ""
     text = phrases.BUDGET_COMPLETE.format(
-        name=user_name,
         month=month,
         income=f"{data.get('income', 0):,.0f}",
         mandatory=f"{data.get('mandatory', 0):,.0f}",
@@ -707,15 +698,14 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         await source.answer(text=text, reply_markup=kb)
 
     if settings.EXPENSE_SIMPLE_CHECK:
-        user_name = source.from_user.first_name or phrases.FALLBACK_NAME
         if isinstance(source, CallbackQuery):
             await source.message.answer(
-                text=phrases.WELCOME_MENU.format(name=user_name),
+                text=phrases.WELCOME_MENU,
                 reply_markup=get_main_reply_keyboard(),
             )
         else:
             await source.answer(
-                text=phrases.WELCOME_MENU.format(name=user_name),
+                text=phrases.WELCOME_MENU,
                 reply_markup=get_main_reply_keyboard(),
             )
 
@@ -770,9 +760,8 @@ async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext)
         )
     elif current_state == EditBudget.waiting_for_period_start.state:
         await update_budget_field(callback.from_user.id, "period_start_day", day)
-        user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
         await callback.message.edit_text(
-            text=phrases.PERIOD_UPDATED.format(name=user_name, day=day),
+            text=phrases.PERIOD_UPDATED.format(day=day),
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         await state.clear()
@@ -893,10 +882,9 @@ async def handle_rounding_choice(callback: CallbackQuery, state: FSMContext):
         else:
             session.add(UserSettings(telegram_id=callback.from_user.id, rounding_mode=mode))
         await session.commit()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     label = phrases.ROUNDING_LABEL_OFF if mode == 0 else f"{mode} ₽"
     await callback.message.edit_text(
-        text=phrases.ROUNDING_SAVED.format(name=user_name, label=label),
+        text=phrases.ROUNDING_SAVED.format(label=label),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
 
@@ -907,10 +895,9 @@ async def handle_rounding_choice(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "menu_add")
 async def menu_add(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await state.set_state(AddExpense.waiting_for_amount)
     await callback.message.edit_text(
-        text=phrases.ADD_EXPENSE_PROMPT.format(name=user_name), reply_markup=get_cancel_keyboard()
+        text=phrases.ADD_EXPENSE_PROMPT, reply_markup=get_cancel_keyboard()
     )
 
 
@@ -1084,8 +1071,6 @@ async def process_expense(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_EXPENSE_SAVE)
         return
 
-    user_name = safe(message.from_user.first_name or phrases.FALLBACK_NAME)
-
     total_round_up = ""
     if total_spare > 0:
         new_total, goal_name = await add_spare_change_to_goal(user_id, total_spare)
@@ -1096,12 +1081,10 @@ async def process_expense(message: Message, state: FSMContext):
     kb = _build_expense_check_kb(first_id, len(lines), corrected_ids)
 
     response_text = phrases.EXPENSE_SAVED_ALL.format(
-        name=user_name, lines="\n".join(lines), round_up=total_round_up
+        lines="\n".join(lines), round_up=total_round_up
     )
     await message.answer(text=response_text, reply_markup=kb)
-
-    if settings.EXPENSE_SIMPLE_CHECK:
-        await state.clear()
+    await state.clear()
 
 
 # ============ CATEGORY CHANGE ============
@@ -1233,9 +1216,8 @@ async def back_from_category_change(callback: CallbackQuery, state: FSMContext):
     if settings.EXPENSE_SIMPLE_CHECK:
         return
     await state.clear()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
     await callback.message.edit_text(
-        text=phrases.BACK_NAV.format(name=user_name),
+        text=phrases.BACK_NAV,
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
 
@@ -1324,11 +1306,10 @@ async def save_new_category(message: Message, state: FSMContext):
         expense.category_id = cat.id
         await session.commit()
 
-    user_name = message.from_user.first_name or phrases.FALLBACK_NAME
     await state.clear()
     await message.answer(
         text=phrases.CATEGORY_CREATED.format(
-            name=name, user_name=user_name, desc=expense.description
+            name=name, desc=expense.description
         ),
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
@@ -1350,9 +1331,8 @@ async def handle_fix_overdraft(callback: CallbackQuery):
     action = parts[1]
 
     if action == "reduce_limit":
-        user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
         await callback.message.edit_text(
-            text=phrases.REDUCE_LIMIT_ACCEPTED.format(name=user_name),
+            text=phrases.REDUCE_LIMIT_ACCEPTED,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
@@ -1454,7 +1434,6 @@ async def save_recalc_balance(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
         return
 
-    user_name = message.from_user.first_name or phrases.FALLBACK_NAME
     new_limit, days_left, money_for_life, mandatory, cubyshka = await reconcile_budget_with_reality(
         message.from_user.id, total_balance
     )
@@ -1462,7 +1441,6 @@ async def save_recalc_balance(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
         text=phrases.RECALC_LIMIT_DONE.format(
-            name=user_name,
             limit=int(new_limit),
             money=int(money_for_life),
             days=days_left,
@@ -1478,12 +1456,12 @@ async def save_recalc_balance(message: Message, state: FSMContext):
 async def menu_settings(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()
-    user_name = callback.from_user.first_name or phrases.FALLBACK_NAME
+    user_name = safe(callback.from_user.first_name or "")
 
     budget = await get_budget_or_none(callback.from_user.id)
     if not budget:
         await callback.message.edit_text(
-            text=phrases.NO_BUDGET_SETTINGS.format(name=user_name),
+            text=phrases.NO_BUDGET_SETTINGS,
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
         return
@@ -1583,10 +1561,9 @@ async def save_edit_period_start(message: Message, state: FSMContext):
         day = days_in_month
 
     await update_budget_field(message.from_user.id, "period_start_day", day)
-    user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
     await message.answer(
-        text=phrases.PERIOD_UPDATED.format(name=user_name, day=day),
+        text=phrases.PERIOD_UPDATED.format(day=day),
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     await state.clear()
@@ -1607,11 +1584,10 @@ async def save_add_income(message: Message, state: FSMContext):
         else:
             new_total = budget.total_income + amount
             await update_budget_field(message.from_user.id, "total_income", new_total)
-        user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
         await message.answer(
             text=phrases.INCOME_ADDED.format(
-                name=user_name, amount=f"{amount:,.0f}", total=f"{new_total:,.0f}"
+                amount=f"{amount:,.0f}", total=f"{new_total:,.0f}"
             ),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
@@ -1625,10 +1601,9 @@ async def save_mandatory(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
         await update_budget_field(message.from_user.id, "mandatory_payments", amount)
-        user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
         await message.answer(
-            text=phrases.MANDATORY_UPDATED.format(name=user_name, amount=f"{amount:,.0f}"),
+            text=phrases.MANDATORY_UPDATED.format(amount=f"{amount:,.0f}"),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         await state.clear()
@@ -1641,10 +1616,9 @@ async def save_black_day(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
         await update_budget_field(message.from_user.id, "black_day_fund", amount)
-        user_name = message.from_user.first_name or phrases.FALLBACK_NAME
 
         await message.answer(
-            text=phrases.SAVINGS_UPDATED.format(name=user_name, amount=f"{amount:,.0f}"),
+            text=phrases.SAVINGS_UPDATED.format(amount=f"{amount:,.0f}"),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         await state.clear()
@@ -1660,10 +1634,10 @@ async def save_wishlist(message: Message, state: FSMContext):
     await update_budget_field(message.from_user.id, "wishlist_name", name)
     await update_budget_field(message.from_user.id, "wishlist_target", price)
 
-    user_name = message.from_user.first_name or phrases.FALLBACK_NAME
+    user_name = safe(message.from_user.first_name or "")
 
     await message.answer(
-        text=f"✅ Готово, {user_name}! Хотелка: {name} — {price:,.0f}₽",
+        text=f"✅ Готово, {user_name}! Хотелка: {safe(name)} — {price:,.0f}₽",
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     await state.clear()
@@ -1807,10 +1781,9 @@ async def handle_reply_menu(message: Message, state: FSMContext):
     btn_text = message.text
 
     if btn_text == phrases.BTN_ADD_EXPENSE:
-        user_name = message.from_user.first_name or phrases.FALLBACK_NAME
         await state.set_state(AddExpense.waiting_for_amount)
         await message.answer(
-            text=phrases.ADD_EXPENSE_PROMPT.format(name=user_name),
+            text=phrases.ADD_EXPENSE_PROMPT,
             reply_markup=get_cancel_keyboard(),
         )
         return
@@ -1832,9 +1805,8 @@ async def handle_reply_menu(message: Message, state: FSMContext):
     if btn_text == phrases.BTN_SETTINGS:
         budget = await get_budget_or_none(message.from_user.id)
         if not budget:
-            user_name = message.from_user.first_name or phrases.FALLBACK_NAME
             await message.answer(
-                text=phrases.NO_BUDGET_SETTINGS.format(name=user_name),
+                text=phrases.NO_BUDGET_SETTINGS,
                 reply_markup=await get_main_menu_keyboard(message.from_user.id),
             )
             return
@@ -1845,9 +1817,8 @@ async def handle_reply_menu(message: Message, state: FSMContext):
         return
 
     if btn_text == phrases.BTN_HELP:
-        user_name = message.from_user.first_name or phrases.FALLBACK_NAME
         await message.answer(
-            text=phrases.HELP_TEXT.format(name=user_name),
+            text=phrases.HELP_TEXT,
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         return
@@ -1865,9 +1836,8 @@ async def handle_text(message: Message, state: FSMContext):
 
     menu_keywords = phrases.MENU_KEYWORDS
     if text.lower() in menu_keywords:
-        user_name = message.from_user.first_name or phrases.FALLBACK_NAME
         await message.answer(
-            text=phrases.UNRECOGNIZED.format(name=user_name),
+            text=phrases.UNRECOGNIZED,
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         return
@@ -1904,8 +1874,6 @@ async def handle_text(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_EXPENSE_SAVE)
         return
 
-    user_name = safe(message.from_user.first_name or phrases.FALLBACK_NAME)
-
     total_round_up = ""
     if total_spare > 0:
         new_total, goal_name = await add_spare_change_to_goal(user_id, total_spare)
@@ -1916,6 +1884,6 @@ async def handle_text(message: Message, state: FSMContext):
     kb = _build_expense_check_kb(first_id, len(lines), corrected_ids)
 
     response_text = phrases.EXPENSE_SAVED_ALL.format(
-        name=user_name, lines="\n".join(lines), round_up=total_round_up
+        lines="\n".join(lines), round_up=total_round_up
     )
     await message.answer(text=response_text, reply_markup=kb)
