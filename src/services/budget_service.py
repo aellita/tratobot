@@ -139,7 +139,7 @@ async def reconcile_budget_with_reality(
         if not budget:
             return 0.0, 1, 0.0, 0.0, 0.0
 
-        money_for_life = max(total_balance - budget.mandatory_payments - budget.black_day_fund, 0)
+        money_for_life = max(total_balance, 0)
         days_left = budget.days_remaining
         if days_left <= 0:
             days_left = 1

@@ -137,7 +137,7 @@ class TestReconcileBudgetWithReality:
             black_day,
         ) = await reconcile_budget_with_reality(1001, 80000.0)
 
-        assert money_for_life == 40000.0
+        assert money_for_life == 80000.0
         assert mandatory == 30000.0
         assert black_day == 10000.0
         assert daily_limit > 0
@@ -147,7 +147,7 @@ class TestReconcileBudgetWithReality:
         result = await reconcile_budget_with_reality(1001, 50000.0)
         assert result == (0.0, 1, 0.0, 0.0, 0.0)
 
-    async def test_no_free_money_after_mandatory_and_black_day(self, db_session):
+    async def test_balance_used_directly_for_money_for_life(self, db_session):
         today = datetime.now()
         budget = Budget(
             telegram_id=1001,
@@ -169,8 +169,8 @@ class TestReconcileBudgetWithReality:
             black_day,
         ) = await reconcile_budget_with_reality(1001, 50000.0)
 
-        assert money_for_life == 0.0
-        assert daily_limit == 0.0
+        assert money_for_life == 50000.0
+        assert daily_limit > 0
         assert days_left > 0
 
     async def test_days_left_capped_to_one(self, db_session):
@@ -208,7 +208,7 @@ class TestReconcileBudgetWithReality:
         db_session.add(budget)
         await db_session.commit()
 
-        _, _, money_for_life, _, _ = await reconcile_budget_with_reality(1001, 10000.0)
+        _, _, money_for_life, _, _ = await reconcile_budget_with_reality(1001, -100.0)
         assert money_for_life == 0.0
 
     async def test_very_large_balance(self, db_session):
@@ -232,7 +232,7 @@ class TestReconcileBudgetWithReality:
         assert money_for_life == 500_000_000.0
         assert daily_limit > 0
 
-    async def test_boundary_balance_equals_mandatory_plus_black_day(self, db_session):
+    async def test_zero_balance_returns_zero_limit(self, db_session):
         today = datetime.now()
         budget = Budget(
             telegram_id=1001,
@@ -246,8 +246,9 @@ class TestReconcileBudgetWithReality:
         db_session.add(budget)
         await db_session.commit()
 
-        _, _, money_for_life, _, _ = await reconcile_budget_with_reality(1001, 40000.0)
+        daily_limit, _, money_for_life, _, _ = await reconcile_budget_with_reality(1001, 0.0)
         assert money_for_life == 0.0
+        assert daily_limit == 0.0
 
 
 class TestUpdateBudgetField:
