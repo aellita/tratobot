@@ -127,31 +127,23 @@ async def get_days_remaining(telegram_id: int) -> int:
 async def reconcile_budget_with_reality(
     telegram_id: int, total_balance: float
 ) -> tuple[float, int, float, float, float]:
-    month = get_msk_now().strftime("%Y-%m")
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(Budget).where(
-                Budget.telegram_id == telegram_id,
-                Budget.month == month,
-            )
-        )
-        budget = result.scalar_one_or_none()
-        if not budget:
-            return 0.0, 1, 0.0, 0.0, 0.0
+    budget = await get_active_budget(telegram_id)
+    if not budget:
+        return 0.0, 1, 0.0, 0.0, 0.0
 
-        money_for_life = max(total_balance, 0)
-        days_left = budget.days_remaining
-        if days_left <= 0:
-            days_left = 1
+    money_for_life = max(total_balance, 0)
+    days_left = budget.days_remaining
+    if days_left <= 0:
+        days_left = 1
 
-        new_daily_limit = max(money_for_life / days_left, 0)
-        return (
-            new_daily_limit,
-            days_left,
-            money_for_life,
-            budget.mandatory_payments,
-            budget.black_day_fund,
-        )
+    new_daily_limit = max(money_for_life / days_left, 0)
+    return (
+        new_daily_limit,
+        days_left,
+        money_for_life,
+        budget.mandatory_payments,
+        budget.black_day_fund,
+    )
 
 
 async def apply_reconciliation(
@@ -160,15 +152,27 @@ async def apply_reconciliation(
     new_mandatory: float | None = None,
     new_black_day: float | None = None,
 ) -> None:
-    month = get_msk_now().strftime("%Y-%m")
+    today = get_msk_now()
+    this_month = today.strftime("%Y-%m")
+    last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
             select(Budget).where(
                 Budget.telegram_id == telegram_id,
-                Budget.month == month,
+                Budget.month.in_([this_month, last_month]),
             )
+            .order_by(Budget.month.desc())
         )
-        budget = result.scalar_one_or_none()
+        budgets = result.scalars().all()
+        budget = None
+        for b in budgets:
+            start = b.period_start_day or 1
+            if today.day >= start and b.month == this_month:
+                budget = b
+                break
+            if today.day < start and b.month == last_month:
+                budget = b
+                break
         if not budget:
             return
         budget.free_money = free_money
