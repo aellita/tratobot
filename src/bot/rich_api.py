@@ -32,6 +32,14 @@ async def edit_rich_message(
         payload["reply_markup"] = reply_markup.model_dump(exclude_none=True)
     result = await _post(url, payload)
     if result is not None and _has_inline_keyboard(reply_markup):
+        old_msg_id = _last_keyboard.pop(chat_id, None)
+        if old_msg_id is not None and old_msg_id != message_id:
+            try:
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id, message_id=old_msg_id, reply_markup=None
+                )
+            except Exception:
+                pass
         _last_keyboard[chat_id] = message_id
     return result
 
@@ -53,6 +61,14 @@ async def send_rich_message(
     if result is not None and _has_inline_keyboard(reply_markup):
         msg_id = result.get("message_id")
         if msg_id:
+            old_msg_id = _last_keyboard.pop(chat_id, None)
+            if old_msg_id is not None and old_msg_id != msg_id:
+                try:
+                    await bot.edit_message_reply_markup(
+                        chat_id=chat_id, message_id=old_msg_id, reply_markup=None
+                    )
+                except Exception:
+                    pass
             _last_keyboard[chat_id] = msg_id
     return result
 

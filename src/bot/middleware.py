@@ -9,13 +9,14 @@ from aiogram import BaseMiddleware
 from aiogram.client.session.middlewares.base import BaseRequestMiddleware
 from aiogram.methods.base import Response, TelegramMethod, TelegramType
 from aiogram.types import CallbackQuery, Message, TelegramObject
-from cachetools import TTLCache
 
 logger = logging.getLogger(__name__)
 
 # ── Global keyboard tracking cache (chat_id → message_id) ──────────────
+# Entries are removed on pop() when the user's next action triggers
+# KeyboardCleanupMiddleware, so no TTL is needed.
 
-_last_keyboard: TTLCache = TTLCache(maxsize=1024, ttl=3600)
+_last_keyboard: dict[int, int] = {}
 
 
 class KeyboardCleanupMiddleware(BaseMiddleware):
