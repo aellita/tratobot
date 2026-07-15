@@ -8,7 +8,7 @@
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг, округление, математические выражения в тратах.  
 **Активно:** —  
-**Ближайшее:** B8 (inline-клавиатура утра — починен), B7, B9, B10, B11  
+**Ближайшее:** B7, B9, B10, B11  
 **В планах:** логика обязательных платежей (обнуление после оплаты), E501, UX5-UX7, F4-F9  
 
 ---
@@ -59,6 +59,26 @@
 
 **Проблема (2):** `edit_rich_message` в `monthly_summary.py` безусловно писал `_last_keyboard[chat_id] = message_id`, затирая старую запись (например, message_id утреннего отчёта). После этого `KeyboardCleanupMiddleware` при клике на утренний отчёт чистил клавиатуру у Monthly Summary, а не у отчёта.
 **Решение (2):** В `edit_rich_message` и `send_rich_message` — перед записью нового `message_id` сначала `pop()` старого и `edit_message_reply_markup(reply_markup=None)`, если это другой message_id.
+
+### B12: Кнопка «В главное меню» в отчётах дублирует ReplyKeyboard (2026-07-15)
+**Проблема:** Во всех отчётах (Morning Report, Evening auto-close, Evening flow) была кнопка «⬅️ В главное меню» с `callback_data="report_back"`. После внедрения ReplyKeyboard (Phase 2, флаг `EXPENSE_SIMPLE_CHECK`) меню всегда доступно внизу чата, кнопка стала бесполезна. При `EXPENSE_SIMPLE_CHECK=True` `report_back` был no-op, при `False` — дублировал ReplyKeyboard.
+
+**Решение (условное от флага):**
+- `EXPENSE_SIMPLE_CHECK=True` (ReplyKeyboard active) → `BTN_BACK_MAIN` **отсутствует** во всех отчётах, `report_back` → acknowledge без клавиатуры.
+- `EXPENSE_SIMPLE_CHECK=False` (inline-меню) → `BTN_BACK_MAIN` **присутствует**, `report_back` → `BACK_NAV` + `get_main_menu_keyboard()`.
+- Изменённые файлы: `morning_report.py`, `evening_report.py`, `evening_flow.py`, `menu.py`.
+
+---
+
+## 📌 Feature Flags
+
+| Флаг | По умолчанию | Что контролирует |
+|------|-------------|------------------|
+| `EXPENSE_SIMPLE_CHECK` | `True` | `True` → ReplyKeyboard (persistent menu внизу чата), inline-меню скрыто, чеки трат без лишних кнопок. `False` → inline-клавиатуры, кнопка «В главное меню» в отчётах. |
+| `BOT_TOKEN` | — | Telegram Bot API токен |
+| `DATABASE_URL` | `sqlite+aiosqlite:///tratobot.db` | Строка подключения к БД (SQLite dev / PostgreSQL prod) |
+
+---
 
 ## Архитектура
 

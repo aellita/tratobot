@@ -7,6 +7,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 
+from ..core.config import settings
 from ..db.database import async_session_maker
 from ..db.models.models import DailyReportsLog, User, UserSettings
 from ..utils import phrases
@@ -16,99 +17,41 @@ from .expense_service import get_current_period_expenses_sum, get_yesterday_expe
 logger = logging.getLogger(__name__)
 
 
-def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup:
-    if btn_type == "REGULAR":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
-            ]
-        )
+def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup | None:
+    has_reply_kb = settings.EXPENSE_SIMPLE_CHECK
+    base: list[list[InlineKeyboardButton]] = []
     if btn_type == "FRESH_START":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
-            ]
-        )
-    if btn_type == "FROM_YELLOW_TO_GREEN":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_USE_SAVINGS_COMFORT, callback_data="use_savings"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
-            ]
-        )
-    if btn_type == "FROM_YELLOW_TO_BLUE":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_RAISE_LIMIT_SAVINGS, callback_data="use_savings"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
-            ]
-        )
-    if btn_type == "FROM_RED_TO_GREEN":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
-            ]
-        )
-    if btn_type == "FROM_RED_TO_BLUE":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_EXIT_CRISIS_GREEN, callback_data="use_savings"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
-            ]
-        )
-    if btn_type == "FROM_RED_TO_YELLOW":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
-            ]
-        )
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
+        base = [
+            [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
         ]
-    )
+    elif btn_type == "FROM_YELLOW_TO_GREEN":
+        base = [
+            [InlineKeyboardButton(text=phrases.BTN_USE_SAVINGS_COMFORT, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
+        ]
+    elif btn_type == "FROM_YELLOW_TO_BLUE":
+        base = [
+            [InlineKeyboardButton(text=phrases.BTN_RAISE_LIMIT_SAVINGS, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
+        ]
+    elif btn_type == "FROM_RED_TO_GREEN":
+        base = [
+            [InlineKeyboardButton(text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
+        ]
+    elif btn_type == "FROM_RED_TO_BLUE":
+        base = [
+            [InlineKeyboardButton(text=phrases.BTN_EXIT_CRISIS_GREEN, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
+        ]
+    elif btn_type == "FROM_RED_TO_YELLOW":
+        base = [
+            [InlineKeyboardButton(text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings")],
+            [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
+        ]
+    if not has_reply_kb:
+        base.append([InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")])
+    return InlineKeyboardMarkup(inline_keyboard=base) if base else None
 
 
 async def _has_morning_report_today(tg_id: int, session) -> bool:

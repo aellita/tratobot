@@ -149,14 +149,13 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
         days_left=days_left,
     )
 
-    if settings.EXPENSE_SIMPLE_CHECK:
-        main_kb = None
-    else:
-        main_kb = InlineKeyboardMarkup(
+    kb = None
+    if not settings.EXPENSE_SIMPLE_CHECK:
+        kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
             ]
         )
-    await callback.message.answer(text, reply_markup=main_kb)
+    await callback.message.answer(text, reply_markup=kb)
 
     await state.clear()

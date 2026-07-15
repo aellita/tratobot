@@ -10,6 +10,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import select
 
 from ..bot.middleware import _last_keyboard
+from ..core.config import settings
 from ..db.database import async_session_maker
 from ..db.models.models import User, UserSettings
 from ..utils import phrases
@@ -189,18 +190,17 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                 except Exception:
                     pass
 
+            kb = None
+            if not settings.EXPENSE_SIMPLE_CHECK:
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
+                    ]
+                )
             await bot.send_message(
                 tg_id,
                 phrases.AUTO_CLOSE.format(total=f"{int(total):,}"),
-                reply_markup=InlineKeyboardMarkup(
-                    inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text=phrases.BTN_BACK_MAIN, callback_data="report_back"
-                            )
-                        ],
-                    ]
-                ),
+                reply_markup=kb,
             )
 
             await state.clear()
