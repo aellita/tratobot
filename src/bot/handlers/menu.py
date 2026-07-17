@@ -800,7 +800,10 @@ async def process_period_start(message: Message, state: FSMContext):
                 reply_markup=await get_main_menu_keyboard(message.from_user.id),
             )
             return
-        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="25"))
+        await message.answer(
+            phrases.ERR_INVALID_NUMBER.format(example="25"),
+            reply_markup=get_cancel_keyboard(),
+        )
         return
 
     if day < 1:
@@ -1571,8 +1574,11 @@ async def save_edit_period_start(message: Message, state: FSMContext):
                 reply_markup=await get_main_menu_keyboard(message.from_user.id),
             )
             return
-        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="25"))
-        return
+            await message.answer(
+                phrases.ERR_INVALID_NUMBER.format(example="25"),
+                reply_markup=get_cancel_keyboard(),
+            )
+            return
 
     if day < 1:
         day = 1
