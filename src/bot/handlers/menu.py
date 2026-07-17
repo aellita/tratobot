@@ -52,6 +52,7 @@ from ..keyboards import (
     get_period_start_keyboard,
     get_rounding_mode_keyboard,
     get_settings_keyboard,
+    get_stats_keyboard,
     get_start_choice_keyboard,
 )
 from ..middleware import dup_middleware
@@ -152,6 +153,16 @@ async def menu_back(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.BACK_NAV,
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+    )
+
+
+@router.callback_query(F.data == "menu_stats")
+async def menu_stats(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.clear()
+    await callback.message.edit_text(
+        text=phrases.BTN_STATS,
+        reply_markup=get_stats_keyboard(),
     )
 
 
@@ -739,7 +750,9 @@ async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext)
     current_state = await state.get_state()
 
     if callback.data == "period_other":
-        await callback.message.edit_text(text=phrases.PERIOD_CUSTOM_PROMPT, reply_markup=None)
+        await callback.message.edit_text(
+            text=phrases.PERIOD_CUSTOM_PROMPT, reply_markup=get_cancel_keyboard()
+        )
         await callback.answer()
         return
 
@@ -1548,6 +1561,16 @@ async def save_edit_period_start(message: Message, state: FSMContext):
     try:
         day = int(message.text.strip())
     except (ValueError, TypeError):
+        data = await state.get_data()
+        retries = data.get("_retry_count", 0) + 1
+        await state.update_data(_retry_count=retries)
+        if retries >= 3:
+            await state.clear()
+            await message.answer(
+                phrases.ERR_TOO_MANY_RETRIES,
+                reply_markup=await get_main_menu_keyboard(message.from_user.id),
+            )
+            return
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="25"))
         return
 

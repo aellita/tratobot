@@ -106,6 +106,7 @@ def get_period_start_keyboard():
             ],
             [InlineKeyboardButton(text=phrases.BTN_FIRST_DAY, callback_data="period_first")],
             [InlineKeyboardButton(text=phrases.BTN_OTHER_DATE, callback_data="period_other")],
+            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="cancel")],
         ]
     )
 
@@ -198,5 +199,5 @@ def get_monthly_nav_keyboard(
         )
     buttons = [row]
     if not settings.EXPENSE_SIMPLE_CHECK:
-        buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")])
+        buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_stats")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

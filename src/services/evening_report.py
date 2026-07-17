@@ -199,7 +199,7 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                 )
             await bot.send_message(
                 tg_id,
-                phrases.AUTO_CLOSE.format(total=f"{int(total):,}"),
+                random.choice(phrases.AUTO_CLOSE).format(total=f"{int(total):,}"),
                 reply_markup=kb,
             )
 
