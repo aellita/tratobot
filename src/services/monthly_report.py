@@ -92,6 +92,8 @@ async def get_average_expenses(telegram_id: int) -> float:
         return 0.0
     totals: list[float] = []
     for budget in budgets:
+        if is_period_active(budget):
+            continue
         period_start, period_end = get_period_dates(budget)
         breakdown = await get_category_breakdown(telegram_id, period_start, period_end)
         total = sum(amount for _, _, amount in breakdown)
