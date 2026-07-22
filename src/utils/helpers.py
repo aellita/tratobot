@@ -13,6 +13,12 @@ MSK_TZ = ZoneInfo("Europe/Moscow")
 
 FALLBACK_EMOJI = "🏷️"
 
+
+def check_retry(retries: int) -> tuple[bool, int]:
+    next_retry = retries + 1
+    return next_retry >= MAX_RETRIES, next_retry
+
+
 # --- Math expression evaluator (recursive descent, no eval) ---
 
 _TOKEN_SPEC = [
