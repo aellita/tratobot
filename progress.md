@@ -104,6 +104,11 @@
 
 **Решение:** SQL-запрос `spent_period` теперь фильтруется по `Expense.date >= period_start AND Expense.date < next_day_after_end`, где границы вычисляются через `get_period_dates(budget)`. `next_day = period_end + timedelta(days=1)` гарантирует, что последний день периода покрывается до 23:59:59.
 
+### B18: `_build_status` — двойной вычет `spent_period` при `free_money > 0` (2026-07-22)
+**Проблема:** `money_for_life = budget.free_money - spent_period`. `free_money` — это остаток на карте, введённый через reconciliation (кнопка «Остаток на карте»). Все прошлые траты периода уже учтены в этом остатке (деньги физически ушли с карты). Вычитание `spent_period` ещё раз давало заниженный «Остаток на жизнь» в статусе (напр. 262 100₽ вместо 275 000₽). `daily_limit` при этом считался верно (делил `free_money`, не `money_for_life`).
+
+**Решение:** `money_for_life = budget.free_money` — без вычитания `spent_period`.
+
 ---
 
 ## 📌 Feature Flags
