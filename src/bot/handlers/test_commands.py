@@ -62,12 +62,17 @@ async def cmd_test_monthly_summary(message: Message, bot: Bot):
         return
 
     budget = None
+    completed_budgets = []
     for b in budgets:
         _, pe = get_period_dates(b)
         if today == pe.date() + timedelta(days=1):
             budget = b
             break
-
+        if pe.date() < today:
+            completed_budgets.append((pe.date(), b))
+    if not budget and completed_budgets:
+        completed_budgets.sort(key=lambda x: x[0], reverse=True)
+        budget = completed_budgets[0][1]
     if not budget:
         budget = budgets[0]
 

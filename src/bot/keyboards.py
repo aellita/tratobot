@@ -116,7 +116,7 @@ def get_period_start_keyboard():
 def get_cancel_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="cancel")],
+            [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
         ]
     )
 
