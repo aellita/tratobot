@@ -176,6 +176,14 @@ def get_stats_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def get_start_new_period_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=phrases.BTN_START_NEW_PERIOD, callback_data="start_new_period")],
+        ]
+    )
+
+
 def get_monthly_nav_keyboard(
     has_prev: bool, has_next: bool, prev_label: str = "", next_label: str = ""
 ) -> InlineKeyboardMarkup:

@@ -92,6 +92,44 @@ async def send_morning_reports(bot: Bot):
                     if settings and not settings.notifications_enabled:
                         continue
 
+                from ..bot.keyboards import get_start_new_period_keyboard
+                from ..bot.rich_api import send_rich_message
+                from ..db.models.models import Budget as BudgetModel
+                from ..utils import phrases
+                from .monthly_report import (
+                    build_summary_data,
+                    format_summary_text,
+                    get_average_expenses,
+                    get_period_dates,
+                )
+
+                today = get_msk_now().date()
+                sent_summary = False
+                async with async_session_maker() as session:
+                    result = await session.execute(
+                        select(BudgetModel).where(BudgetModel.telegram_id == tg_id)
+                    )
+                    for b in result.scalars().all():
+                        _, pe = get_period_dates(b)
+                        if today == pe.date() + timedelta(days=1):
+                            data = await build_summary_data(tg_id, b)
+                            msg = format_summary_text(data)
+                            avg = await get_average_expenses(tg_id)
+                            if avg > 0:
+                                msg += phrases.MONTHLY_POSTSCRIPT.format(avg=int(avg))
+                            await send_rich_message(
+                                bot, tg_id, msg,
+                                reply_markup=get_start_new_period_keyboard(),
+                            )
+                            async with async_session_maker() as log_session:
+                                await _log_morning_report(tg_id, log_session)
+                            logger.info(f"Ежемесячный отчёт отправлен {tg_id}")
+                            sent_summary = True
+                            break
+
+                if sent_summary:
+                    continue
+
                 from .budget_service import get_active_budget
 
                 budget = await get_active_budget(tg_id)
@@ -99,25 +137,7 @@ async def send_morning_reports(bot: Bot):
                 if not budget or budget.daily_limit <= 0:
                     continue
 
-                from .monthly_report import (
-                    build_summary_data,
-                    format_summary_text,
-                    get_period_dates,
-                )
-
                 period_start, period_end = get_period_dates(budget)
-                today = get_msk_now().date()
-                period_end_date = period_end.date()
-                if today == period_end_date + timedelta(days=1):
-                    async with async_session_maker() as session:
-                        await _log_morning_report(tg_id, session)
-                    from ..bot.rich_api import send_rich_message
-
-                    data = await build_summary_data(tg_id, budget)
-                    msg = format_summary_text(data)
-                    await send_rich_message(bot, tg_id, msg)
-                    logger.info(f"Ежемесячный отчёт отправлен {tg_id}")
-                    continue
 
                 yesterday_spent = await get_yesterday_expenses_sum(tg_id)
                 spent_period = await get_current_period_expenses_sum(tg_id)

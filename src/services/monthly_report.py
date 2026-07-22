@@ -86,6 +86,22 @@ async def get_all_budgets(telegram_id: int) -> list[Budget]:
         return list(result.scalars().all())
 
 
+async def get_average_expenses(telegram_id: int) -> float:
+    budgets = await get_all_budgets(telegram_id)
+    if not budgets:
+        return 0.0
+    totals: list[float] = []
+    for budget in budgets:
+        period_start, period_end = get_period_dates(budget)
+        breakdown = await get_category_breakdown(telegram_id, period_start, period_end)
+        total = sum(amount for _, _, amount in breakdown)
+        if total > 0:
+            totals.append(total)
+    if not totals:
+        return 0.0
+    return sum(totals) / len(totals)
+
+
 async def get_category_breakdown(
     telegram_id: int, period_start: datetime, period_end: datetime
 ) -> list[tuple[str | None, int, float]]:

@@ -52,8 +52,8 @@ from ..keyboards import (
     get_period_start_keyboard,
     get_rounding_mode_keyboard,
     get_settings_keyboard,
-    get_stats_keyboard,
     get_start_choice_keyboard,
+    get_stats_keyboard,
 )
 from ..middleware import dup_middleware
 
@@ -258,6 +258,27 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
 
     await callback.message.answer(
         text=phrases.ONBOARDING_RESTART, reply_markup=get_onboarding_keyboard()
+    )
+    await state.set_state(BudgetSetup.waiting_for_income)
+
+
+@router.callback_query(F.data == "start_new_period")
+async def start_new_period(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.clear()
+
+    await get_or_create_user(
+        telegram_id=callback.from_user.id,
+        first_name=callback.from_user.first_name,
+        username=callback.from_user.username,
+    )
+    await seed_user_categories(callback.from_user.id)
+
+    greeting = random.choice(GREETINGS)
+    await callback.message.edit_text(text=greeting)
+
+    await callback.message.answer(
+        text=phrases.ONBOARDING_START, reply_markup=get_onboarding_keyboard()
     )
     await state.set_state(BudgetSetup.waiting_for_income)
 

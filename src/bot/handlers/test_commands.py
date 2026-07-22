@@ -27,3 +27,46 @@ async def cmd_test_teaser(message: Message, bot: Bot, state: FSMContext):
 @router.message(Command("test_morning"))
 async def cmd_test_morning(message: Message, bot: Bot):
     await send_morning_reports(bot)
+
+
+@router.message(Command("test_monthly_summary"))
+async def cmd_test_monthly_summary(message: Message, bot: Bot):
+    from sqlalchemy import select
+
+    from ...db.database import async_session_maker
+    from ...db.models.models import Budget
+    from ...services.budget_service import get_active_budget
+    from ...services.monthly_report import (
+        build_summary_data,
+        format_summary_text,
+        get_average_expenses,
+    )
+    from ...utils import phrases
+    from ..keyboards import get_start_new_period_keyboard
+    from ..rich_api import send_rich_message
+
+    tg_id = message.from_user.id
+
+    budget = await get_active_budget(tg_id)
+    if not budget:
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(Budget).where(Budget.telegram_id == tg_id).order_by(Budget.month.desc())
+            )
+            budget = result.scalars().first()
+        if not budget:
+            await message.answer("❌ У тебя нет ни одного бюджета.")
+            return
+
+    await message.answer("📊 Генерирую Monthly Summary...")
+
+    data = await build_summary_data(tg_id, budget)
+    msg = format_summary_text(data)
+    avg = await get_average_expenses(tg_id)
+    if avg > 0:
+        msg += phrases.MONTHLY_POSTSCRIPT.format(avg=int(avg))
+
+    await send_rich_message(
+        bot, tg_id, msg,
+        reply_markup=get_start_new_period_keyboard(),
+    )
