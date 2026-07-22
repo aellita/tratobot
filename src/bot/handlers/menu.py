@@ -310,7 +310,7 @@ async def rollover_edit_budget(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
 
-    from ...services.monthly_report import get_all_budgets
+    from ...services.monthly_report import get_all_budgets, get_period_dates
 
     tg_id = callback.from_user.id
     budgets = await get_all_budgets(tg_id)
@@ -318,7 +318,17 @@ async def rollover_edit_budget(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("❌ Не могу найти предыдущий бюджет.")
         return
 
-    old = budgets[0]
+    today = get_msk_now().date()
+    old = None
+    for b in budgets:
+        _, pe = get_period_dates(b)
+        if today == pe.date() + timedelta(days=1):
+            old = b
+            break
+    if not old:
+        await callback.message.answer("❌ Не найден завершившийся период.")
+        return
+
     old_income = old.total_income
     old_date = old.period_start_day or 1
 
