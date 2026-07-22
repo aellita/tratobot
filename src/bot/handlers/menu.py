@@ -326,8 +326,7 @@ async def rollover_edit_budget(callback: CallbackQuery, state: FSMContext):
             old = b
             break
     if not old:
-        await callback.message.answer("❌ Не найден завершившийся период.")
-        return
+        old = budgets[0]
 
     old_income = old.total_income
     old_date = old.period_start_day or 1
