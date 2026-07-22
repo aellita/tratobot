@@ -57,6 +57,14 @@ from ..keyboards import (
 )
 from ..middleware import dup_middleware
 
+REPLY_MENU_COMMANDS = frozenset({
+    phrases.BTN_ADD_EXPENSE,
+    phrases.BTN_DAILY_LIMIT,
+    phrases.BTN_STATS,
+    phrases.BTN_SETTINGS,
+    phrases.BTN_HELP,
+})
+
 router = Router()
 
 
@@ -780,6 +788,14 @@ async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext)
         await state.clear()
 
     await callback.answer()
+
+
+@router.message(BudgetSetup.waiting_for_period_start, F.text.in_(REPLY_MENU_COMMANDS))
+async def handle_menu_interrupt_in_budget_setup(message: Message, state: FSMContext):
+    await message.answer(
+        phrases.FSM_INTERRUPT_PERIOD,
+        reply_markup=get_cancel_keyboard(),
+    )
 
 
 @router.message(BudgetSetup.waiting_for_period_start)
@@ -1553,6 +1569,14 @@ async def edit_period_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(EditBudget.waiting_for_period_start)
     await callback.message.edit_text(
         text=phrases.PERIOD_EDIT_PROMPT, reply_markup=get_period_start_keyboard()
+    )
+
+
+@router.message(EditBudget.waiting_for_period_start, F.text.in_(REPLY_MENU_COMMANDS))
+async def handle_menu_interrupt_in_edit_budget(message: Message, state: FSMContext):
+    await message.answer(
+        phrases.FSM_INTERRUPT_PERIOD,
+        reply_markup=get_cancel_keyboard(),
     )
 
 
