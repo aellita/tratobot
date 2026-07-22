@@ -46,6 +46,8 @@ from ..keyboards import (
     get_cancel_keyboard,
     get_change_budget_choice_keyboard,
     get_duplicate_keyboard,
+    get_keep_date_keyboard,
+    get_keep_income_keyboard,
     get_main_menu_keyboard,
     get_main_reply_keyboard,
     get_onboarding_keyboard,
@@ -75,6 +77,11 @@ class BudgetSetup(StatesGroup):
     waiting_for_black_day = State()
     waiting_for_wishlist_name = State()
     waiting_for_rounding_mode = State()
+
+
+class NewPeriodSetup(StatesGroup):
+    waiting_for_income = State()
+    waiting_for_period_start = State()
 
 
 class EditBudget(StatesGroup):
@@ -262,25 +269,68 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
     await state.set_state(BudgetSetup.waiting_for_income)
 
 
-@router.callback_query(F.data == "start_new_period")
-async def start_new_period(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data == "rollover_keep")
+async def rollover_keep_budget(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
 
-    await get_or_create_user(
-        telegram_id=callback.from_user.id,
-        first_name=callback.from_user.first_name,
-        username=callback.from_user.username,
-    )
-    await seed_user_categories(callback.from_user.id)
+    from ...services.monthly_report import get_all_budgets
 
-    greeting = random.choice(GREETINGS)
-    await callback.message.edit_text(text=greeting)
+    tg_id = callback.from_user.id
+    budgets = await get_all_budgets(tg_id)
+    if not budgets:
+        await callback.message.answer("❌ Не могу найти предыдущий бюджет.")
+        return
 
-    await callback.message.answer(
-        text=phrases.ONBOARDING_START, reply_markup=get_onboarding_keyboard()
+    old = budgets[0]
+    month = get_msk_now().strftime("%Y-%m")
+    await save_budget(
+        telegram_id=tg_id, month=month,
+        income=old.total_income,
+        mandatory=old.mandatory_payments,
+        black_day=old.black_day_fund,
+        wishlist_name=old.wishlist_name or phrases.DEFAULT_WISHLIST_NAME,
+        wishlist_price=old.wishlist_target,
+        period_start_day=old.period_start_day or 1,
     )
-    await state.set_state(BudgetSetup.waiting_for_income)
+
+    from ..middleware import _last_keyboard
+    _last_keyboard.pop(tg_id, None)
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+
+    await callback.message.answer(phrases.ROLLOVER_CONFIRMED)
+
+
+@router.callback_query(F.data == "rollover_edit")
+async def rollover_edit_budget(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.clear()
+
+    from ...services.monthly_report import get_all_budgets
+
+    tg_id = callback.from_user.id
+    budgets = await get_all_budgets(tg_id)
+    if not budgets:
+        await callback.message.answer("❌ Не могу найти предыдущий бюджет.")
+        return
+
+    old = budgets[0]
+    old_income = old.total_income
+    old_date = old.period_start_day or 1
+
+    await state.update_data(old_income=old_income, old_date=old_date, income=old_income)
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+    text = f"💰 В прошлом периоде твой доход был {int(old_income):,} ₽. Сколько залетает сейчас?"
+    await callback.message.answer(text=text, reply_markup=get_keep_income_keyboard(old_income))
+    await state.set_state(NewPeriodSetup.waiting_for_income)
 
 
 @router.callback_query(F.data == "menu_status")
@@ -940,6 +990,106 @@ async def handle_rounding_choice(callback: CallbackQuery, state: FSMContext):
         text=phrases.ROUNDING_SAVED.format(label=label),
         reply_markup=await get_main_menu_keyboard(callback.from_user.id),
     )
+
+
+# ============ NEW PERIOD SETUP (SMART ROLLOVER) ============
+
+
+async def _advance_new_period(source: CallbackQuery | Message, state: FSMContext):
+    current = await state.get_state()
+    if current == NewPeriodSetup.waiting_for_income.state:
+        data = await state.get_data()
+        old_date = data.get("old_date", 1)
+        text = f"🗓️ Обычно мы стартуем {old_date}-го числа. Меняем дату начала периода?"
+        if isinstance(source, CallbackQuery):
+            await source.message.answer(text=text, reply_markup=get_keep_date_keyboard(old_date))
+        else:
+            await source.answer(text=text, reply_markup=get_keep_date_keyboard(old_date))
+        await state.set_state(NewPeriodSetup.waiting_for_period_start)
+    elif current == NewPeriodSetup.waiting_for_period_start.state:
+        await _finish_new_period(source, state)
+
+
+async def _finish_new_period(source: CallbackQuery | Message, state: FSMContext):
+    data = await state.get_data()
+    income = data.get("income", 0)
+    period_start_day = data.get("period_start_day", 1)
+    tg_id = source.from_user.id
+
+    from ...services.monthly_report import get_all_budgets
+
+    budgets = await get_all_budgets(tg_id)
+    if budgets:
+        old = budgets[0]
+        mandatory = old.mandatory_payments
+        black_day = old.black_day_fund
+        wishlist_name = old.wishlist_name or phrases.DEFAULT_WISHLIST_NAME
+        wishlist_target = old.wishlist_target
+    else:
+        mandatory = 0
+        black_day = 0
+        wishlist_name = phrases.DEFAULT_WISHLIST_NAME
+        wishlist_target = 0
+
+    month = get_msk_now().strftime("%Y-%m")
+    await save_budget(
+        telegram_id=tg_id, month=month,
+        income=income, mandatory=mandatory, black_day=black_day,
+        wishlist_name=wishlist_name, wishlist_price=wishlist_target,
+        period_start_day=period_start_day,
+    )
+    await state.clear()
+
+    if isinstance(source, CallbackQuery):
+        try:
+            await source.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await source.message.answer(phrases.ROLLOVER_CONFIRMED)
+    else:
+        await source.answer(phrases.ROLLOVER_CONFIRMED)
+
+
+@router.callback_query(F.data == "rollover_keep_income")
+async def handle_rollover_keep_income(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    data = await state.get_data()
+    income = data.get("old_income", 0)
+    await state.update_data(income=income)
+    await _advance_new_period(callback, state)
+
+
+@router.callback_query(F.data == "rollover_keep_date")
+async def handle_rollover_keep_date(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    data = await state.get_data()
+    period_start_day = data.get("old_date", 1)
+    await state.update_data(period_start_day=period_start_day)
+    await _advance_new_period(callback, state)
+
+
+@router.message(NewPeriodSetup.waiting_for_income)
+async def new_period_income(message: Message, state: FSMContext):
+    amount = parse_amount(message.text.strip())
+    if amount is None or amount <= 0:
+        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
+        return
+    await state.update_data(income=amount)
+    await _advance_new_period(message, state)
+
+
+@router.message(NewPeriodSetup.waiting_for_period_start)
+async def new_period_period_start(message: Message, state: FSMContext):
+    text = message.text.strip()
+    try:
+        day = int(text)
+        if day < 1 or day > 31:
+            raise ValueError
+    except (ValueError, TypeError):
+        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="20"))
+        return
+    await state.update_data(period_start_day=day)
+    await _advance_new_period(message, state)
 
 
 # ============ ADD EXPENSE ============

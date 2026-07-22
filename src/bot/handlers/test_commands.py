@@ -42,7 +42,7 @@ async def cmd_test_monthly_summary(message: Message, bot: Bot):
         get_average_expenses,
     )
     from ...utils import phrases
-    from ..keyboards import get_start_new_period_keyboard
+    from ..keyboards import get_rollover_keyboard
     from ..rich_api import send_rich_message
 
     tg_id = message.from_user.id
@@ -62,11 +62,12 @@ async def cmd_test_monthly_summary(message: Message, bot: Bot):
 
     data = await build_summary_data(tg_id, budget)
     msg = format_summary_text(data)
-    avg = await get_average_expenses(tg_id)
-    if avg > 0:
-        msg += phrases.MONTHLY_POSTSCRIPT.format(avg=int(avg))
+    await send_rich_message(bot, tg_id, msg)
 
-    await send_rich_message(
-        bot, tg_id, msg,
-        reply_markup=get_start_new_period_keyboard(),
+    avg = await get_average_expenses(tg_id)
+    offer = phrases.ROLLOVER_OFFER.format(
+        old_date=budget.period_start_day or 1,
+        avg=int(avg) if avg > 0 else 0,
+        old_income=int(budget.total_income),
     )
+    await bot.send_message(tg_id, offer, reply_markup=get_rollover_keyboard())

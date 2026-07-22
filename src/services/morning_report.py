@@ -92,7 +92,7 @@ async def send_morning_reports(bot: Bot):
                     if settings and not settings.notifications_enabled:
                         continue
 
-                from ..bot.keyboards import get_start_new_period_keyboard
+                from ..bot.keyboards import get_rollover_keyboard
                 from ..bot.rich_api import send_rich_message
                 from ..db.models.models import Budget as BudgetModel
                 from ..utils import phrases
@@ -114,16 +114,22 @@ async def send_morning_reports(bot: Bot):
                         if today == pe.date() + timedelta(days=1):
                             data = await build_summary_data(tg_id, b)
                             msg = format_summary_text(data)
+                            await send_rich_message(bot, tg_id, msg)
+
                             avg = await get_average_expenses(tg_id)
-                            if avg > 0:
-                                msg += phrases.MONTHLY_POSTSCRIPT.format(avg=int(avg))
-                            await send_rich_message(
-                                bot, tg_id, msg,
-                                reply_markup=get_start_new_period_keyboard(),
+                            offer = phrases.ROLLOVER_OFFER.format(
+                                old_date=b.period_start_day or 1,
+                                avg=int(avg) if avg > 0 else 0,
+                                old_income=int(b.total_income),
                             )
+                            await bot.send_message(
+                                tg_id, offer,
+                                reply_markup=get_rollover_keyboard(),
+                            )
+
                             async with async_session_maker() as log_session:
                                 await _log_morning_report(tg_id, log_session)
-                            logger.info(f"Ежемесячный отчёт отправлен {tg_id}")
+                            logger.info(f"Ежемесячный отчёт и rollover отправлены {tg_id}")
                             sent_summary = True
                             break
 

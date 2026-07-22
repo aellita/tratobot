@@ -176,10 +176,37 @@ def get_stats_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_start_new_period_keyboard():
+def get_rollover_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_START_NEW_PERIOD, callback_data="start_new_period")],
+            [
+                InlineKeyboardButton(text=phrases.BTN_ROLLOVER_KEEP, callback_data="rollover_keep"),
+                InlineKeyboardButton(text=phrases.BTN_ROLLOVER_EDIT, callback_data="rollover_edit"),
+            ],
+        ]
+    )
+
+
+def get_keep_income_keyboard(amount: float) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text=phrases.BTN_ROLLOVER_KEEP_INCOME.format(amount=int(amount)),
+                callback_data="rollover_keep_income",
+            )],
+            [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
+        ]
+    )
+
+
+def get_keep_date_keyboard(day: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(
+                text=phrases.BTN_ROLLOVER_KEEP_DATE.format(day=day),
+                callback_data="rollover_keep_date",
+            )],
+            [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
         ]
     )
 
