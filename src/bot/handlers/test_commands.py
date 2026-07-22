@@ -53,7 +53,7 @@ async def cmd_test_monthly_summary(message: Message, bot: Bot):
     today = get_msk_now().date()
     async with async_session_maker() as session:
         result = await session.execute(
-            select(Budget).where(Budget.telegram_id == tg_id)
+            select(Budget).where(Budget.telegram_id == tg_id).order_by(Budget.month.desc())
         )
         budgets = list(result.scalars().all())
 
