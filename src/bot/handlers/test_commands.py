@@ -70,4 +70,4 @@ async def cmd_test_monthly_summary(message: Message, bot: Bot):
         avg=int(avg) if avg > 0 else 0,
         old_income=int(budget.total_income),
     )
-    await bot.send_message(tg_id, offer, reply_markup=get_rollover_keyboard())
+    await bot.send_message(tg_id, offer, reply_markup=get_rollover_keyboard(budget.id))

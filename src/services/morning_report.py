@@ -124,7 +124,7 @@ async def send_morning_reports(bot: Bot):
                             )
                             await bot.send_message(
                                 tg_id, offer,
-                                reply_markup=get_rollover_keyboard(),
+                                reply_markup=get_rollover_keyboard(b.id),
                             )
 
                             async with async_session_maker() as log_session:

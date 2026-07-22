@@ -43,6 +43,7 @@ from ...services.goal_service import add_spare_change_to_goal, get_goal_current_
 from ...services.user_service import get_or_create_user
 from ...utils import phrases
 from ...utils.helpers import get_msk_now, parse_amount, safe
+from ..callbacks import RolloverCb
 from ..keyboards import (
     get_cancel_keyboard,
     get_change_budget_choice_keyboard,
@@ -270,23 +271,24 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
     await state.set_state(BudgetSetup.waiting_for_income)
 
 
-@router.callback_query(F.data == "rollover_keep")
-async def rollover_keep_budget(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(RolloverCb.filter(F.action == "keep"))
+async def rollover_keep_budget(
+    callback: CallbackQuery, callback_data: RolloverCb, state: FSMContext,
+):
     await callback.answer()
     await state.clear()
 
-    from ...services.monthly_report import get_all_budgets
+    async with async_session_maker() as session:
+        old = await session.get(Budget, callback_data.budget_id)
 
-    tg_id = callback.from_user.id
-    budgets = await get_all_budgets(tg_id)
-    if not budgets:
-        await callback.message.answer("❌ Не могу найти предыдущий бюджет.")
+    if not old:
+        await callback.answer("⚠️ Исходный бюджет не найден.", show_alert=True)
         return
 
-    old = budgets[0]
+    tg_id = callback.from_user.id
     month = get_msk_now().strftime("%Y-%m")
     await save_budget(
-        telegram_id=tg_id, month=month,
+        telegram_id=tg_id, month=month, free_money=0,
         income=old.total_income,
         mandatory=old.mandatory_payments,
         black_day=old.black_day_fund,
@@ -305,28 +307,19 @@ async def rollover_keep_budget(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(phrases.ROLLOVER_CONFIRMED)
 
 
-@router.callback_query(F.data == "rollover_edit")
-async def rollover_edit_budget(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(RolloverCb.filter(F.action == "edit"))
+async def rollover_edit_budget(
+    callback: CallbackQuery, callback_data: RolloverCb, state: FSMContext,
+):
     await callback.answer()
     await state.clear()
 
-    from ...services.monthly_report import get_all_budgets, get_period_dates
+    async with async_session_maker() as session:
+        old = await session.get(Budget, callback_data.budget_id)
 
-    tg_id = callback.from_user.id
-    budgets = await get_all_budgets(tg_id)
-    if not budgets:
-        await callback.message.answer("❌ Не могу найти предыдущий бюджет.")
-        return
-
-    today = get_msk_now().date()
-    old = None
-    for b in budgets:
-        _, pe = get_period_dates(b)
-        if today == pe.date() + timedelta(days=1):
-            old = b
-            break
     if not old:
-        old = budgets[0]
+        await callback.answer("⚠️ Исходный бюджет не найден.", show_alert=True)
+        return
 
     old_income = old.total_income
     old_date = old.period_start_day or 1
@@ -1087,7 +1080,11 @@ async def handle_rollover_keep_date(callback: CallbackQuery, state: FSMContext):
 
 @router.message(NewPeriodSetup.waiting_for_income)
 async def new_period_income(message: Message, state: FSMContext):
-    amount = parse_amount(message.text.strip())
+    try:
+        amount = parse_amount(message.text.strip())
+    except ValueError:
+        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
+        return
     if amount is None or amount <= 0:
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
         return

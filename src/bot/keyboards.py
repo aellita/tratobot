@@ -4,12 +4,14 @@ from aiogram.types import (
     KeyboardButton,
     ReplyKeyboardMarkup,
 )
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from src.core.config import settings
 from src.utils import phrases
 from src.utils.helpers import get_msk_now
 
 from ..services.budget_service import get_active_budget
+from .callbacks import RolloverCb
 
 
 def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
@@ -176,15 +178,17 @@ def get_stats_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_rollover_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text=phrases.BTN_ROLLOVER_KEEP, callback_data="rollover_keep"),
-                InlineKeyboardButton(text=phrases.BTN_ROLLOVER_EDIT, callback_data="rollover_edit"),
-            ],
-        ]
+def get_rollover_keyboard(budget_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=phrases.BTN_ROLLOVER_KEEP,
+        callback_data=RolloverCb(action="keep", budget_id=budget_id),
     )
+    builder.button(
+        text=phrases.BTN_ROLLOVER_EDIT,
+        callback_data=RolloverCb(action="edit", budget_id=budget_id),
+    )
+    return builder.as_markup()
 
 
 def get_keep_income_keyboard(amount: float) -> InlineKeyboardMarkup:
