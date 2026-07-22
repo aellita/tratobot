@@ -6,7 +6,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from src.core.config import settings
 from src.utils import phrases
-from src.utils.helpers import get_msk_now
+from src.utils.helpers import check_retry, get_msk_now
 
 from ...db.database import async_session_maker
 from ...db.models.models import Expense
@@ -25,7 +25,7 @@ from ...services.expense_service import (
     parse_expense_text,
 )
 from ...utils.helpers import safe
-from ..keyboards import get_main_menu_keyboard
+from ..keyboards import get_cancel_keyboard, get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +42,26 @@ async def handle_evening_expense(message: Message, state: FSMContext):
 
     parsed = parse_expense_text(message.text)
     if not parsed.is_valid:
+        data = await state.get_data()
+        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
+        await state.update_data(_retry_count=next_retry)
+        if exhausted:
+            await state.clear()
+            await message.answer(
+                phrases.ERR_TOO_MANY_RETRIES,
+                reply_markup=await get_main_menu_keyboard(user_id),
+            )
+            return
         if parsed.error_type == "MATH_ERROR":
             await message.answer(
-                phrases.ERR_MATH_ERROR.format(detail=parsed.error_detail or parsed.raw_text)
+                phrases.ERR_MATH_ERROR.format(detail=parsed.error_detail or parsed.raw_text),
+                reply_markup=get_cancel_keyboard(),
             )
         else:
-            await message.answer(phrases.ERR_PARSE_EXPENSE)
+            await message.answer(
+                phrases.ERR_PARSE_EXPENSE,
+                reply_markup=get_cancel_keyboard(),
+            )
         return
 
     amount = parsed.amount

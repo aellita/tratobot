@@ -357,7 +357,10 @@ async def save_edit_expense(message: Message, state: FSMContext):
                 reply_markup=await get_main_menu_keyboard(message.from_user.id),
             )
             return
-        await message.answer(phrases.ERR_INVALID_NUMBER.format(example="500"))
+        await message.answer(
+            phrases.ERR_INVALID_NUMBER.format(example="500"),
+            reply_markup=get_cancel_keyboard(),
+        )
         return
 
     expense = await update_expense_amount(message.from_user.id, expense_id, amount)

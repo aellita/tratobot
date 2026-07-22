@@ -109,6 +109,23 @@
 
 **Решение:** `money_for_life = budget.free_money` — без вычитания `spent_period`.
 
+### B19: Retry+cancel везде, где FSM-ввод числа (2026-07-22)
+**Проблема:** 7 FSM-хендлеров числового ввода не имели retry-счётчика (3 попытки → выход) и кнопки «Отмена» — пользователь мог бесконечно получать «❌ Введи число» без выхода. Ещё 3 хендлера имели retry, но без cancel-кнопки на сообщении об ошибке.
+
+**Исправленные хендлеры:**
+- `process_income` (BudgetSetup.waiting_for_income)
+- `process_mandatory` (BudgetSetup.waiting_for_mandatory)
+- `process_black_day` (BudgetSetup.waiting_for_black_day)
+- `save_recalc_balance` (EditBudget.waiting_for_recalc_balance)
+- `save_add_income` (EditBudget.waiting_for_add_income)
+- `save_mandatory` (EditBudget.waiting_for_mandatory)
+- `save_black_day` (EditBudget.waiting_for_black_day)
+- `process_expense` (AddExpense.waiting_for_amount) — добавлена cancel-кнопка
+- `save_edit_expense` (EditExpense.waiting_for_amount, history.py) — добавлена cancel-кнопка
+- `handle_evening_expense` (EveningState.filling, evening_flow.py) — добавлены retry+cancel
+
+**Паттерн:** `check_retry()` + `get_cancel_keyboard()` + `ERR_TOO_MANY_RETRIES` на 3-й попытке.
+
 ---
 
 ## 📌 Feature Flags

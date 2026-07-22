@@ -128,7 +128,7 @@ class TestProcessIncome:
 
         await process_income(msg, state)
 
-        state.update_data.assert_not_called()
+        state.update_data.assert_awaited_with(_retry_count=1)
         state.set_state.assert_not_called()
         msg.answer.assert_awaited()
 
@@ -138,7 +138,8 @@ class TestProcessIncome:
 
         await process_income(msg, state)
 
-        state.update_data.assert_not_called()
+        state.update_data.assert_awaited_with(_retry_count=1)
+        state.set_state.assert_not_called()
 
     async def test_zero_income_returns_error(self):
         msg = _make_message("0")
@@ -146,7 +147,7 @@ class TestProcessIncome:
 
         await process_income(msg, state)
 
-        state.update_data.assert_not_called()
+        state.update_data.assert_awaited_with(_retry_count=1)
 
 
 # =============================================================================
