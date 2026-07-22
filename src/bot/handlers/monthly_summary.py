@@ -49,12 +49,12 @@ async def _build_report_text(telegram_id: int, budget_idx: int) -> tuple[str, bo
     next_label = ""
     if has_prev:
         next_b = budgets[budget_idx + 1]
-        pd = get_period_dates(next_b)
-        prev_label = pd[0].strftime("%b").lower()
+        ps, pe = get_period_dates(next_b)
+        prev_label = f"{ps.strftime('%d.%m')}–{pe.strftime('%d.%m')} · {int(next_b.total_income):,} ₽"
     if has_next:
         prev_b = budgets[budget_idx - 1]
-        pd = get_period_dates(prev_b)
-        next_label = pd[0].strftime("%b").lower()
+        ps, pe = get_period_dates(prev_b)
+        next_label = f"{ps.strftime('%d.%m')}–{pe.strftime('%d.%m')} · {int(prev_b.total_income):,} ₽"
 
     return text, has_prev, has_next, prev_label, next_label
 

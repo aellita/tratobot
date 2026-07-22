@@ -261,6 +261,9 @@ def format_summary_text(data: dict, label: str = "") -> str:
     )
     parts.append(f"<p><b>💰 Всего потрачено: {data['total_spent']:,.0f} ₽</b> ({zone_str})</p>")
 
+    budget_income = int(budget.total_income)
+    parts.append(f"<p>💵 Бюджет: {budget_income:,} ₽</p>")
+
     avg_line = phrases.MONTHLY_AVG_DAY.format(avg=data["avg_day"])
     parts.append(f"<p>{_esc(avg_line)}</p>")
 
