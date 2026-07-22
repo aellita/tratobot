@@ -95,6 +95,15 @@
 - `EXPENSE_SIMPLE_CHECK=False` (inline-меню) → `BTN_BACK_MAIN` **присутствует**, `report_back` → `BACK_NAV` + `get_main_menu_keyboard()`.
 - Изменённые файлы: `morning_report.py`, `evening_report.py`, `evening_flow.py`, `menu.py`.
 
+### B13 + B14: `free_money` не сбрасывался при ролловере + `spent_period` считал все траты (2026-07-22)
+**Проблема (B13):** `save_budget()` не трогал `free_money`. После Fast Track / Edit Path старый `free_money` (из reconciliation) оставался и переопределял `daily_limit`.
+
+**Решение:** `save_budget()` получила параметр `free_money: float = 0` — теперь `free_money` явно обнуляется при создании или обновлении любого бюджета. Один SQL-запрос, без дополнительного roundtrip.
+
+**Проблема (B14):** `_build_status()` считал `spent_period` как `SUM(Expense.amount) WHERE is_deleted == False` без фильтра по дате — суммировались все траты за всё время, затем вычитались из `free_money` или `income`, давая бессмысленный остаток.
+
+**Решение:** SQL-запрос `spent_period` теперь фильтруется по `Expense.date >= period_start AND Expense.date < next_day_after_end`, где границы вычисляются через `get_period_dates(budget)`. `next_day = period_end + timedelta(days=1)` гарантирует, что последний день периода покрывается до 23:59:59.
+
 ---
 
 ## 📌 Feature Flags

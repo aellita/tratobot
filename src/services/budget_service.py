@@ -42,6 +42,7 @@ async def save_budget(
     wishlist_name: str = None,
     wishlist_price: float = 0,
     period_start_day: int = 1,
+    free_money: float = 0,
 ):
     async with async_session_maker() as session:
         result = await session.execute(
@@ -56,6 +57,7 @@ async def save_budget(
             budget.wishlist_name = wishlist_name or "Хотелка"
             budget.wishlist_target = wishlist_price
             budget.period_start_day = period_start_day
+            budget.free_money = free_money
         else:
             budget = Budget(
                 telegram_id=telegram_id,
@@ -66,6 +68,7 @@ async def save_budget(
                 wishlist_name=wishlist_name or "Хотелка",
                 wishlist_target=wishlist_price,
                 period_start_day=period_start_day,
+                free_money=free_money,
             )
             session.add(budget)
 

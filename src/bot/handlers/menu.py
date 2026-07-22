@@ -1,6 +1,7 @@
 import logging
 import random
 import re
+from datetime import timedelta
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -358,10 +359,17 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         )
         spent_today = result.scalar() or 0
 
+        from ...services.monthly_report import get_period_dates
+
+        period_start, period_end = get_period_dates(budget)
+        next_day = period_end + timedelta(days=1)
+
         result = await session.execute(
             select(func.sum(Expense.amount)).where(
                 Expense.telegram_id == tg_id,
                 Expense.is_deleted == False,
+                Expense.date >= period_start,
+                Expense.date < next_day,
             )
         )
         spent_period = result.scalar() or 0
