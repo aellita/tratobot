@@ -310,6 +310,9 @@ def format_summary_text(data: dict, label: str = "") -> str:
             det_html += f"• {_esc(content)}<br>"
     det_html = det_html.rstrip("<br>")
 
+    period_label = data.get("period_label", "")
+    if period_label:
+        det_html = f"• Период: {_esc(period_label)}<br>" + det_html
     parts.append("<details>\n<summary>📁 Детали расчёта</summary>\n" + det_html + "\n</details>")
 
     return "\n".join(parts)
@@ -358,4 +361,5 @@ async def build_summary_data(telegram_id: int, budget: Budget) -> dict:
         "bdf_amount": bdf_amount,
         "bdf_used": bdf_used,
         "rounding_total": rounding_total,
+        "period_label": f"{period_start.strftime('%d %b').lower()} – {period_end.strftime('%d %b %Y').lower()}",
     }
