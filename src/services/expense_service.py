@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from ..db.database import async_session_maker
 from ..db.models.models import Expense, UserSettings
 from ..utils import phrases
-from ..utils.helpers import _parse_math_prefix, _preprocess_math, _split_math_prefix, get_msk_now
+from ..utils.helpers import _parse_math_prefix, _preprocess_math, _split_math_prefix, get_msk_now, safe
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
@@ -311,10 +311,10 @@ async def get_today_expenses_grouped(telegram_id: int) -> list[str]:
     for exp, cat in rows:
         if cat:
             emoji, cat_name = get_category_display(cat.name)
-            prefix = f"{emoji} {cat_name}"
+            prefix = f"{emoji} {safe(cat_name)}"
         else:
             prefix = "📦 Прочее"
-        desc = exp.description or ""
+        desc = safe(exp.description or "")
         label = f"{desc} — {exp.amount:,.0f}₽" if desc else f"{exp.amount:,.0f}₽"
         lines.append(f"{prefix} {label}")
 

@@ -42,7 +42,7 @@ from ...services.expense_service import (
 from ...services.goal_service import add_spare_change_to_goal, get_goal_current_amount
 from ...services.user_service import get_or_create_user
 from ...utils import phrases
-from ...utils.helpers import check_retry, get_msk_now, parse_amount, safe
+from ...utils.helpers import get_msk_now, parse_amount, safe
 from ..callbacks import RolloverCb
 from ..keyboards import (
     get_cancel_keyboard,
@@ -60,6 +60,7 @@ from ..keyboards import (
     get_stats_keyboard,
 )
 from ..middleware import dup_middleware
+from ._shared import handle_invalid_input
 
 REPLY_MENU_COMMANDS = frozenset({
     phrases.BTN_ADD_EXPENSE,
@@ -70,6 +71,7 @@ REPLY_MENU_COMMANDS = frozenset({
 })
 
 router = Router()
+
 
 
 class BudgetSetup(StatesGroup):
@@ -434,7 +436,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     expense_lines = await get_today_expenses_grouped(tg_id)
     expenses_block = ""
     if expense_lines:
-        expenses_block = "\n" + "\n".join(expense_lines)
+        expenses_block = "\n<blockquote>" + "\n".join(expense_lines) + "</blockquote>"
 
     text = (
         f"<b>БАЛАНС</b> · {zone_emoji} {zone_label}\n\n"
@@ -822,20 +824,7 @@ async def process_income(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text)
     except ValueError:
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="50000"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="50000"))
         return
 
     await state.update_data(income=amount)
@@ -902,20 +891,7 @@ async def process_period_start(message: Message, state: FSMContext):
     try:
         day = int(message.text.strip())
     except (ValueError, TypeError):
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="25"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="25"))
         return
 
     if day < 1:
@@ -937,20 +913,7 @@ async def process_mandatory(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
     except (ValueError, TypeError):
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="15000"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="15000"))
         return
 
     await state.update_data(mandatory=amount)
@@ -965,20 +928,7 @@ async def process_black_day(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
     except ValueError:
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="5000"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="5000"))
         return
 
     await state.update_data(black_day=amount)
@@ -1128,20 +1078,7 @@ async def new_period_income(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text.strip())
     except ValueError:
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="50000"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="50000"))
         return
     if amount is None or amount <= 0:
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
@@ -1166,20 +1103,7 @@ async def new_period_period_start(message: Message, state: FSMContext):
         if day < 1 or day > 31:
             raise ValueError
     except (ValueError, TypeError):
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="20"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="20"))
         return
     await state.update_data(period_start_day=day)
     await _advance_new_period(message, state)
@@ -1309,19 +1233,9 @@ async def process_expense(message: Message, state: FSMContext):
     if not result.is_fully_valid:
         invalid = next((r for r in result.reports if not r.is_valid), None)
         if invalid and invalid.error_type == "MATH_ERROR":
-            data = await state.get_data()
-            exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-            await state.update_data(_retry_count=next_retry)
-            if exhausted:
-                await state.clear()
-                await message.answer(
-                    phrases.ERR_TOO_MANY_RETRIES,
-                    reply_markup=await get_main_menu_keyboard(message.from_user.id),
-                )
-                return
-            await message.answer(
+            await handle_invalid_input(
+                message, state,
                 phrases.ERR_MATH_ERROR.format(detail=invalid.error_detail or invalid.raw_text),
-                reply_markup=get_cancel_keyboard(),
             )
             return
         return
@@ -1728,20 +1642,7 @@ async def save_recalc_balance(message: Message, state: FSMContext):
     try:
         total_balance = parse_amount(message.text, allow_zero=True)
     except ValueError:
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="50000"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="50000"))
         return
 
     new_limit, days_left, money_for_life, mandatory, cubyshka = await reconcile_budget_with_reality(
@@ -1866,20 +1767,7 @@ async def save_edit_period_start(message: Message, state: FSMContext):
     try:
         day = int(message.text.strip())
     except (ValueError, TypeError):
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="25"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="25"))
         return
 
     if day < 1:
@@ -1905,20 +1793,7 @@ async def save_add_income(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text)
     except ValueError:
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="10000"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="10000"))
         return
 
     budget = await get_budget_or_none(message.from_user.id)
@@ -1947,20 +1822,7 @@ async def save_mandatory(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
     except ValueError:
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="15000"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="15000"))
         return
 
     await update_budget_field(message.from_user.id, "mandatory_payments", amount)
@@ -1976,20 +1838,7 @@ async def save_black_day(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
     except ValueError:
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="5000"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="5000"))
         return
 
     await update_budget_field(message.from_user.id, "black_day_fund", amount)

@@ -19,8 +19,9 @@ from ...services.expense_service import (
     soft_delete_expense,
     update_expense_amount,
 )
-from ...utils.helpers import check_retry, parse_amount, safe
+from ...utils.helpers import parse_amount, safe
 from ..keyboards import get_cancel_keyboard, get_main_menu_keyboard
+from ._shared import handle_invalid_input
 
 logger = logging.getLogger(__name__)
 
@@ -347,20 +348,7 @@ async def save_edit_expense(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text)
     except ValueError:
-        data = await state.get_data()
-        exhausted, next_retry = check_retry(data.get("_retry_count", 0))
-        await state.update_data(_retry_count=next_retry)
-        if exhausted:
-            await state.clear()
-            await message.answer(
-                phrases.ERR_TOO_MANY_RETRIES,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            phrases.ERR_INVALID_NUMBER.format(example="500"),
-            reply_markup=get_cancel_keyboard(),
-        )
+        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="500"))
         return
 
     expense = await update_expense_amount(message.from_user.id, expense_id, amount)

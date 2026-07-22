@@ -128,6 +128,20 @@
 
 ---
 
+### B19: retry+cancel — единая функция + blockquote-цитата трат (2026-07-22)
+**Рефакторинг retry:** 10 идентичных блоков `check_retry`+`get_cancel_keyboard`
+вынесены в `handle_invalid_input()` в `_shared.py`. Все 13 мест (menu.py 10,
+history.py 1, evening_flow.py 2) теперь вызывают её одной строкой.
+
+**Blockquote для трат:** строка «Остаток» в статусе теперь оборачивает
+сегодняшние траты в `<blockquote>` — цветной отступ слева (Telegram HTML).
+Для защиты от XSS `cat_name` и `description` обёрнуты в `safe()`.
+
+**Исправлено:**
+- `expense_service.py`: `safe()` импорт + `safe(cat_name)`
+- `_build_status`: `<blockquote>` вокруг expense_lines
+- `_shared.py`: единый `handle_invalid_input()`
+
 ## 📌 Feature Flags
 
 | Флаг | По умолчанию | Что контролирует |
