@@ -304,7 +304,9 @@ async def rollover_keep_budget(
     except Exception:
         pass
 
-    await callback.message.answer(phrases.ROLLOVER_CONFIRMED)
+    budget = await get_active_budget(tg_id)
+    dl = int(budget.daily_limit) if budget else 0
+    await callback.message.answer(phrases.ROLLOVER_CONFIRMED.format(daily_limit=dl))
 
 
 @router.callback_query(RolloverCb.filter(F.action == "edit"))
@@ -1055,9 +1057,13 @@ async def _finish_new_period(source: CallbackQuery | Message, state: FSMContext)
             await source.message.edit_reply_markup(reply_markup=None)
         except Exception:
             pass
-        await source.message.answer(phrases.ROLLOVER_CONFIRMED)
+        budget = await get_active_budget(tg_id)
+        dl = int(budget.daily_limit) if budget else 0
+        await source.message.answer(phrases.ROLLOVER_CONFIRMED.format(daily_limit=dl))
     else:
-        await source.answer(phrases.ROLLOVER_CONFIRMED)
+        budget = await get_active_budget(tg_id)
+        dl = int(budget.daily_limit) if budget else 0
+        await source.answer(phrases.ROLLOVER_CONFIRMED.format(daily_limit=dl))
 
 
 @router.callback_query(F.data == "rollover_keep_income")
