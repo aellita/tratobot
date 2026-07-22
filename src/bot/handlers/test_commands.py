@@ -31,32 +31,45 @@ async def cmd_test_morning(message: Message, bot: Bot):
 
 @router.message(Command("test_monthly_summary"))
 async def cmd_test_monthly_summary(message: Message, bot: Bot):
+    from datetime import timedelta
+
     from sqlalchemy import select
 
     from ...db.database import async_session_maker
     from ...db.models.models import Budget
-    from ...services.budget_service import get_active_budget
     from ...services.monthly_report import (
         build_summary_data,
         format_summary_text,
         get_average_expenses,
+        get_period_dates,
     )
     from ...utils import phrases
+    from ...utils.helpers import get_msk_now
     from ..keyboards import get_rollover_keyboard
     from ..rich_api import send_rich_message
 
     tg_id = message.from_user.id
 
-    budget = await get_active_budget(tg_id)
+    today = get_msk_now().date()
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Budget).where(Budget.telegram_id == tg_id)
+        )
+        budgets = list(result.scalars().all())
+
+    if not budgets:
+        await message.answer("❌ У тебя нет ни одного бюджета.")
+        return
+
+    budget = None
+    for b in budgets:
+        _, pe = get_period_dates(b)
+        if today == pe.date() + timedelta(days=1):
+            budget = b
+            break
+
     if not budget:
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(Budget).where(Budget.telegram_id == tg_id).order_by(Budget.month.desc())
-            )
-            budget = result.scalars().first()
-        if not budget:
-            await message.answer("❌ У тебя нет ни одного бюджета.")
-            return
+        budget = budgets[0]
 
     await message.answer("📊 Генерирую Monthly Summary...")
 
