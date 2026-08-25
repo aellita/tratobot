@@ -396,7 +396,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0
     pct_sim = dl_simulated / max(dl_base, 1) * 100 if dl_base > 0 else 0
 
-    remaining_today = max(dl_base - spent_today, 0)
+    remaining_today = max(dl_pred - spent_today, 0)
     remaining_period = money_for_life
     period_end_day = budget.period_start_day or 1
     period_end_str = f"{period_end_day}-го" if period_end_day > 1 else f"{period_end_day}-го"
@@ -430,7 +430,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         today_line = "Свободно 0 ₽ ⛔"
 
     spent_line = f"Потрачено {int(spent_today):,} ₽"
-    if spent_today > dl_base:
+    if spent_today > dl_pred:
         spent_line += " ⚠️"
 
     expense_lines = await get_today_expenses_grouped(tg_id)
@@ -443,7 +443,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         f"<b>Сегодня</b>\n"
         f"{today_line} · {spent_line}{expenses_block}\n\n"
         f"<b>Период (до {period_end_str} · {days_left} дн.)</b>\n"
-        f"Остаток {int(remaining_period):,} ₽ · Лимит {int(dl_base):,} ₽/день\n\n"
+        f"Остаток {int(remaining_period):,} ₽ · Лимит {int(dl_pred):,} ₽/день\n\n"
         f"<b>Резервы под охраной</b>\n"
         f"Обязательные {int(budget.mandatory_payments):,} · "
         f"Кубышка {int(savings):,} · "

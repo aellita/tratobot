@@ -169,14 +169,14 @@ async def send_morning_reports(bot: Bot):
 
                 end_of_period = days_left <= 3
 
-                overdraft = max(yesterday_spent - dl_base, 0)
-                if yesterday_spent <= dl_base:
+                overdraft = max(yesterday_spent - dl_pred, 0)
+                if yesterday_spent <= dl_pred:
                     yesterday_line = phrases.YESTERDAY_OK.format(
-                        spent=int(yesterday_spent), limit=int(dl_base)
+                        spent=int(yesterday_spent), limit=int(dl_pred)
                     )
                 else:
                     yesterday_line = phrases.YESTERDAY_OVER.format(
-                        spent=int(yesterday_spent), limit=int(dl_base), over=int(overdraft)
+                        spent=int(yesterday_spent), limit=int(dl_pred), over=int(overdraft)
                     )
 
                 if end_of_period:
@@ -315,7 +315,14 @@ async def send_morning_reports(bot: Bot):
                         ]
                     )
 
-                full_text = phrases.MORNING_GREETING + yesterday_line + "\n\n" + zone_text
+                full_text = (
+                    phrases.MORNING_GREETING
+                    + phrases.MORNING_TODAY_PLAN.format(limit=int(dl_pred))
+                    + "\n\n"
+                    + yesterday_line
+                    + "\n\n"
+                    + zone_text
+                )
 
                 kb = _build_morning_keyboard(btn_type)
                 await bot.send_message(tg_id, full_text, reply_markup=kb)

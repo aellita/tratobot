@@ -298,6 +298,7 @@ EVENING_TIMEOUT = (
 
 # ── Morning report ─────────────────────────────────────────
 MORNING_GREETING = "☀️ Доброе утро, бро!\n\n"
+MORNING_TODAY_PLAN = "📋 План на сегодня: {limit} ₽/день"
 
 YESTERDAY_OK = "📅 <b>Вчера:</b> потрачено {spent} ₽ из {limit} ₽ ✅"
 YESTERDAY_OVER = "📅 <b>Вчера:</b> потрачено {spent} ₽ из {limit} ₽ — перерасход <b>{over} ₽</b> 🚨"
