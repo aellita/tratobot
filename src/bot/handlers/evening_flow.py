@@ -22,7 +22,7 @@ from ...services.expense_service import (
     get_current_period_expenses_sum,
     get_today_daily_limit,
     get_today_expenses_sum,
-    parse_expense_text,
+    parse_multi_expense_text,
 )
 from ...utils.helpers import safe
 from ..keyboards import get_main_menu_keyboard
@@ -41,12 +41,16 @@ async def handle_evening_expense(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_EMPTY_EXPENSE)
         return
 
-    parsed = parse_expense_text(message.text)
-    if not parsed.is_valid:
-        if parsed.error_type == "MATH_ERROR":
+    result = parse_multi_expense_text(message.text)
+    if not result.reports:
+        return
+
+    if not result.is_fully_valid:
+        invalid = next((r for r in result.reports if not r.is_valid), None)
+        if invalid and invalid.error_type == "MATH_ERROR":
             await handle_invalid_input(
                 message, state,
-                phrases.ERR_MATH_ERROR.format(detail=parsed.error_detail or parsed.raw_text),
+                phrases.ERR_MATH_ERROR.format(detail=invalid.error_detail or invalid.raw_text),
             )
         else:
             await handle_invalid_input(
@@ -55,48 +59,53 @@ async def handle_evening_expense(message: Message, state: FSMContext):
             )
         return
 
-    amount = parsed.amount
-    description = parsed.description
+    response_parts = []
+    container_lines = []
 
-    cat, _ = await detect_category_db(description, user_id, amount)
-    cat_id = cat.id if cat else None
-    emoji = ""
-    if cat:
-        emoji_char, _ = get_category_display(cat.name)
-        emoji = f"{emoji_char} "
+    for report in result.reports:
+        amount = report.amount
+        description = report.description
 
-    async with async_session_maker() as session:
-        expense = Expense(
-            telegram_id=user_id,
-            amount=amount,
-            description=description,
-            category_id=cat_id,
-            date=get_msk_now(),
-        )
-        session.add(expense)
-        await session.commit()
+        cat, _ = await detect_category_db(description, user_id, amount)
+        cat_id = cat.id if cat else None
+        emoji = ""
+        if cat:
+            emoji_char, _ = get_category_display(cat.name)
+            emoji = f"{emoji_char} "
 
-    response_parts = [
-        phrases.EVENING_SAVED.format(
+        async with async_session_maker() as session:
+            expense = Expense(
+                telegram_id=user_id,
+                amount=amount,
+                description=description,
+                category_id=cat_id,
+                date=get_msk_now(),
+            )
+            session.add(expense)
+            await session.commit()
+
+        saved_line = phrases.EVENING_SAVED.format(
             emoji=emoji, amount=f"{amount:,.0f}", desc=safe(description)
         )
-    ]
-    if parsed.was_corrected:
-        response_parts.append(
-            phrases.ERR_MATH_CORRECTED.format(hint=parsed.correction_hint or "")
+        if report.was_corrected:
+            saved_line = saved_line + "\n" + phrases.ERR_MATH_CORRECTED.format(
+                hint=report.correction_hint or ""
+            )
+        response_parts.append(saved_line)
+
+        line = (
+            phrases.EVENING_LINE_DESC.format(amount=f"{amount:,.0f}", desc=safe(description))
+            if description
+            else phrases.EVENING_LINE.format(amount=f"{amount:,.0f}")
         )
+        container_lines.append(line)
+
     await message.answer("\n".join(response_parts))
 
     data = await state.get_data()
     container_id = data.get("container_id")
     session_expenses = data.get("session_expenses", [])
-
-    line = (
-        phrases.EVENING_LINE_DESC.format(amount=f"{amount:,.0f}", desc=safe(description))
-        if description
-        else phrases.EVENING_LINE.format(amount=f"{amount:,.0f}")
-    )
-    session_expenses.append(line)
+    session_expenses.extend(container_lines)
     await state.update_data(session_expenses=session_expenses)
 
     try:
