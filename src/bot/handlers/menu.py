@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import random
 import re
@@ -100,22 +99,6 @@ class EditBudget(StatesGroup):
 
 class AddExpense(StatesGroup):
     waiting_for_amount = State()
-    waiting_for_description = State()
-
-
-_description_timeout_tasks: dict[int, asyncio.Task] = {}
-
-
-async def _description_timeout(user_id: int, state: FSMContext):
-    try:
-        await asyncio.sleep(90)
-        current_state = await state.get_state()
-        if current_state == AddExpense.waiting_for_description.state:
-            await state.clear()
-    except asyncio.CancelledError:
-        pass
-    finally:
-        _description_timeout_tasks.pop(user_id, None)
 
 
 class CustomCategory(StatesGroup):
@@ -1286,37 +1269,6 @@ async def process_expense(message: Message, state: FSMContext):
             )
             return
 
-    if len(result.reports) == 1 and not result.reports[0].description:
-        report = result.reports[0]
-        effective = report.amount
-        rounding_mode = await get_rounding_mode(user_id)
-        if rounding_mode > 0:
-            effective, _ = compute_rounding(report.amount, rounding_mode)
-        async with async_session_maker() as session:
-            expense = Expense(
-                telegram_id=user_id,
-                amount=effective,
-                description=phrases.FALLBACK_DESC,
-                category_id=None,
-                date=get_msk_now(),
-            )
-            session.add(expense)
-            await session.commit()
-            expense_id = expense.id
-
-        await state.set_state(AddExpense.waiting_for_description)
-        await state.update_data(pending_expense_id=expense_id, pending_amount=effective)
-
-        task = asyncio.create_task(_description_timeout(user_id, state))
-        _description_timeout_tasks[user_id] = task
-
-        kb = _build_expense_check_kb(expense_id, 1)
-        await message.answer(
-            phrases.LAZY_INPUT_PROMPT.format(amount=f"{effective:,.0f}"),
-            reply_markup=kb or get_cancel_keyboard(),
-        )
-        return
-
     sent_dup, all_silent, lines, total_spare, first_id, corrected_ids = await _save_expenses_from_parsed_list(
         user_id, result.reports, message
     )
@@ -1343,60 +1295,6 @@ async def process_expense(message: Message, state: FSMContext):
         lines="\n".join(lines), round_up=total_round_up
     )
     await message.answer(text=response_text, reply_markup=kb)
-    await state.clear()
-
-
-@router.message(AddExpense.waiting_for_description)
-async def handle_description_followup(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-
-    task = _description_timeout_tasks.pop(user_id, None)
-    if task:
-        task.cancel()
-
-    text = message.text.strip() if message.text else ""
-
-    if text in _REPLY_BTNS:
-        await state.clear()
-        await handle_reply_menu(message, state)
-        return
-
-    if not text:
-        await state.clear()
-        return
-
-    if re.search(r"\d", text):
-        await state.clear()
-        await state.set_state(AddExpense.waiting_for_amount)
-        await process_expense(message, state)
-        return
-
-    data = await state.get_data()
-    expense_id = data.get("pending_expense_id")
-    amount = data.get("pending_amount", 0)
-
-    if not expense_id:
-        await state.clear()
-        return
-
-    cat, _ = await detect_category_db(text, user_id, amount)
-    cat_id = cat.id if cat else None
-    emoji_char, cat_name = get_category_display(cat.name) if cat else phrases.DEFAULT_CATEGORY
-
-    async with async_session_maker() as session:
-        result = await session.execute(select(Expense).where(Expense.id == expense_id))
-        expense = result.scalar_one_or_none()
-        if expense:
-            expense.description = text
-            expense.category_id = cat_id
-            await session.commit()
-
-    await message.answer(
-        phrases.LAZY_INPUT_UPDATED.format(
-            emoji=emoji_char, amount=f"{amount:,.0f}", desc=safe(text), cat=cat_name
-        ),
-        reply_markup=get_main_menu_keyboard(user_id),
-    )
     await state.clear()
 
 
@@ -1994,9 +1892,6 @@ async def edit_rounding(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "cancel")
 async def cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    task = _description_timeout_tasks.pop(callback.from_user.id, None)
-    if task:
-        task.cancel()
     await state.clear()
     await callback.message.edit_text(
         text=phrases.BACK_NAV,
