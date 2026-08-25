@@ -136,6 +136,8 @@ STATUS_PERIOD_ZERO = "💵 <b>Остаток на жизнь:</b> 0 ₽ 💸"
 
 EXPENSE_SAVED_LINE = "💰 {amount}₽ — {desc} {emoji}{cat}"
 EXPENSE_SAVED_ALL = "✅ Записано!\n\n{lines}{round_up}"
+LAZY_INPUT_PROMPT = "📦 {amount}₽ — записано в Прочее!\nДопиши описание — я подберу категорию."
+LAZY_INPUT_UPDATED = "✅ Обновил: {emoji} {amount}₽ — {desc} ({cat})"
 CATEGORY_CHANGED = "✅ Категория изменена!\n\n💰 {amount}₽ — {desc}\n{emoji} {cat}"
 BACK_NAV = "\u200b"
 CANCEL_RECALC = "❌ Отменено. Возвращаю в меню."
