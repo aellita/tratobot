@@ -4,10 +4,12 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import ErrorEvent, Message
 
 from ..core.config import settings
 from ..db.database import close_db, init_db, migrate_schema
 from ..services.morning_report import send_morning_reports
+from ..utils import phrases
 from ..utils.helpers import get_msk_now
 from .handlers.categories import router as categories_router
 from .handlers.evening_flow import router as evening_router
@@ -44,6 +46,24 @@ dp.include_router(evening_router)
 dp.include_router(history_router)
 dp.include_router(monthly_summary_router)
 dp.include_router(menu_router)
+
+
+@dp.errors()
+async def error_handler(event: ErrorEvent):
+    logger.error("Unhandled exception", exc_info=event.exception)
+
+    update = event.update
+    msg: Message | None = None
+    if hasattr(update, "message"):
+        msg = update.message
+    elif hasattr(update, "callback_query") and update.callback_query:
+        msg = update.callback_query.message
+
+    if msg:
+        try:
+            await msg.answer(phrases.ERR_GENERIC)
+        except Exception:
+            pass
 
 
 async def on_startup():
