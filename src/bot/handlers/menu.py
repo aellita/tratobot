@@ -303,29 +303,50 @@ async def rollover_keep_budget(
 
     tg_id = callback.from_user.id
     month = get_msk_now().strftime("%Y-%m")
+
+    old_mandatory = old.mandatory_payments
+    old_black_day = old.black_day_fund
+    old_wishlist_name = old.wishlist_name
+    old_wishlist_target = old.wishlist_target
+
     await save_budget(
         telegram_id=tg_id,
         month=month,
         free_money=0,
         income=old.total_income,
-        mandatory=old.mandatory_payments,
-        black_day=old.black_day_fund,
-        wishlist_name=old.wishlist_name or phrases.DEFAULT_WISHLIST_NAME,
-        wishlist_price=old.wishlist_target,
+        mandatory=old_mandatory,
+        black_day=old_black_day,
+        wishlist_name=old_wishlist_name or phrases.DEFAULT_WISHLIST_NAME,
+        wishlist_price=old_wishlist_target,
         period_start_day=old.period_start_day or 1,
     )
 
     from ..middleware import _last_keyboard
 
     _last_keyboard.pop(tg_id, None)
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
 
     budget = await get_active_budget(tg_id)
     dl = int(budget.daily_limit) if budget else 0
-    await callback.message.answer(phrases.ROLLOVER_CONFIRMED.format(daily_limit=dl))
+
+    carried_parts = []
+    if old_mandatory > 0:
+        carried_parts.append(f"• Обязательные: {int(old_mandatory):,}₽")
+    if old_black_day > 0:
+        carried_parts.append(f"• Кубышка: {int(old_black_day):,}₽")
+    if old_wishlist_target > 0 and old_wishlist_name:
+        carried_parts.append(f"• {safe(old_wishlist_name)}: {int(old_wishlist_target):,}₽")
+
+    if carried_parts:
+        text = (
+            "✅ План продлён.\n\n"
+            "📋 Перенесено из прошлого периода:\n"
+            + "\n".join(carried_parts)
+            + f"\n\n💰 Дневной лимит: {dl}₽. Поехали. 🚀"
+        )
+    else:
+        text = phrases.ROLLOVER_CONFIRMED.format(daily_limit=dl)
+
+    await callback.message.edit_text(text=text)
 
 
 @router.callback_query(RolloverCb.filter(F.action == "edit"))
@@ -1691,7 +1712,7 @@ async def _render_settings(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]
         money_line = f"• Свободных: {budget.free_money:,.0f}₽"
     else:
         money_line = f"• Всего доход: {budget.total_income:,.0f}₽"
-    text = f"⚙️ Что меняем?\n\n📊 Бюджет\n{money_line}\n{period_info}"
+    text = f"⚙️ Что меняем?\n\n📊 Бюджет\n<blockquote>{money_line}\n{period_info}</blockquote>"
     return text, get_settings_keyboard()
 
 
