@@ -33,13 +33,11 @@ from ...services.categorization import (
 )
 from ...services.expense_service import (
     ExpenseParseReport,
-    compute_rounding,
-    get_rounding_mode,
     get_today_expenses_grouped,
     get_today_expenses_sum,
     parse_multi_expense_text,
 )
-from ...services.goal_service import add_spare_change_to_goal, get_goal_current_amount
+from ...services.goal_service import get_goal_current_amount
 from ...services.user_service import get_or_create_user
 from ...utils import phrases
 from ...utils.helpers import get_msk_now, parse_amount, safe
@@ -1148,10 +1146,8 @@ async def _save_expenses_from_parsed_list(
     user_id: int,
     reports: list[ExpenseParseReport],
     message: Message,
-) -> tuple[bool, bool, list[str], float, int | None, list[int]]:
-    rounding_mode = await get_rounding_mode(user_id)
+) -> tuple[bool, bool, list[str], int | None, list[int]]:
     lines = []
-    total_spare = 0.0
     first_id = None
     errors = 0
     all_silent = True
@@ -1164,9 +1160,6 @@ async def _save_expenses_from_parsed_list(
         description = report.description or phrases.FALLBACK_DESC
 
         effective = amount
-        if rounding_mode > 0:
-            effective, spare = compute_rounding(amount, rounding_mode)
-            total_spare += spare
 
         if description == phrases.FALLBACK_DESC:
             cat = None
@@ -1191,7 +1184,7 @@ async def _save_expenses_from_parsed_list(
                 phrases.DUP_WARNING.format(amount=f"{effective:,.0f}", desc=safe(description)),
                 reply_markup=get_duplicate_keyboard(),
             )
-            return True, True, [], 0.0, None, []
+            return True, True, [], None, []
 
         all_silent = False
 
@@ -1234,7 +1227,7 @@ async def _save_expenses_from_parsed_list(
         )
         lines.append(line)
 
-    return False, all_silent, lines, total_spare, first_id, corrected_ids
+    return False, all_silent, lines, first_id, corrected_ids
 
 
 @router.message(AddExpense.waiting_for_amount)
@@ -1299,7 +1292,6 @@ async def process_expense(message: Message, state: FSMContext):
         sent_dup,
         all_silent,
         lines,
-        total_spare,
         first_id,
         corrected_ids,
     ) = await _save_expenses_from_parsed_list(user_id, result.reports, message)
@@ -1313,18 +1305,9 @@ async def process_expense(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_EXPENSE_SAVE)
         return
 
-    total_round_up = ""
-    if total_spare > 0:
-        new_total, goal_name = await add_spare_change_to_goal(user_id, total_spare)
-        total_round_up = phrases.ROUND_UP.format(
-            amount=int(total_spare), goal=goal_name, total=int(new_total)
-        )
-
     kb = _build_expense_check_kb(first_id, len(lines), corrected_ids)
 
-    response_text = phrases.EXPENSE_SAVED_ALL.format(
-        lines="\n".join(lines), round_up=total_round_up
-    )
+    response_text = phrases.EXPENSE_SAVED_ALL.format(lines="\n".join(lines), round_up="")
     await message.answer(text=response_text, reply_markup=kb)
     await state.clear()
 
@@ -1710,16 +1693,6 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
 
     period_day = budget.period_start_day or 1
     period_info = f"📅 Период: с {period_day}-го" if period_day != 1 else "📅 Период: весь месяц"
-    async with async_session_maker() as session:
-        settings_result = await session.execute(
-            select(UserSettings).where(UserSettings.telegram_id == callback.from_user.id)
-        )
-        user_settings = settings_result.scalar_one_or_none()
-        rounding_label = (
-            f"{user_settings.rounding_mode} ₽"
-            if (user_settings and user_settings.rounding_mode > 0)
-            else "выкл"
-        )
     if budget.free_money > 0:
         money_line = f"• Свободных: {budget.free_money:,.0f}₽"
     else:
@@ -1731,7 +1704,6 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
         f"• Обязательные: {budget.mandatory_payments:,.0f}₽\n"
         f"• Кубышка: {budget.black_day_fund:,.0f}₽\n"
         f"• {safe(budget.wishlist_name or phrases.DEFAULT_WISHLIST_NAME)}: {budget.wishlist_target:,.0f}₽\n"
-        f"• Округление: {rounding_label}\n"
         f"{period_info}",
         reply_markup=get_settings_keyboard(),
     )
@@ -2127,7 +2099,6 @@ async def handle_text(message: Message, state: FSMContext):
         sent_dup,
         all_silent,
         lines,
-        total_spare,
         first_id,
         corrected_ids,
     ) = await _save_expenses_from_parsed_list(user_id, result.reports, message)
@@ -2141,16 +2112,7 @@ async def handle_text(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_EXPENSE_SAVE)
         return
 
-    total_round_up = ""
-    if total_spare > 0:
-        new_total, goal_name = await add_spare_change_to_goal(user_id, total_spare)
-        total_round_up = phrases.ROUND_UP.format(
-            amount=int(total_spare), goal=goal_name, total=int(new_total)
-        )
-
     kb = _build_expense_check_kb(first_id, len(lines), corrected_ids)
 
-    response_text = phrases.EXPENSE_SAVED_ALL.format(
-        lines="\n".join(lines), round_up=total_round_up
-    )
+    response_text = phrases.EXPENSE_SAVED_ALL.format(lines="\n".join(lines), round_up="")
     await message.answer(text=response_text, reply_markup=kb)
