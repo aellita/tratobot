@@ -8,11 +8,11 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 8 |
+| ✅ Готово | 14 |
 | 🔧 В работе | 0 |
-| ⏳ Ожидает | 7 |
+| ⏳ Ожидает | 6 |
 
-**Следующая задача:** День 2 — Настройки → Дополнительное планирование
+**Следующая задача:** День 2 — Задача 1: Настройки → Дополнительное планирование
 
 ---
 
@@ -33,17 +33,37 @@
 
 ---
 
-### День 2: Настройки → Дополнительное планирование
+### День 2: Продуктовые упрощения (3 задачи)
 
-> **Цель:** обязательные/кубышка/хотелка/округление убраны из главного экрана настроек в подменю.
+#### Задача 3 (сделана первой): Удаление округления
+
+> **Цель:** округление трат отключено — сумма сохраняется как есть, без ROUND_UP и add_spare_change_to_goal.
+
+- [x] ✅ `menu.py:33-42` — убраны импорты `compute_rounding`, `get_rounding_mode`, `add_spare_change_to_goal`
+- [x] ✅ `menu.py:1147-1230` — `_save_expenses_from_parsed_list`: без `rounding_mode`, без `total_spare`, `effective = amount`
+- [x] ✅ `menu.py:1291-1320` — `process_expense`: без блока ROUND_UP
+- [x] ✅ `menu.py:2098-2125` — `handle_text`: без блока ROUND_UP
+- [x] ✅ `menu.py:1694-1705` — `menu_settings`: убрана строка «Округление»
+- [x] ✅ `ruff check` + `ruff format` — без новых ошибок
+
+#### Задача 1: Настройки → Дополнительное планирование
+
+> **Цель:** обязательные/кубышка/хотелка убраны из главного экрана настроек в подменю. Паттерн `_from_advanced_planning: set[int]` (аналог `_cat_back_target`).
 
 - [ ] ⏳ `keyboards.py` — `get_settings_keyboard()`: 4 кнопки вместо 7
 - [ ] ⏳ `keyboards.py` — новая `get_advanced_planning_keyboard()`
-- [ ] ⏳ `menu.py` — новый хендлер `menu_advanced_planning`
-- [ ] ⏳ `menu.py:1666-1706` — `menu_settings`: упростить текст (только доход + период)
-- [ ] ⏳ `phrases.py` — фразы для экрана доп. планирования
-- [ ] ⏳ `menu.py:295` — rollover-защита: если `mandatory_payments > 0`, показать в тексте
-- [ ] ⏳ `ruff check` + `ruff format`
+- [ ] ⏳ `menu.py` — `_from_advanced_planning: set[int]` + хендлер `menu_advanced_planning`
+- [ ] ⏳ `menu.py` — callback-обёртки `adv_mandatory` / `adv_black_day` / `adv_wishlist`
+- [ ] ⏳ `menu.py:1680-1718` — `menu_settings`: текст доход + период, без mandatory/black_day/wishlist
+- [ ] ⏳ `menu.py:2067-2078` — handler `BTN_SETTINGS`: текст доход + период (согласован с callback-путём)
+- [ ] ⏳ `menu.py:1851-1901` — `save_mandatory`/`save_black_day`/`save_wishlist`: проверка `_from_advanced_planning`
+- [ ] ⏳ `phrases.py` — `BTN_ADVANCED_PLANNING`, `ADVANCED_PLANNING_TITLE`
+
+#### Задача 2: Rollover-защита
+
+> **Цель:** предупредить о переносе обязательных/кубышки при продлении периода.
+
+- [ ] ⏳ `menu.py:288-311` — `rollover_keep_budget`: показать перенесённые значения в `ROLLOVER_CONFIRMED`
 
 ---
 
