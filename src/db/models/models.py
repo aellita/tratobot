@@ -67,11 +67,11 @@ class Budget(Base):
         start = self._clamped_start
         days_in_month = calendar.monthrange(today.year, today.month)[1]
         if start == 1:
-            return max(days_in_month - today.day, 0)
+            return max(days_in_month - today.day + 1, 0)
         if today.day >= start:
             remaining = days_in_month - today.day
             next_days = start - 1
-            return remaining + next_days
+            return remaining + next_days + 1
         else:
             return start - today.day
 

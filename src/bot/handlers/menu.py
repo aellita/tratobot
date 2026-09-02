@@ -811,10 +811,10 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     clamped_start = min(period_start_day, days_in_month)
     if clamped_start == 1:
-        days_remaining = max(days_in_month - today.day, 0)
+        days_remaining = max(days_in_month - today.day + 1, 0)
     elif today.day >= clamped_start:
         remaining_this = days_in_month - today.day
-        days_remaining = remaining_this + clamped_start - 1
+        days_remaining = remaining_this + clamped_start
     else:
         days_remaining = clamped_start - today.day
     daily_limit = max(available / max(days_remaining, 1), 0)
