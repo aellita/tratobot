@@ -8,11 +8,11 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 14 |
+| ✅ Готово | 22 |
 | 🔧 В работе | 0 |
-| ⏳ Ожидает | 6 |
+| ⏳ Ожидает | 5 |
 
-**Следующая задача:** День 2 — Задача 1: Настройки → Дополнительное планирование
+**Следующая задача:** День 2 — Задача 2: Rollover-защита
 
 ---
 
@@ -50,14 +50,15 @@
 
 > **Цель:** обязательные/кубышка/хотелка убраны из главного экрана настроек в подменю. Паттерн `_from_advanced_planning: set[int]` (аналог `_cat_back_target`).
 
-- [ ] ⏳ `keyboards.py` — `get_settings_keyboard()`: 4 кнопки вместо 7
-- [ ] ⏳ `keyboards.py` — новая `get_advanced_planning_keyboard()`
-- [ ] ⏳ `menu.py` — `_from_advanced_planning: set[int]` + хендлер `menu_advanced_planning`
-- [ ] ⏳ `menu.py` — callback-обёртки `adv_mandatory` / `adv_black_day` / `adv_wishlist`
-- [ ] ⏳ `menu.py:1680-1718` — `menu_settings`: текст доход + период, без mandatory/black_day/wishlist
-- [ ] ⏳ `menu.py:2067-2078` — handler `BTN_SETTINGS`: текст доход + период (согласован с callback-путём)
-- [ ] ⏳ `menu.py:1851-1901` — `save_mandatory`/`save_black_day`/`save_wishlist`: проверка `_from_advanced_planning`
-- [ ] ⏳ `phrases.py` — `BTN_ADVANCED_PLANNING`, `ADVANCED_PLANNING_TITLE`
+- [x] ✅ `keyboards.py` — `get_settings_keyboard()`: 4 кнопки вместо 7
+- [x] ✅ `keyboards.py` — новая `get_advanced_planning_keyboard()`
+- [x] ✅ `menu.py` — `_from_advanced_planning: set[int]` + хендлер `menu_advanced_planning`
+- [x] ✅ `menu.py` — callback-обёртки `adv_mandatory` / `adv_black_day` / `adv_wishlist`
+- [x] ✅ `menu.py` — `_render_settings` + `_render_advanced_planning` (единые хелперы)
+- [x] ✅ `menu.py` — `menu_settings` + handler `BTN_SETTINGS`: текст доход + период (согласованы)
+- [x] ✅ `menu.py` — `save_mandatory`/`save_black_day`/`save_wishlist`: проверка `_from_advanced_planning`
+- [x] ✅ `phrases.py` — `BTN_ADVANCED_PLANNING`
+- [x] ✅ `tests/test_settings_keyboard.py` — 5 тестов на кнопки
 
 #### Задача 2: Rollover-защита
 
