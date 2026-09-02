@@ -62,16 +62,17 @@ from ..keyboards import (
 from ..middleware import dup_middleware
 from ._shared import handle_invalid_input
 
-REPLY_MENU_COMMANDS = frozenset({
-    phrases.BTN_ADD_EXPENSE,
-    phrases.BTN_DAILY_LIMIT,
-    phrases.BTN_STATS,
-    phrases.BTN_SETTINGS,
-    phrases.BTN_HELP,
-})
+REPLY_MENU_COMMANDS = frozenset(
+    {
+        phrases.BTN_ADD_EXPENSE,
+        phrases.BTN_DAILY_LIMIT,
+        phrases.BTN_STATS,
+        phrases.BTN_SETTINGS,
+        phrases.BTN_HELP,
+    }
+)
 
 router = Router()
-
 
 
 class BudgetSetup(StatesGroup):
@@ -125,7 +126,11 @@ def _build_expense_check_kb(
             buttons = []
             if fix_id is not None:
                 buttons.append(
-                    [InlineKeyboardButton(text=phrases.BTN_FIX_AMOUNT, callback_data=f"exp_edit:{fix_id}")]
+                    [
+                        InlineKeyboardButton(
+                            text=phrases.BTN_FIX_AMOUNT, callback_data=f"exp_edit:{fix_id}"
+                        )
+                    ]
                 )
             buttons.append(
                 [
@@ -135,7 +140,9 @@ def _build_expense_check_kb(
                     )
                 ]
             )
-            buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")])
+            buttons.append(
+                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")]
+            )
             return InlineKeyboardMarkup(inline_keyboard=buttons)
         return InlineKeyboardMarkup(
             inline_keyboard=[
@@ -146,7 +153,11 @@ def _build_expense_check_kb(
         buttons = []
         if fix_id is not None:
             buttons.append(
-                [InlineKeyboardButton(text=phrases.BTN_FIX_AMOUNT, callback_data=f"exp_edit:{fix_id}")]
+                [
+                    InlineKeyboardButton(
+                        text=phrases.BTN_FIX_AMOUNT, callback_data=f"exp_edit:{fix_id}"
+                    )
+                ]
             )
         buttons.append(
             [
@@ -212,7 +223,7 @@ async def cmd_start(message: Message, state: FSMContext):
         greeting = random.choice(GREETINGS)
         await message.answer(text=greeting)
 
-        await message.answer(text=phrases.ONBOARDING_START, reply_markup=get_onboarding_keyboard())
+        await message.answer(text=phrases.ONBOARDING_START, reply_markup=get_cancel_keyboard())
         await state.set_state(BudgetSetup.waiting_for_income)
     else:
         await message.answer(
@@ -275,7 +286,9 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(RolloverCb.filter(F.action == "keep"))
 async def rollover_keep_budget(
-    callback: CallbackQuery, callback_data: RolloverCb, state: FSMContext,
+    callback: CallbackQuery,
+    callback_data: RolloverCb,
+    state: FSMContext,
 ):
     await callback.answer()
     await state.clear()
@@ -290,7 +303,9 @@ async def rollover_keep_budget(
     tg_id = callback.from_user.id
     month = get_msk_now().strftime("%Y-%m")
     await save_budget(
-        telegram_id=tg_id, month=month, free_money=0,
+        telegram_id=tg_id,
+        month=month,
+        free_money=0,
         income=old.total_income,
         mandatory=old.mandatory_payments,
         black_day=old.black_day_fund,
@@ -300,6 +315,7 @@ async def rollover_keep_budget(
     )
 
     from ..middleware import _last_keyboard
+
     _last_keyboard.pop(tg_id, None)
     try:
         await callback.message.delete()
@@ -313,7 +329,9 @@ async def rollover_keep_budget(
 
 @router.callback_query(RolloverCb.filter(F.action == "edit"))
 async def rollover_edit_budget(
-    callback: CallbackQuery, callback_data: RolloverCb, state: FSMContext,
+    callback: CallbackQuery,
+    callback_data: RolloverCb,
+    state: FSMContext,
 ):
     await callback.answer()
     await state.clear()
@@ -658,14 +676,9 @@ async def skip_step(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     current_state = await state.get_state()
 
-    if current_state == BudgetSetup.waiting_for_income.state:
-        await state.update_data(
-            income=0, mandatory=0, black_day=0, wishlist_name="", wishlist_price=0
-        )
-        await _finish_onboarding(callback, state)
-    elif current_state == BudgetSetup.waiting_for_period_start.state:
+    if current_state == BudgetSetup.waiting_for_period_start.state:
         await state.update_data(period_start_day=1)
-        await _advance_onboarding(callback, state)
+        await _finish_onboarding(callback, state)
     elif current_state == BudgetSetup.waiting_for_mandatory.state:
         await state.update_data(mandatory=0)
         await _advance_onboarding(callback, state)
@@ -784,15 +797,17 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         days_remaining = clamped_start - today.day
     daily_limit = max(available / max(days_remaining, 1), 0)
 
-    period_note = f"📅 Период: с {period_start_day}-го числа\n" if period_start_day != 1 else ""
-    text = phrases.BUDGET_COMPLETE.format(
+    text = (
+        "🎉 <b>Готово!</b>\n\n"
+        "📊 Бюджет на {month}:\n"
+        "• Доход: {income}₽\n"
+        "💰 <b>Дневной лимит: {daily_limit}₽</b>\n\n"
+        "{hint}"
+    ).format(
         month=month,
         income=f"{data.get('income', 0):,.0f}",
-        mandatory=f"{data.get('mandatory', 0):,.0f}",
-        black_day=f"{data.get('black_day', 0):,.0f}",
-        wishlist=f"{wishlist_price:,.0f}",
-        period_note=period_note,
         daily_limit=f"{daily_limit:,.0f}",
+        hint=phrases.ONBOARDING_HINT_SETTINGS,
     )
 
     kb = await get_main_menu_keyboard(telegram_id)
@@ -824,7 +839,9 @@ async def process_income(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text)
     except ValueError:
-        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="50000"))
+        await handle_invalid_input(
+            message, state, phrases.ERR_INVALID_NUMBER.format(example="50000")
+        )
         return
 
     await state.update_data(income=amount)
@@ -860,10 +877,7 @@ async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext)
 
     if current_state == BudgetSetup.waiting_for_period_start.state:
         await state.update_data(period_start_day=day)
-        await state.set_state(BudgetSetup.waiting_for_mandatory)
-        await callback.message.edit_text(
-            text=phrases.INCOME_SAVED_PERIOD, reply_markup=get_onboarding_keyboard()
-        )
+        await _finish_onboarding(callback, state)
     elif current_state == EditBudget.waiting_for_period_start.state:
         await update_budget_field(callback.from_user.id, "period_start_day", day)
         await callback.message.edit_text(
@@ -904,8 +918,7 @@ async def process_period_start(message: Message, state: FSMContext):
         day = days_in_month
 
     await state.update_data(period_start_day=day)
-    await state.set_state(BudgetSetup.waiting_for_mandatory)
-    await message.answer(text=phrases.INCOME_SAVED_PERIOD, reply_markup=get_onboarding_keyboard())
+    await _finish_onboarding(message, state)
 
 
 @router.message(BudgetSetup.waiting_for_mandatory)
@@ -913,7 +926,9 @@ async def process_mandatory(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
     except (ValueError, TypeError):
-        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="15000"))
+        await handle_invalid_input(
+            message, state, phrases.ERR_INVALID_NUMBER.format(example="15000")
+        )
         return
 
     await state.update_data(mandatory=amount)
@@ -928,7 +943,9 @@ async def process_black_day(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
     except ValueError:
-        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="5000"))
+        await handle_invalid_input(
+            message, state, phrases.ERR_INVALID_NUMBER.format(example="5000")
+        )
         return
 
     await state.update_data(black_day=amount)
@@ -1034,9 +1051,13 @@ async def _finish_new_period(source: CallbackQuery | Message, state: FSMContext)
 
     month = get_msk_now().strftime("%Y-%m")
     await save_budget(
-        telegram_id=tg_id, month=month,
-        income=income, mandatory=mandatory, black_day=black_day,
-        wishlist_name=wishlist_name, wishlist_price=wishlist_target,
+        telegram_id=tg_id,
+        month=month,
+        income=income,
+        mandatory=mandatory,
+        black_day=black_day,
+        wishlist_name=wishlist_name,
+        wishlist_price=wishlist_target,
         period_start_day=period_start_day,
     )
     await state.clear()
@@ -1078,7 +1099,9 @@ async def new_period_income(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text.strip())
     except ValueError:
-        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="50000"))
+        await handle_invalid_input(
+            message, state, phrases.ERR_INVALID_NUMBER.format(example="50000")
+        )
         return
     if amount is None or amount <= 0:
         await message.answer(phrases.ERR_INVALID_NUMBER.format(example="50000"))
@@ -1202,7 +1225,11 @@ async def _save_expenses_from_parsed_list(
             corrected_ids.append(expense.id)
 
         dup_middleware.record(
-            user_id, message.message_id, effective, description, expense.id,
+            user_id,
+            message.message_id,
+            effective,
+            description,
+            expense.id,
             response_text=line,
         )
         lines.append(line)
@@ -1234,7 +1261,8 @@ async def process_expense(message: Message, state: FSMContext):
         invalid = next((r for r in result.reports if not r.is_valid), None)
         if invalid and invalid.error_type == "MATH_ERROR":
             await handle_invalid_input(
-                message, state,
+                message,
+                state,
                 phrases.ERR_MATH_ERROR.format(detail=invalid.error_detail or invalid.raw_text),
             )
             return
@@ -1262,16 +1290,19 @@ async def process_expense(message: Message, state: FSMContext):
                 user_id, report.amount, description, cat_id, description, emoji, cat_name
             )
             await message.answer(
-                phrases.DUP_WARNING.format(
-                    amount=f"{report.amount:,.0f}", desc=safe(description)
-                ),
+                phrases.DUP_WARNING.format(amount=f"{report.amount:,.0f}", desc=safe(description)),
                 reply_markup=get_duplicate_keyboard(),
             )
             return
 
-    sent_dup, all_silent, lines, total_spare, first_id, corrected_ids = await _save_expenses_from_parsed_list(
-        user_id, result.reports, message
-    )
+    (
+        sent_dup,
+        all_silent,
+        lines,
+        total_spare,
+        first_id,
+        corrected_ids,
+    ) = await _save_expenses_from_parsed_list(user_id, result.reports, message)
     if sent_dup:
         return
 
@@ -1519,9 +1550,7 @@ async def save_new_category(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer(
-        text=phrases.CATEGORY_CREATED.format(
-            name=name, desc=expense.description
-        ),
+        text=phrases.CATEGORY_CREATED.format(name=name, desc=expense.description),
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
 
@@ -1642,7 +1671,9 @@ async def save_recalc_balance(message: Message, state: FSMContext):
     try:
         total_balance = parse_amount(message.text, allow_zero=True)
     except ValueError:
-        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="50000"))
+        await handle_invalid_input(
+            message, state, phrases.ERR_INVALID_NUMBER.format(example="50000")
+        )
         return
 
     new_limit, days_left, money_for_life, mandatory, cubyshka = await reconcile_budget_with_reality(
@@ -1793,7 +1824,9 @@ async def save_add_income(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text)
     except ValueError:
-        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="10000"))
+        await handle_invalid_input(
+            message, state, phrases.ERR_INVALID_NUMBER.format(example="10000")
+        )
         return
 
     budget = await get_budget_or_none(message.from_user.id)
@@ -1809,9 +1842,7 @@ async def save_add_income(message: Message, state: FSMContext):
         await update_budget_field(message.from_user.id, "total_income", new_total)
 
     await message.answer(
-        text=phrases.INCOME_ADDED.format(
-            amount=f"{amount:,.0f}", total=f"{new_total:,.0f}"
-        ),
+        text=phrases.INCOME_ADDED.format(amount=f"{amount:,.0f}", total=f"{new_total:,.0f}"),
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     await state.clear()
@@ -1822,7 +1853,9 @@ async def save_mandatory(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
     except ValueError:
-        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="15000"))
+        await handle_invalid_input(
+            message, state, phrases.ERR_INVALID_NUMBER.format(example="15000")
+        )
         return
 
     await update_budget_field(message.from_user.id, "mandatory_payments", amount)
@@ -1838,7 +1871,9 @@ async def save_black_day(message: Message, state: FSMContext):
     try:
         amount = parse_amount(message.text, allow_zero=True)
     except ValueError:
-        await handle_invalid_input(message, state, phrases.ERR_INVALID_NUMBER.format(example="5000"))
+        await handle_invalid_input(
+            message, state, phrases.ERR_INVALID_NUMBER.format(example="5000")
+        )
         return
 
     await update_budget_field(message.from_user.id, "black_day_fund", amount)
@@ -1948,7 +1983,11 @@ async def handle_duplicate_confirm(callback: CallbackQuery):
         balance=balance,
     )
     dup_middleware.record(
-        user_id, 0, pending["amount"], pending["description"], expense.id,
+        user_id,
+        0,
+        pending["amount"],
+        pending["description"],
+        expense.id,
         response_text=response_text,
     )
     dup_middleware.reset_dup_count(user_id, pending["amount"], pending["description"])
@@ -2084,9 +2123,14 @@ async def handle_text(message: Message, state: FSMContext):
     )
 
     user_id = message.from_user.id
-    sent_dup, all_silent, lines, total_spare, first_id, corrected_ids = await _save_expenses_from_parsed_list(
-        user_id, result.reports, message
-    )
+    (
+        sent_dup,
+        all_silent,
+        lines,
+        total_spare,
+        first_id,
+        corrected_ids,
+    ) = await _save_expenses_from_parsed_list(user_id, result.reports, message)
     if sent_dup:
         return
 

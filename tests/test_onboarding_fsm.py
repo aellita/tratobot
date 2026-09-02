@@ -160,10 +160,10 @@ class TestProcessPeriodStart:
         msg = _make_message("15")
         state = _make_state()
 
-        await process_period_start(msg, state)
+        with patch("src.bot.handlers.menu._finish_onboarding", AsyncMock()):
+            await process_period_start(msg, state)
 
         state.update_data.assert_awaited()
-        state.set_state.assert_awaited_with(BudgetSetup.waiting_for_mandatory)
 
     async def test_invalid_text_returns_error(self):
         msg = _make_message("abc")
@@ -177,7 +177,8 @@ class TestProcessPeriodStart:
         msg = _make_message("0")
         state = _make_state()
 
-        await process_period_start(msg, state)
+        with patch("src.bot.handlers.menu._finish_onboarding", AsyncMock()):
+            await process_period_start(msg, state)
 
         state.update_data.assert_awaited()
 
@@ -185,7 +186,8 @@ class TestProcessPeriodStart:
         msg = _make_message("35")
         state = _make_state()
 
-        await process_period_start(msg, state)
+        with patch("src.bot.handlers.menu._finish_onboarding", AsyncMock()):
+            await process_period_start(msg, state)
 
         state.update_data.assert_awaited()
 
@@ -293,52 +295,16 @@ class TestProcessWishlistName:
 
 
 class TestSkipStep:
-    async def test_skip_income(self):
+    async def test_skip_period_start(self):
         cb = _make_callback("skip_step")
         state = _make_state()
-        state.get_state = AsyncMock(return_value=BudgetSetup.waiting_for_income.state)
+        state.get_state = AsyncMock(return_value=BudgetSetup.waiting_for_period_start.state)
 
         with (
             patch("src.bot.handlers.menu.get_onboarding_keyboard"),
             patch("src.bot.handlers.menu._finish_onboarding", AsyncMock()),
         ):
             await skip_step(cb, state)
-
-        state.update_data.assert_awaited()
-
-    async def test_skip_mandatory(self):
-        cb = _make_callback("skip_step")
-        state = _make_state()
-        state.get_state = AsyncMock(return_value=BudgetSetup.waiting_for_mandatory.state)
-
-        await skip_step(cb, state)
-
-        state.update_data.assert_awaited()
-
-    async def test_skip_black_day(self):
-        cb = _make_callback("skip_step")
-        state = _make_state()
-        state.get_state = AsyncMock(return_value=BudgetSetup.waiting_for_black_day.state)
-
-        await skip_step(cb, state)
-
-        state.update_data.assert_awaited()
-
-    async def test_skip_wishlist_name(self):
-        cb = _make_callback("skip_step")
-        state = _make_state()
-        state.get_state = AsyncMock(return_value=BudgetSetup.waiting_for_wishlist_name.state)
-
-        await skip_step(cb, state)
-
-        state.update_data.assert_awaited()
-
-    async def test_skip_rounding_mode(self):
-        cb = _make_callback("skip_step")
-        state = _make_state()
-        state.get_state = AsyncMock(return_value=BudgetSetup.waiting_for_rounding_mode.state)
-
-        await skip_step(cb, state)
 
         state.update_data.assert_awaited()
 
@@ -388,20 +354,20 @@ class TestHandlePeriodStartChoice:
         state = _make_state()
         state.get_state = AsyncMock(return_value=BudgetSetup.waiting_for_period_start.state)
 
-        await handle_period_start_choice(cb, state)
+        with patch("src.bot.handlers.menu._finish_onboarding", AsyncMock()):
+            await handle_period_start_choice(cb, state)
 
         state.update_data.assert_awaited()
-        state.set_state.assert_awaited_with(BudgetSetup.waiting_for_mandatory)
 
     async def test_period_first(self):
         cb = _make_callback("period_first")
         state = _make_state()
         state.get_state = AsyncMock(return_value=BudgetSetup.waiting_for_period_start.state)
 
-        await handle_period_start_choice(cb, state)
+        with patch("src.bot.handlers.menu._finish_onboarding", AsyncMock()):
+            await handle_period_start_choice(cb, state)
 
         state.update_data.assert_awaited()
-        state.set_state.assert_awaited_with(BudgetSetup.waiting_for_mandatory)
 
     async def test_period_other_prompts_input(self):
         cb = _make_callback("period_other")
