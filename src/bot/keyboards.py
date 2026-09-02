@@ -69,15 +69,26 @@ async def _get_daily_limit_label(telegram_id: int) -> str | None:
 def get_settings_keyboard():
     buttons = [
         [InlineKeyboardButton(text=phrases.BTN_CHANGE_BUDGET, callback_data="change_budget")],
-        [InlineKeyboardButton(text=phrases.BTN_MANDATORY, callback_data="edit_mandatory")],
-        [InlineKeyboardButton(text=phrases.BTN_SAVINGS, callback_data="edit_black_day")],
-        [InlineKeyboardButton(text=phrases.BTN_WISHLIST, callback_data="edit_wishlist")],
         [InlineKeyboardButton(text=phrases.BTN_PERIOD_START, callback_data="edit_period_start")],
-        [InlineKeyboardButton(text=phrases.BTN_ROUNDING, callback_data="edit_rounding")],
         [InlineKeyboardButton(text=phrases.BTN_MANAGE_CATEGORIES, callback_data="menu_categories")],
+        [
+            InlineKeyboardButton(
+                text=phrases.BTN_ADVANCED_PLANNING, callback_data="menu_advanced_planning"
+            )
+        ],
     ]
     if not settings.EXPENSE_SIMPLE_CHECK:
         buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_advanced_planning_keyboard():
+    buttons = [
+        [InlineKeyboardButton(text=phrases.BTN_MANDATORY, callback_data="adv_mandatory")],
+        [InlineKeyboardButton(text=phrases.BTN_SAVINGS, callback_data="adv_black_day")],
+        [InlineKeyboardButton(text=phrases.BTN_WISHLIST, callback_data="adv_wishlist")],
+        [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_settings")],
+    ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -194,10 +205,12 @@ def get_rollover_keyboard(budget_id: int) -> InlineKeyboardMarkup:
 def get_keep_income_keyboard(amount: float) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text=phrases.BTN_ROLLOVER_KEEP_INCOME.format(amount=int(amount)),
-                callback_data="rollover_keep_income",
-            )],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_ROLLOVER_KEEP_INCOME.format(amount=int(amount)),
+                    callback_data="rollover_keep_income",
+                )
+            ],
             [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
         ]
     )
@@ -206,10 +219,12 @@ def get_keep_income_keyboard(amount: float) -> InlineKeyboardMarkup:
 def get_keep_date_keyboard(day: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(
-                text=phrases.BTN_ROLLOVER_KEEP_DATE.format(day=day),
-                callback_data="rollover_keep_date",
-            )],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_ROLLOVER_KEEP_DATE.format(day=day),
+                    callback_data="rollover_keep_date",
+                )
+            ],
             [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
         ]
     )

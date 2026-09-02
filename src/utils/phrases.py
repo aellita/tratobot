@@ -38,6 +38,7 @@ BTN_SAVINGS = "🏦 Кубышка"
 BTN_WISHLIST = "🎯 Хотелка"
 BTN_PERIOD_START = "📅 День старта"
 BTN_ROUNDING = "🐖 Округление"
+BTN_ADVANCED_PLANNING = "🧾 Дополнительное планирование"
 
 BTN_TODAY = "📅 Сегодня ({day}-е)"
 BTN_FIRST_DAY = "1-е число"

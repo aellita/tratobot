@@ -43,6 +43,7 @@ from ...utils import phrases
 from ...utils.helpers import get_msk_now, parse_amount, safe
 from ..callbacks import RolloverCb
 from ..keyboards import (
+    get_advanced_planning_keyboard,
     get_cancel_keyboard,
     get_change_budget_choice_keyboard,
     get_duplicate_keyboard,
@@ -71,6 +72,8 @@ REPLY_MENU_COMMANDS = frozenset(
 )
 
 router = Router()
+
+_from_advanced_planning: set[int] = set()
 
 
 class BudgetSetup(StatesGroup):
@@ -1677,19 +1680,10 @@ async def save_recalc_balance(message: Message, state: FSMContext):
 # ============ SETTINGS ============
 
 
-@router.callback_query(F.data == "menu_settings")
-async def menu_settings(callback: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await callback.answer()
-    user_name = safe(callback.from_user.first_name or "")
-
-    budget = await get_budget_or_none(callback.from_user.id)
+async def _render_settings(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    budget = await get_budget_or_none(telegram_id)
     if not budget:
-        await callback.message.edit_text(
-            text=phrases.NO_BUDGET_SETTINGS,
-            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
-        )
-        return
+        return phrases.NO_BUDGET_SETTINGS, await get_main_menu_keyboard(telegram_id)
 
     period_day = budget.period_start_day or 1
     period_info = f"📅 Период: с {period_day}-го" if period_day != 1 else "📅 Период: весь месяц"
@@ -1697,16 +1691,39 @@ async def menu_settings(callback: CallbackQuery, state: FSMContext):
         money_line = f"• Свободных: {budget.free_money:,.0f}₽"
     else:
         money_line = f"• Всего доход: {budget.total_income:,.0f}₽"
-    await callback.message.edit_text(
-        text=f"⚙️ {user_name}, что меняем?\n\n"
-        f"📊 Текущий бюджет:\n"
-        f"{money_line}\n"
-        f"• Обязательные: {budget.mandatory_payments:,.0f}₽\n"
-        f"• Кубышка: {budget.black_day_fund:,.0f}₽\n"
-        f"• {safe(budget.wishlist_name or phrases.DEFAULT_WISHLIST_NAME)}: {budget.wishlist_target:,.0f}₽\n"
-        f"{period_info}",
-        reply_markup=get_settings_keyboard(),
+    text = f"⚙️ Что меняем?\n\n📊 Бюджет\n{money_line}\n{period_info}"
+    return text, get_settings_keyboard()
+
+
+async def _render_advanced_planning(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    budget = await get_budget_or_none(telegram_id)
+    if not budget:
+        return phrases.NO_BUDGET_SETTINGS, await get_main_menu_keyboard(telegram_id)
+
+    wishlist_name = safe(budget.wishlist_name or phrases.DEFAULT_WISHLIST_NAME)
+    text = (
+        f"🧾 Дополнительное планирование\n\n"
+        f"📌 Обязательные: {budget.mandatory_payments:,.0f}₽\n"
+        f"🏦 Кубышка: {budget.black_day_fund:,.0f}₽\n"
+        f"🎯 {wishlist_name}: {budget.wishlist_target:,.0f}₽"
     )
+    return text, get_advanced_planning_keyboard()
+
+
+@router.callback_query(F.data == "menu_settings")
+async def menu_settings(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.answer()
+    text, kb = await _render_settings(callback.from_user.id)
+    await callback.message.edit_text(text=text, reply_markup=kb)
+
+
+@router.callback_query(F.data == "menu_advanced_planning")
+async def menu_advanced_planning(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.answer()
+    text, kb = await _render_advanced_planning(callback.from_user.id)
+    await callback.message.edit_text(text=text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "add_income")
@@ -1716,6 +1733,24 @@ async def add_income(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         text=phrases.INCOME_ADD_PROMPT, reply_markup=get_cancel_keyboard()
     )
+
+
+@router.callback_query(F.data == "adv_mandatory")
+async def adv_mandatory(callback: CallbackQuery, state: FSMContext):
+    _from_advanced_planning.add(callback.from_user.id)
+    await edit_mandatory(callback, state)
+
+
+@router.callback_query(F.data == "adv_black_day")
+async def adv_black_day(callback: CallbackQuery, state: FSMContext):
+    _from_advanced_planning.add(callback.from_user.id)
+    await edit_black_day(callback, state)
+
+
+@router.callback_query(F.data == "adv_wishlist")
+async def adv_wishlist(callback: CallbackQuery, state: FSMContext):
+    _from_advanced_planning.add(callback.from_user.id)
+    await edit_wishlist(callback, state)
 
 
 @router.callback_query(F.data == "edit_mandatory")
@@ -1831,11 +1866,17 @@ async def save_mandatory(message: Message, state: FSMContext):
         return
 
     await update_budget_field(message.from_user.id, "mandatory_payments", amount)
-    await message.answer(
-        text=phrases.MANDATORY_UPDATED.format(amount=f"{amount:,.0f}"),
-        reply_markup=await get_main_menu_keyboard(message.from_user.id),
-    )
-    await state.clear()
+    if message.from_user.id in _from_advanced_planning:
+        _from_advanced_planning.discard(message.from_user.id)
+        await state.clear()
+        text, kb = await _render_advanced_planning(message.from_user.id)
+        await message.answer(text=text, reply_markup=kb)
+    else:
+        await message.answer(
+            text=phrases.MANDATORY_UPDATED.format(amount=f"{amount:,.0f}"),
+            reply_markup=await get_main_menu_keyboard(message.from_user.id),
+        )
+        await state.clear()
 
 
 @router.message(EditBudget.waiting_for_black_day)
@@ -1849,11 +1890,17 @@ async def save_black_day(message: Message, state: FSMContext):
         return
 
     await update_budget_field(message.from_user.id, "black_day_fund", amount)
-    await message.answer(
-        text=phrases.SAVINGS_UPDATED.format(amount=f"{amount:,.0f}"),
-        reply_markup=await get_main_menu_keyboard(message.from_user.id),
-    )
-    await state.clear()
+    if message.from_user.id in _from_advanced_planning:
+        _from_advanced_planning.discard(message.from_user.id)
+        await state.clear()
+        text, kb = await _render_advanced_planning(message.from_user.id)
+        await message.answer(text=text, reply_markup=kb)
+    else:
+        await message.answer(
+            text=phrases.SAVINGS_UPDATED.format(amount=f"{amount:,.0f}"),
+            reply_markup=await get_main_menu_keyboard(message.from_user.id),
+        )
+        await state.clear()
 
 
 @router.message(EditBudget.waiting_for_wishlist)
@@ -1866,11 +1913,17 @@ async def save_wishlist(message: Message, state: FSMContext):
 
     user_name = safe(message.from_user.first_name or "")
 
-    await message.answer(
-        text=f"✅ Готово, {user_name}! Хотелка: {safe(name)} — {price:,.0f}₽",
-        reply_markup=await get_main_menu_keyboard(message.from_user.id),
-    )
-    await state.clear()
+    if message.from_user.id in _from_advanced_planning:
+        _from_advanced_planning.discard(message.from_user.id)
+        await state.clear()
+        text, kb = await _render_advanced_planning(message.from_user.id)
+        await message.answer(text=text, reply_markup=kb)
+    else:
+        await message.answer(
+            text=f"✅ Готово, {user_name}! Хотелка: {safe(name)} — {price:,.0f}₽",
+            reply_markup=await get_main_menu_keyboard(message.from_user.id),
+        )
+        await state.clear()
 
 
 # ============ ROUNDING MODE SETTINGS ============
@@ -2037,17 +2090,8 @@ async def handle_reply_menu(message: Message, state: FSMContext):
         return
 
     if btn_text == phrases.BTN_SETTINGS:
-        budget = await get_budget_or_none(message.from_user.id)
-        if not budget:
-            await message.answer(
-                text=phrases.NO_BUDGET_SETTINGS,
-                reply_markup=await get_main_menu_keyboard(message.from_user.id),
-            )
-            return
-        await message.answer(
-            text=phrases.BTN_SETTINGS,
-            reply_markup=get_settings_keyboard(),
-        )
+        text, kb = await _render_settings(message.from_user.id)
+        await message.answer(text=text, reply_markup=kb)
         return
 
     if btn_text == phrases.BTN_HELP:
