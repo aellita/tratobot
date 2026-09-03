@@ -20,7 +20,6 @@ from ...services.evening_report import (
 )
 from ...services.expense_service import (
     get_current_period_expenses_sum,
-    get_today_daily_limit,
     get_today_expenses_sum,
     parse_multi_expense_text,
 )
@@ -49,12 +48,14 @@ async def handle_evening_expense(message: Message, state: FSMContext):
         invalid = next((r for r in result.reports if not r.is_valid), None)
         if invalid and invalid.error_type == "MATH_ERROR":
             await handle_invalid_input(
-                message, state,
+                message,
+                state,
                 phrases.ERR_MATH_ERROR.format(detail=invalid.error_detail or invalid.raw_text),
             )
         else:
             await handle_invalid_input(
-                message, state,
+                message,
+                state,
                 phrases.ERR_PARSE_EXPENSE,
             )
         return
@@ -88,8 +89,10 @@ async def handle_evening_expense(message: Message, state: FSMContext):
             emoji=emoji, amount=f"{amount:,.0f}", desc=safe(description)
         )
         if report.was_corrected:
-            saved_line = saved_line + "\n" + phrases.ERR_MATH_CORRECTED.format(
-                hint=report.correction_hint or ""
+            saved_line = (
+                saved_line
+                + "\n"
+                + phrases.ERR_MATH_CORRECTED.format(hint=report.correction_hint or "")
             )
         response_parts.append(saved_line)
 
@@ -130,7 +133,6 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
 
     user_id = callback.from_user.id
 
-    limit = await get_today_daily_limit(user_id)
     spent = await get_today_expenses_sum(user_id)
     budget = await get_active_budget(user_id)
 
@@ -144,9 +146,11 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
             )
         period_spent = await get_current_period_expenses_sum(user_id)
         available_cash = max(total_available - period_spent, 0)
+        limit = max(available_cash / max(days_left, 1), 0)
     else:
         days_left = 1
         available_cash = 0
+        limit = 0
 
     if limit <= 0:
         await callback.message.answer(

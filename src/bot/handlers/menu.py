@@ -1709,9 +1709,9 @@ async def _render_settings(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]
     period_day = budget.period_start_day or 1
     period_info = f"📅 Период: с {period_day}-го" if period_day != 1 else "📅 Период: весь месяц"
     if budget.free_money > 0:
-        money_line = f"• Свободных: {budget.free_money:,.0f}₽"
+        money_line = f"💰 Свободно: {budget.free_money:,.0f}₽"
     else:
-        money_line = f"• Всего доход: {budget.total_income:,.0f}₽"
+        money_line = f"💰 Доход: {budget.total_income:,.0f}₽"
     text = f"⚙️ Что меняем?\n\n📊 Бюджет\n<blockquote>{money_line}\n{period_info}</blockquote>"
     return text, get_settings_keyboard()
 

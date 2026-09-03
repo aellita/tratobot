@@ -93,6 +93,13 @@
 
 **Файлы:** `models.py:70,74`, `menu.py:814,817`, `tests/test_daily_limit_scenarios.py`
 
+### Вечерний лимит — живой вместо планового + мешок в настройках (2026-09-02)
+**Проблема:** вечерний отчёт показывал `budget.daily_limit` (плановый `income/total_days`, напр. 10000₽), а не `dl_pred` (живой с учётом трат, ~8000₽). Пользователь получал ложное чувство запаса. В настройках `•` выглядел как точка.
+
+**Решение:** `finalize_evening_report` теперь вычисляет `limit = available_cash / days_left` (как `_build_status`). `_render_settings` → `💰 Доход/Свободно`.
+
+**Файлы:** `evening_flow.py`, `menu.py`
+
 ## Decision Log (ADR)
 
 ### HTML-инъекция через first_name: убрать {name} из косметических фраз (2026-07-10)
