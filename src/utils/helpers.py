@@ -176,7 +176,7 @@ def _preprocess_math(text: str) -> tuple[str, bool, str | None]:
         for _ in range(extra):
             idx = fixed_math.rfind(")")
             if idx >= 0:
-                fixed_math = fixed_math[:idx] + fixed_math[idx + 1:]
+                fixed_math = fixed_math[:idx] + fixed_math[idx + 1 :]
                 hint = phrases.HINT_REMOVED_PAREN
 
     # 3. Collapse double operators (++ → +, +- → -, -+ → -)
@@ -257,6 +257,16 @@ def _extract_emoji(text: str) -> tuple[str | None, str]:
     cleaned = " ".join(cleaned.split()).strip()
 
     return anchor, cleaned
+
+
+def build_category_name(raw: str, fallback_emoji: str | None = None) -> str | None:
+    emoji_char, text = _extract_emoji(raw)
+    emoji_char = emoji_char or fallback_emoji or FALLBACK_EMOJI
+    text = " ".join(text.split()).strip()
+    if not text:
+        return None
+    text = text[:1].upper() + text[1:]
+    return f"{emoji_char} {text}"
 
 
 def safe(text: str | None) -> str:

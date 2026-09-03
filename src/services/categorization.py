@@ -1,13 +1,12 @@
 import difflib
 import json
-import unicodedata
 
 from sqlalchemy import func, select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Category, Expense
 from ..utils import phrases
-from ..utils.helpers import FALLBACK_EMOJI
+from ..utils.helpers import FALLBACK_EMOJI, _extract_emoji
 
 _seeded_users: set[int] = set()
 
@@ -266,11 +265,11 @@ def get_category_display(category_name: str) -> tuple[str, str]:
     if matched_emoji and display:
         return matched_emoji, display
 
-    name = category_name.strip()
-    if len(name) > 1 and unicodedata.category(name[0]) == "So":
-        return name[0], name[1:].strip()
+    emoji_char, cleaned = _extract_emoji(category_name.strip())
+    if emoji_char and cleaned:
+        return emoji_char, cleaned
 
-    return FALLBACK_EMOJI, name
+    return FALLBACK_EMOJI, category_name.strip()
 
 
 async def detect_category_db(

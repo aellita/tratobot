@@ -21,7 +21,7 @@ from ...services.category_service import (
     rename_category,
     toggle_archive_category,
 )
-from ...utils.helpers import FALLBACK_EMOJI, _extract_emoji, safe
+from ...utils.helpers import build_category_name, safe
 from ..keyboards import get_main_menu_keyboard
 
 router = Router()
@@ -262,15 +262,8 @@ async def process_cat_rename(message: Message, state: FSMContext):
             return
 
         old_emoji, _ = get_category_display(cat.name)
-        new_emoji, text_part = _extract_emoji(raw)
-
-        if new_emoji is None:
-            emoji = old_emoji or FALLBACK_EMOJI
-            text_part = raw
-        else:
-            emoji = new_emoji
-
-        if not text_part:
+        new_name = build_category_name(raw, fallback_emoji=old_emoji)
+        if new_name is None:
             await message.answer(
                 phrases.ERR_NAME_LENGTH,
                 reply_markup=InlineKeyboardMarkup(
@@ -285,8 +278,6 @@ async def process_cat_rename(message: Message, state: FSMContext):
                 ),
             )
             return
-        text_part = text_part[0].upper() + text_part[1:].lower()
-        new_name = f"{emoji} {text_part}"
 
         if new_name == cat.name:
             await state.clear()

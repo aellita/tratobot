@@ -194,7 +194,11 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
             if not settings.EXPENSE_SIMPLE_CHECK:
                 kb = InlineKeyboardMarkup(
                     inline_keyboard=[
-                        [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")],
+                        [
+                            InlineKeyboardButton(
+                                text=phrases.BTN_BACK_MAIN, callback_data="report_back"
+                            )
+                        ],
                     ]
                 )
             await bot.send_message(

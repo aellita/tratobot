@@ -7,7 +7,9 @@ from ..keyboards import get_cancel_keyboard, get_main_menu_keyboard
 
 
 async def handle_invalid_input(
-    message: Message, state: FSMContext, error_text: str,
+    message: Message,
+    state: FSMContext,
+    error_text: str,
 ) -> None:
     """Increment retry; if 3rd failure clear state + timeout message."""
     data = await state.get_data()

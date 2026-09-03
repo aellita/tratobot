@@ -160,7 +160,8 @@ async def apply_reconciliation(
     last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
     async with async_session_maker() as session:
         result = await session.execute(
-            select(Budget).where(
+            select(Budget)
+            .where(
                 Budget.telegram_id == telegram_id,
                 Budget.month.in_([this_month, last_month]),
             )

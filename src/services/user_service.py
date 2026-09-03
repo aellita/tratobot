@@ -8,7 +8,9 @@ async def get_or_create_user(
     async with async_session_maker() as session:
         user = await session.get(User, telegram_id)
         if not user:
-            user = User(telegram_id=telegram_id, first_name=first_name, username=username, is_active=True)
+            user = User(
+                telegram_id=telegram_id, first_name=first_name, username=username, is_active=True
+            )
             session.add(user)
             await session.commit()
         return user

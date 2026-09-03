@@ -8,7 +8,13 @@ from sqlalchemy import func, select
 from ..db.database import async_session_maker
 from ..db.models.models import Expense, UserSettings
 from ..utils import phrases
-from ..utils.helpers import _parse_math_prefix, _preprocess_math, _split_math_prefix, get_msk_now, safe
+from ..utils.helpers import (
+    _parse_math_prefix,
+    _preprocess_math,
+    _split_math_prefix,
+    get_msk_now,
+    safe,
+)
 
 PAGE_SIZE = 5
 IGNORE_WORDS = {"рублей", "рубля", "рубль", "руб", "₽"}
@@ -95,9 +101,7 @@ def _fallback_first_number(text: str) -> ExpenseParseReport | None:
 
 def parse_expense_text(text: str, line_number: int = 0) -> ExpenseParseReport:
     if not text.strip():
-        return ExpenseParseReport(
-            raw_text=text, line_number=line_number, error_type="EMPTY"
-        )
+        return ExpenseParseReport(raw_text=text, line_number=line_number, error_type="EMPTY")
 
     has_math = bool(re.search(r"[+\-*/()]", text))
 
@@ -107,7 +111,7 @@ def parse_expense_text(text: str, line_number: int = 0) -> ExpenseParseReport:
         if total > 0:
             if not re.search(r"[+\-*/]\s*\d", rest):
                 raw_rest = rest
-                rest = re.sub(r'\s*[+\-*/()]+\s*', ' ', rest).strip()
+                rest = re.sub(r"\s*[+\-*/()]+\s*", " ", rest).strip()
                 was_corrected = rest != raw_rest.strip()
                 return ExpenseParseReport(
                     amount=total,
@@ -177,9 +181,7 @@ def parse_expense_text(text: str, line_number: int = 0) -> ExpenseParseReport:
         fallback.line_number = line_number
         return fallback
 
-    return ExpenseParseReport(
-        raw_text=text, line_number=line_number, error_type="NO_NUMBER"
-    )
+    return ExpenseParseReport(raw_text=text, line_number=line_number, error_type="NO_NUMBER")
 
 
 def parse_multi_expense_text(text: str) -> MultiExpenseParseResult:

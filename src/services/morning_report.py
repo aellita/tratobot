@@ -26,17 +26,29 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup | None:
         ]
     elif btn_type == "FROM_YELLOW_TO_GREEN":
         base = [
-            [InlineKeyboardButton(text=phrases.BTN_USE_SAVINGS_COMFORT, callback_data="use_savings")],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_USE_SAVINGS_COMFORT, callback_data="use_savings"
+                )
+            ],
             [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
         ]
     elif btn_type == "FROM_YELLOW_TO_BLUE":
         base = [
-            [InlineKeyboardButton(text=phrases.BTN_RAISE_LIMIT_SAVINGS, callback_data="use_savings")],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_RAISE_LIMIT_SAVINGS, callback_data="use_savings"
+                )
+            ],
             [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
         ]
     elif btn_type == "FROM_RED_TO_GREEN":
         base = [
-            [InlineKeyboardButton(text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings")],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings"
+                )
+            ],
             [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
         ]
     elif btn_type == "FROM_RED_TO_BLUE":
@@ -46,7 +58,11 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup | None:
         ]
     elif btn_type == "FROM_RED_TO_YELLOW":
         base = [
-            [InlineKeyboardButton(text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings")],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings"
+                )
+            ],
             [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
         ]
     if not has_reply_kb:
@@ -123,7 +139,8 @@ async def send_morning_reports(bot: Bot):
                                 old_income=int(b.total_income),
                             )
                             await bot.send_message(
-                                tg_id, offer,
+                                tg_id,
+                                offer,
                                 reply_markup=get_rollover_keyboard(b.id),
                             )
 

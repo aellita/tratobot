@@ -40,7 +40,7 @@ from ...services.expense_service import (
 from ...services.goal_service import get_goal_current_amount
 from ...services.user_service import get_or_create_user
 from ...utils import phrases
-from ...utils.helpers import get_msk_now, parse_amount, safe
+from ...utils.helpers import build_category_name, get_msk_now, parse_amount, safe
 from ..callbacks import RolloverCb
 from ..keyboards import (
     get_advanced_planning_keyboard,
@@ -1496,7 +1496,8 @@ async def new_category_prompt(callback: CallbackQuery, state: FSMContext):
 
 @router.message(CustomCategory.waiting_for_name)
 async def save_new_category(message: Message, state: FSMContext):
-    name = message.text.strip().capitalize()
+    raw = message.text.strip()
+    name = build_category_name(raw)
     if not name or len(name) > 30:
         await message.answer(
             phrases.ERR_NAME_LENGTH,
