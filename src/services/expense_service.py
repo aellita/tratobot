@@ -319,8 +319,10 @@ async def get_today_expenses_grouped(telegram_id: int) -> list[str]:
                 prefix = f"{emoji} {safe(cat_name)}"
         else:
             prefix = "📦 Прочее"
-        desc = safe(exp.description or "")
-        label = f"{desc} — {exp.amount:,.0f}₽" if desc else f"{exp.amount:,.0f}₽"
+        raw_desc = exp.description or ""
+        desc = safe(raw_desc)
+        display_desc = f"{desc[:1].upper()}{desc[1:]}" if desc else ""
+        label = f"{display_desc} — {exp.amount:,.0f}₽" if display_desc else f"{exp.amount:,.0f}₽"
         lines.append(f"{prefix} {label}")
 
     return lines
