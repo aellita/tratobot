@@ -6,10 +6,10 @@
 
 ## Текущий статус и фокус
 
-**Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), округление, математические выражения в тратах.  
-**Активно:** упрощение продукта — перенос mandatory/black_day/wishlist/rounding в Дополнительное планирование  
-**Ближайшее:** День 2 — Настройки → Дополнительное планирование, затем проверка daily_limit, B18, ASAP-дубликат, E501  
-**В планах:** AI weekly insight, dogfooding  
+**Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения.  
+**Активно:** Dogfooding (День 5)  
+**Ближайшее:** AI weekly insight  
+**В планах:** Dogfooding AI, релиз 5-10 пользователям  
 
 ---
 
@@ -99,6 +99,20 @@
 **Решение:** `finalize_evening_report` теперь вычисляет `limit = available_cash / days_left` (как `_build_status`). `_render_settings` → `💰 Доход/Свободно`.
 
 **Файлы:** `evening_flow.py`, `menu.py`
+
+### Категории и составные emoji (2026-09-02)
+**Проблема:** `get_category_display` брал только первый codepoint (`unicodedata.category(name[0])=="So"`), ломая `🧒🏼` → `🧒 🏼детское` и `⚕️` → `⚕ ️ Здоровье`. `save_new_category` → `capitalize()` делал `🧒🏼Детское` → `🧒🏼детское`.
+
+**Решение:** `helpers.py:260` `build_category_name(raw, fallback_emoji)` — `_extract_emoji` + один пробел + `text[:1].upper()+text[1:]` без `.lower()`. `categorization.py:258` `get_category_display` → через `_extract_emoji` (чинит старые записи без миграции).
+
+**Файлы:** `helpers.py`, `categorization.py`, `categories.py`, `menu.py`
+
+### День 4: B18 + ASAP-дубликат + E501 (2026-09-02)
+**Проблема B18:** `morning_report.py:173` `money_for_life = budget.free_money - spent_period` — двойной вычет, `free_money` уже остаток. **ASAP:** `get_today_expenses_grouped` дублировал `Транспорт транспорт` когда `desc == cat_name`. **E501:** 18 строк >100 в `phrases.py`.
+
+**Решение:** B18 → `budget.free_money`; ASAP → `desc.lower()==cat_name.lower()` → `prefix=emoji`; E501 — ручной перенос.
+
+**Файлы:** `morning_report.py`, `expense_service.py`, `phrases.py`
 
 ### Категории и составные emoji (2026-09-02)
 **Проблема:** `get_category_display` брал только первый codepoint (`unicodedata.category(name[0])=="So"`), ломая `🧒🏼` → `🧒 🏼детское` и `⚕️` → `⚕ ️ Здоровье`. `save_new_category` → `capitalize()` делал `🧒🏼Детское` → `🧒🏼детское`. Два пути создания давали разный стиль.

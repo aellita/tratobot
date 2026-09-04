@@ -8,11 +8,11 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 36 |
+| ✅ Готово | 41 |
 | 🔧 В работе | 0 |
-| ⏳ Ожидает | 4 |
+| ⏳ Ожидает | 3 |
 
-**Следующая задача:** День 4 — B18 + ASAP-дубликат + E501
+**Следующая задача:** День 5 — Dogfooding
 
 ---
 
@@ -125,11 +125,11 @@
 
 > **Цель:** закрыть технический хвост.
 
-- [ ] ⏳ B18: `morning_report.py` — `budget.free_money - spent_period` → `budget.free_money`
-- [ ] ⏳ ASAP-дубликат: `expense_service.py` — `get_today_expenses_grouped`: если `desc == cat_name`, не дублировать
-- [ ] ⏳ E501: `phrases.py` — разбить 18 длинных строк
-- [ ] ⏳ `ruff check` + `ruff format`
-- [ ] ⏳ `pytest` — полный прогон
+- [x] ✅ B18: `morning_report.py:173` — `budget.free_money - spent_period` → `budget.free_money`
+- [x] ✅ ASAP-дубликат: `expense_service.py:313` — если `desc.lower() == cat_name.lower()` → `prefix = emoji`
+- [x] ✅ E501: `phrases.py` — 18 строк разбиты вручную, `ruff format`
+- [x] ✅ `ruff check` + `ruff format`
+- [x] ✅ `pytest` — 357 passed
 
 ---
 
