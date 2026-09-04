@@ -8,7 +8,7 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 35 |
+| ✅ Готово | 36 |
 | 🔧 В работе | 0 |
 | ⏳ Ожидает | 4 |
 
@@ -110,6 +110,16 @@
 
 - [x] ✅ `menu.py:_render_settings` — `•` → `💰` (Доход/Свободно)
 - [x] ✅ `evening_flow.py:finalize_evening_report` — лимит теперь `dl_pred` (live), не `budget.daily_limit` (плановый)
+
+### Фикс: категории и составные emoji (2026-09-02)
+
+> **Цель:** исправить отображение составных emoji (🧒🏼/⚕️) и единый стиль создания/переименования.
+
+- [x] ✅ `helpers.py:260` — новый `build_category_name(raw, fallback_emoji)` (один пробел, `text[:1].upper()+text[1:]` без `.lower()`)
+- [x] ✅ `categorization.py:258` — `get_category_display` → через `_extract_emoji` (чинит `🧒 🏼детское`/`⚕ ️ Здоровье` без миграции)
+- [x] ✅ `categories.py:223` — `process_cat_rename` → `build_category_name`
+- [x] ✅ `menu.py:1497` — `save_new_category` → `build_category_name` (был `capitalize()`)
+- [x] ✅ `ruff format` + `pytest` — 33 passed
 
 ### День 4: B18 + ASAP-дубликат + E501
 

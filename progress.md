@@ -100,6 +100,13 @@
 
 **Файлы:** `evening_flow.py`, `menu.py`
 
+### Категории и составные emoji (2026-09-02)
+**Проблема:** `get_category_display` брал только первый codepoint (`unicodedata.category(name[0])=="So"`), ломая `🧒🏼` → `🧒 🏼детское` и `⚕️` → `⚕ ️ Здоровье`. `save_new_category` → `capitalize()` делал `🧒🏼Детское` → `🧒🏼детское`. Два пути создания давали разный стиль.
+
+**Решение:** `helpers.py:260` `build_category_name(raw, fallback_emoji)` — `_extract_emoji` + один пробел + `text[:1].upper()+text[1:]` без `.lower()`. `categorization.py:258` `get_category_display` → через `_extract_emoji` (чинит старые записи без миграции). Оба хендлера используют helper.
+
+**Файлы:** `helpers.py`, `categorization.py`, `categories.py`, `menu.py`
+
 ## Decision Log (ADR)
 
 ### HTML-инъекция через first_name: убрать {name} из косметических фраз (2026-07-10)
