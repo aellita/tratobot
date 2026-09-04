@@ -170,7 +170,7 @@ async def send_morning_reports(bot: Bot):
                 savings = budget.black_day_fund
 
                 if budget.free_money > 0:
-                    money_for_life = budget.free_money - spent_period
+                    money_for_life = budget.free_money
                 else:
                     money_for_life = (
                         budget.total_income
