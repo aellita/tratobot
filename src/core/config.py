@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     BOT_TOKEN: str = ""
     DATABASE_URL: str = "sqlite+aiosqlite:///tratobot.db"
     EXPENSE_SIMPLE_CHECK: bool = True
-    RECOVERY_ENABLED: bool = False
+    RECOVERY_ENABLED: bool = True
 
     RECOVERY_TRIGGER: float = 0.85
     RECOVERY_FAST: float = 0.60
