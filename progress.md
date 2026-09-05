@@ -6,10 +6,10 @@
 
 ## Текущий статус и фокус
 
-**Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения.  
-**Активно:** Dogfooding (День 5)  
-**Ближайшее:** AI weekly insight  
-**В планах:** Dogfooding AI, релиз 5-10 пользователям  
+**Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (kill-switch off)**.  
+**Активно:** Recovery v1 — smoke-test (включить `RECOVERY_ENABLED=true`)  
+**Ближайшее:** phrases 3–5 вариантов на группу (A-P), AI weekly insight  
+**В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям  
 
 ---
 
@@ -250,11 +250,21 @@ history.py 1, evening_flow.py 2) теперь вызывают её одной �
 - `_build_status`: `<blockquote>` вокруг expense_lines
 - `_shared.py`: единый `handle_invalid_input()`
 
+### Recovery v1-infra (2026-09-05) — kill-switch off
+**Проблема:** нужен временный режим поверх `Budget.daily_limit` для возврата к замороженному `B` без изменения бюджета, с выбором 60/70/80% и вечерним пересчётом длительности.
+**Решение:**
+- `Budget.base_daily_limit` frozen при `save_budget()`/`resolve_frozen_baseline()` (атомарно `WHERE base_daily_limit IS NULL`), `recovery_states` (история, `initial_*` immutable, `total_days` mutable) + `recovery_offer_state` (`dismissed/last_offer_at/deficit`), миграция `database.py` (`ALLOWED_TABLES/COLUMNS`, SQLite `REAL`/`INTEGER` vs PostgreSQL `NUMERIC`/`BOOLEAN`).
+- `recovery_service.py` чистая математика `Decimal`: `trigger 0.85, fast 0.60/balanced 0.70/soft 0.80, success 0.90, replan 0.90, small 1.10, tail 7, cooldown 3, min 1000` + `calculate_recovery_options/days, should_offer, check_success, is_small_overspend, should_repeat_offer` + DB-helpers `get_active_recovery/create_recovery/stop/complete/update_days/expire` (все `get_msk_now()` tz-aware, `UPSERT` offer).
+- Оркестрация за `RECOVERY_ENABLED=false`: `menu.py:_build_status` рендер (скрытие нулевых резервов, `🧘 день 3 из 10 / 7000·10дн / После этого — 10000 ещё 7дн`), коллбэки `recovery:choose:fast|balanced|soft` (re-validate `B*days- money`, `days+7<=remaining`), `dismiss/stop/show_options`, бюджет-хуки `add_income/recalc/mandatory/black_day/period_start` (не `saving_today`, отдельный flow), `morning_report` (active/success/offer), `evening_report` (факт `saving_today=max(0,target-spent)`, `10→8` честно, прогноз только `+`), `rollover` + `period_end` → `expired(period_end)`.
+- `phrases.py` 16 групп (`BTN_RECOVERY_*`, `RECOVERY_*`), `keyboards.py` 3 клавиатуры, `get_user_now()` обёртка, `pyproject.toml` `ignore E712`.
+**Файлы:** `models.py:58,159`, `database.py:13,204`, `config.py:18`, `helpers.py:224`, `recovery_service.py`, `budget_service.py:36`, `menu.py:76,590,854`, `keyboards.py:233`, `morning_report.py:343`, `evening_report.py:240`, `phrases.py:664`.
+
 ## 📌 Feature Flags
 
 | Флаг | По умолчанию | Что контролирует |
 |------|-------------|------------------|
 | `EXPENSE_SIMPLE_CHECK` | `True` | `True` → ReplyKeyboard (persistent menu внизу чата), inline-меню скрыто, чеки трат без лишних кнопок. `False` → inline-клавиатуры, кнопка «В главное меню» в отчётах. |
+| `RECOVERY_ENABLED` | `False` | Kill-switch Recovery. `False` → инфра дормантна (миграция есть, UI скрыт). `True` → активны Daily Limit блок, утреннее предложение, вечерний пересчёт `total_days`, бюджет-хуки. |
 | `BOT_TOKEN` | — | Telegram Bot API токен |
 | `DATABASE_URL` | `sqlite+aiosqlite:///tratobot.db` | Строка подключения к БД (SQLite dev / PostgreSQL prod) |
 

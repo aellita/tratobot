@@ -8,11 +8,11 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 41 |
+| ✅ Готово | 42 |
 | 🔧 В работе | 0 |
-| ⏳ Ожидает | 3 |
+| ⏳ Ожидает | 2 |
 
-**Следующая задача:** День 5 — Dogfooding
+**Следующая задача:** День 5 — Dogfooding Recovery (включить `RECOVERY_ENABLED=true`) → фразы 3–5 вариантов
 
 ---
 
@@ -130,6 +130,24 @@
 - [x] ✅ E501: `phrases.py` — 18 строк разбиты вручную, `ruff format`
 - [x] ✅ `ruff check` + `ruff format`
 - [x] ✅ `pytest` — 357 passed
+
+### День 4.5: Recovery v1-infra (kill-switch off)
+
+> **Цель:** временный режим поверх `Budget.daily_limit` — `B` frozen, 60/70/80%, `+7`, `85/90/110`, `get_user_now` tz-aware. Review: `datetime.now()` → `get_msk_now()`.
+
+- [x] ✅ `models.py:58` — `Budget.base_daily_limit` nullable Float (frozen B)
+- [x] ✅ `models.py:159,181` — `RecoveryState` (`recovery_states`) + `RecoveryOfferState` (`recovery_offer_state`) + `_get_user_now` wrappers
+- [x] ✅ `database.py:13,204` — `ALLOWED_TABLES/COLUMNS` + миграция `base_daily_limit` + `CREATE TABLE IF NOT EXISTS` (SQLite/PostgreSQL)
+- [x] ✅ `config.py:18` — `RECOVERY_ENABLED=false` + 10 констант `TRIGGER 0.85, FAST 0.60...`
+- [x] ✅ `helpers.py:224` — `get_user_now/get_user_now_aware` (MSK сейчас, интерфейс для EKB)
+- [x] ✅ `recovery_service.py` — чистая математика `Decimal` + DB-helpers (`get_active_recovery/create/stop/complete/update/expire`, `dismiss_offer`) — все `get_msk_now()`
+- [x] ✅ `budget_service.py:36` — `resolve_frozen_baseline()` + `save_budget()` фризит `B` (`WHERE base_daily_limit IS NULL`)
+- [x] ✅ `phrases.py:664` — 16 групп `BTN_RECOVERY_*/RECOVERY_*` + `ERR_ROLLOVER_NOT_FOUND/ROLLOVER_ASK_INCOME`
+- [x] ✅ `keyboards.py:233` — `get_recovery_offer/single/active/plan_keyboard` (`fast|balanced|soft`)
+- [x] ✅ `menu.py:76,590,854` — `_build_status` рендер (скрытие нулевых резервов, `🧘 день 3 из 10`), коллбэки `recovery:show_options/choose/dismiss/stop` с re-validate `days+7<=remaining` + бюджет-хуки `_handle_recovery_budget_change` + `rollover` expire `period_end`
+- [x] ✅ `morning_report.py:343` — active/success/offer ветки за флагом, `evening_report.py:240` — вечерний пересчёт `total_days` (`10→8` честно) + прогноз только `+`, 0 кнопок
+- [x] ✅ `pyproject.toml` — `ignore E712` (SQLAlchemy `== False`)
+- [x] ✅ `ruff` + `pytest 357 passed` — Review: `datetime.now()→get_msk_now()` fixed, safe to push
 
 ---
 

@@ -59,6 +59,7 @@ Telegram-бот для учёта личных финансов. Ироничн�
 - [x] **ReplyKeyboard (Phase 2):** постоянное меню внизу чата (Добавить трату, Дневной лимит, Статистика, Настройки, Помощь). Работает из любого FSM. Отправляется при /start, после онбординга, при menu_back/cancel/open_menu. Inline-меню скрыто при `EXPENSE_SIMPLE_CHECK=True`
 - [x] **Monthly Summary (Queue 19):** красивый ежемесячный отчёт с тотемами (6 персонажей + Чебурашка), моноширинной таблицей категорий, collapsible «Детали расчёта», навигацией по всем периодам. Точка входа: «Статистика» → «🗓️ Отчет за месяц». Авто-рассылка вместо утреннего отчёта в день после `period_start_day`.
 - [x] **UX-рефакторинг бюджета:** «Обновить доход» + «Добавить доход» схлопнуты в «Изменить бюджет» с выбором (дополнительный доход / остаток на карте). Critical Reset заменён на «🔄 Пересчитать лимит» без зон — только в Morning Report. Кнопки пересчёта убраны из статуса. Баг `daily_limit` исправлен: при `free_money > 0` лимит считается от `days_remaining`, а не от `_period_total_days`. (2026-07-10)
+- [x] **Recovery v1-infra (kill-switch off):** `Budget.base_daily_limit` frozen, `recovery_states` + `recovery_offer_state`, `recovery_service` Decimal `85/60/70/80/90/110 +7`, Daily Limit блок `🧘 день 3 из 10` с `get_user_now` tz-aware, коллбэки `fast|balanced|soft` + re-validate, `RECOVERY_ENABLED=false`. (2026-09-05)
 
 ### 🐛 Баги
 

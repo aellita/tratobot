@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from datetime import datetime
 from decimal import ROUND_CEILING, Decimal
+
+from ..utils.helpers import get_msk_now
 
 from sqlalchemy import select
 
@@ -179,7 +180,7 @@ async def get_offer_state(telegram_id: int) -> RecoveryOfferState | None:
 
 
 async def dismiss_offer(telegram_id: int, deficit: float | Decimal) -> None:
-    now = datetime.now()
+    now = get_msk_now()
     async with async_session_maker() as session:
         result = await session.execute(
             select(RecoveryOfferState).where(RecoveryOfferState.telegram_id == telegram_id)
@@ -208,7 +209,7 @@ async def create_recovery(
     total_days: int,
     deficit: float | Decimal,
 ) -> RecoveryState:
-    now = datetime.now()
+    now = get_msk_now()
     b = float(_to_decimal(baseline))
     t = float(_to_decimal(target))
     d = float(_to_decimal(deficit))
@@ -244,8 +245,8 @@ async def stop_recovery(telegram_id: int) -> RecoveryState | None:
         if not rs:
             return None
         rs.status = "stopped"
-        rs.stopped_at = datetime.now()
-        rs.updated_at = datetime.now()
+        rs.stopped_at = get_msk_now()
+        rs.updated_at = get_msk_now()
         await session.commit()
         return rs
 
@@ -262,8 +263,8 @@ async def complete_recovery(telegram_id: int, reason: str) -> RecoveryState | No
             return None
         rs.status = "completed" if reason != "period_end" else "expired"
         rs.completion_reason = reason
-        rs.completed_at = datetime.now()
-        rs.updated_at = datetime.now()
+        rs.completed_at = get_msk_now()
+        rs.updated_at = get_msk_now()
         await session.commit()
         return rs
 
@@ -280,7 +281,7 @@ async def update_recovery_days(telegram_id: int, new_days: int) -> RecoveryState
             return None
         if rs.total_days != new_days:
             rs.total_days = new_days
-            rs.updated_at = datetime.now()
+            rs.updated_at = get_msk_now()
             await session.commit()
         return rs
 
@@ -295,6 +296,6 @@ async def expire_active_recoveries_for_budget(budget_id: int) -> None:
         for rs in result.scalars().all():
             rs.status = "expired"
             rs.completion_reason = "period_end"
-            rs.completed_at = datetime.now()
-            rs.updated_at = datetime.now()
+            rs.completed_at = get_msk_now()
+            rs.updated_at = get_msk_now()
         await session.commit()
