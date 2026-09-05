@@ -225,6 +225,14 @@ def get_msk_now() -> datetime:
     return datetime.now(MSK_TZ).replace(tzinfo=None)
 
 
+def get_user_now(telegram_id: int | None = None) -> datetime:
+    return datetime.now(MSK_TZ).replace(tzinfo=None)
+
+
+def get_user_now_aware(telegram_id: int | None = None) -> datetime:
+    return datetime.now(MSK_TZ)
+
+
 def parse_amount(text: str, *, allow_zero: bool = False) -> float:
     math_result = _eval_math(text)
     if math_result is not None:

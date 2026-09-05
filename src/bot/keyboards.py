@@ -230,6 +230,51 @@ def get_keep_date_keyboard(day: int) -> InlineKeyboardMarkup:
     )
 
 
+def get_recovery_offer_keyboard(options: list) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    level_map = {
+        "fast": phrases.BTN_RECOVERY_FAST,
+        "balanced": phrases.BTN_RECOVERY_BALANCED,
+        "soft": phrases.BTN_RECOVERY_SOFT,
+    }
+    for opt in options:
+        label = level_map.get(opt.level, opt.level)
+        rows.append(
+            [InlineKeyboardButton(text=label, callback_data=f"recovery:choose:{opt.level}")]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(text=phrases.BTN_RECOVERY_DISMISS, callback_data="recovery:dismiss"),
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def get_recovery_single_keyboard(level: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=phrases.BTN_RECOVERY_TRY, callback_data=f"recovery:choose:{level}")],
+            [InlineKeyboardButton(text=phrases.BTN_RECOVERY_DISMISS, callback_data="recovery:dismiss")],
+        ]
+    )
+
+
+def get_recovery_active_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=phrases.BTN_RECOVERY_STOP, callback_data="recovery:stop")],
+        ]
+    )
+
+
+def get_recovery_plan_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=phrases.BTN_RECOVERY_PLAN, callback_data="recovery:show_options")],
+        ]
+    )
+
+
 def get_monthly_nav_keyboard(
     has_prev: bool, has_next: bool, prev_label: str = "", next_label: str = ""
 ) -> InlineKeyboardMarkup:

@@ -19,6 +19,8 @@ ALLOWED_TABLES = {
     "user_settings",
     "users",
     "daily_reports_log",
+    "recovery_states",
+    "recovery_offer_state",
 }
 ALLOWED_COLUMNS = {
     "user_id",
@@ -30,6 +32,24 @@ ALLOWED_COLUMNS = {
     "is_archived",
     "report_type",
     "sent_date",
+    "base_daily_limit",
+    "budget_id",
+    "status",
+    "completion_reason",
+    "baseline",
+    "target",
+    "total_days",
+    "initial_deficit",
+    "initial_target",
+    "initial_total_days",
+    "started_at",
+    "stopped_at",
+    "completed_at",
+    "created_at",
+    "updated_at",
+    "dismissed",
+    "last_offer_at",
+    "last_offer_deficit",
 }
 
 
@@ -180,6 +200,94 @@ async def migrate_schema():
                     text("ALTER TABLE categories ADD COLUMN is_archived INTEGER DEFAULT 0")
                 )
             logger.info("Migrated categories: added is_archived")
+
+        if not await _has_column(conn, "budgets", "base_daily_limit"):
+            if is_postgres:
+                await conn.execute(
+                    text("ALTER TABLE budgets ADD COLUMN base_daily_limit FLOAT DEFAULT NULL")
+                )
+            else:
+                await conn.execute(
+                    text("ALTER TABLE budgets ADD COLUMN base_daily_limit REAL DEFAULT NULL")
+                )
+            logger.info("Migrated budgets: added base_daily_limit")
+
+        # Recovery tables (create if not exists via raw SQL for cross-DB compatibility)
+        if is_postgres:
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS recovery_states (
+                        id SERIAL PRIMARY KEY,
+                        telegram_id BIGINT NOT NULL REFERENCES users(telegram_id),
+                        budget_id INTEGER NOT NULL REFERENCES budgets(id),
+                        status VARCHAR(20) NOT NULL,
+                        completion_reason VARCHAR(20),
+                        baseline FLOAT NOT NULL,
+                        target FLOAT NOT NULL,
+                        total_days INTEGER NOT NULL,
+                        initial_deficit FLOAT NOT NULL,
+                        initial_target FLOAT NOT NULL,
+                        initial_total_days INTEGER NOT NULL,
+                        started_at TIMESTAMP NOT NULL,
+                        stopped_at TIMESTAMP,
+                        completed_at TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL
+                    )
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS recovery_offer_state (
+                        telegram_id BIGINT PRIMARY KEY REFERENCES users(telegram_id),
+                        dismissed BOOLEAN NOT NULL DEFAULT FALSE,
+                        last_offer_at TIMESTAMP,
+                        last_offer_deficit FLOAT
+                    )
+                    """
+                )
+            )
+        else:
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS recovery_states (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        telegram_id BIGINT NOT NULL REFERENCES users(telegram_id),
+                        budget_id INTEGER NOT NULL REFERENCES budgets(id),
+                        status VARCHAR(20) NOT NULL,
+                        completion_reason VARCHAR(20),
+                        baseline FLOAT NOT NULL,
+                        target FLOAT NOT NULL,
+                        total_days INTEGER NOT NULL,
+                        initial_deficit FLOAT NOT NULL,
+                        initial_target FLOAT NOT NULL,
+                        initial_total_days INTEGER NOT NULL,
+                        started_at TIMESTAMP NOT NULL,
+                        stopped_at TIMESTAMP,
+                        completed_at TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL,
+                        updated_at TIMESTAMP NOT NULL
+                    )
+                    """
+                )
+            )
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS recovery_offer_state (
+                        telegram_id BIGINT PRIMARY KEY REFERENCES users(telegram_id),
+                        dismissed INTEGER NOT NULL DEFAULT 0,
+                        last_offer_at TIMESTAMP,
+                        last_offer_deficit FLOAT
+                    )
+                    """
+                )
+            )
+        logger.info("Migrated recovery: ensured recovery_states and recovery_offer_state")
 
 
 async def close_db():

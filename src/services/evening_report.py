@@ -14,7 +14,7 @@ from ..core.config import settings
 from ..db.database import async_session_maker
 from ..db.models.models import User, UserSettings
 from ..utils import phrases
-from ..utils.helpers import get_msk_now
+from ..utils.helpers import get_msk_now, get_user_now
 from .expense_service import get_today_expenses_grouped, get_today_expenses_sum
 
 logger = logging.getLogger(__name__)
@@ -190,6 +190,133 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                 except Exception:
                     pass
 
+            recovery_extra = ""
+            if settings.RECOVERY_ENABLED:
+                try:
+                    from sqlalchemy import func, select as sa_select
+
+                    from ..db.database import async_session_maker as _asm
+                    from ..db.models.models import Budget as _Budget, Expense as _Expense
+                    from ..services.budget_service import get_active_budget as _get_budget
+                    from ..services.recovery_service import (
+                        get_active_recovery,
+                        is_small_overspend,
+                        recalculate_days,
+                        update_recovery_days,
+                    )
+
+                    budget = await _get_budget(tg_id)
+                    if budget:
+                        active = await get_active_recovery(tg_id)
+                        if active:
+                            # spent today
+                            async with _asm() as session:
+                                today_start = get_user_now().replace(
+                                    hour=0, minute=0, second=0, microsecond=0
+                                )
+                                result = await session.execute(
+                                    sa_select(func.sum(_Expense.amount)).where(
+                                        _Expense.telegram_id == tg_id,
+                                        _Expense.is_deleted == False,
+                                        _Expense.date >= today_start,
+                                    )
+                                )
+                                spent_today = result.scalar() or 0
+                                from ..services.monthly_report import get_period_dates
+
+                                period_start, period_end = get_period_dates(budget)
+                                next_day = period_end + __import__("datetime").timedelta(days=1)
+                                result = await session.execute(
+                                    sa_select(func.sum(_Expense.amount)).where(
+                                        _Expense.telegram_id == tg_id,
+                                        _Expense.is_deleted == False,
+                                        _Expense.date >= period_start,
+                                        _Expense.date < next_day,
+                                    )
+                                )
+                                spent_period = result.scalar() or 0
+                            if budget.free_money > 0:
+                                money_for_life = budget.free_money
+                            else:
+                                money_for_life = (
+                                    budget.total_income
+                                    - budget.mandatory_payments
+                                    - budget.black_day_fund
+                                    - spent_period
+                                )
+                            days_left = budget.days_remaining
+                            old_days = active.total_days
+                            deficit = max(active.baseline * days_left - money_for_life, 0)
+                            new_days = recalculate_days(deficit, active.baseline, active.target)
+                            if new_days and new_days != old_days:
+                                await update_recovery_days(tg_id, new_days)
+                                cur_day = (get_user_now().date() - active.started_at.date()).days + 1
+                                cur_day = max(cur_day, 1)
+                                recovery_extra = (
+                                    f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=old_days)}\n"
+                                    + phrases.RECOVERY_EVENING_SAVED.format(
+                                        spent=int(spent_today),
+                                        target=int(active.target),
+                                        saved=int(max(active.target - spent_today, 0)),
+                                    )
+                                    + f"\n{phrases.RECOVERY_EVENING_SHORTENED.format(old=old_days, new=new_days, word='дней' if new_days % 10 != 1 else 'день')}"
+                                )
+                            else:
+                                cur_day = (get_user_now().date() - active.started_at.date()).days + 1
+                                cur_day = max(cur_day, 1)
+                                total = new_days or old_days
+                                if spent_today <= active.target:
+                                    if spent_today == active.target:
+                                        recovery_extra = (
+                                            f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=total)}\n"
+                                            + phrases.RECOVERY_EVENING_EXACT.format(
+                                                spent=int(spent_today), target=int(active.target)
+                                            )
+                                            + f"\n{phrases.RECOVERY_EVENING_GOOD}"
+                                        )
+                                    else:
+                                        saved = int(active.target - spent_today)
+                                        recovery_extra = (
+                                            f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=total)}\n"
+                                            + phrases.RECOVERY_EVENING_SAVED.format(
+                                                spent=int(spent_today),
+                                                target=int(active.target),
+                                                saved=saved,
+                                            )
+                                        )
+                                        # forecast only if positive
+                                        if saved > 0:
+                                            sim_deficit = max(
+                                                active.baseline * days_left - (money_for_life + saved), 0
+                                            )
+                                            sim_days = recalculate_days(
+                                                sim_deficit, active.baseline, active.target
+                                            )
+                                            if sim_days and sim_days < total:
+                                                diff = total - sim_days
+                                                recovery_extra += "\n" + phrases.RECOVERY_EVENING_FORECAST.format(
+                                                    n=diff, word="дней" if diff % 10 != 1 else "день"
+                                                )
+                                else:
+                                    if is_small_overspend(spent_today, active.target):
+                                        recovery_extra = (
+                                            f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=total)}\n"
+                                            + phrases.RECOVERY_EVENING_EXACT.format(
+                                                spent=int(spent_today), target=int(active.target)
+                                            )
+                                            + f"\n{phrases.RECOVERY_EVENING_SLIGHT}"
+                                        )
+                                    else:
+                                        recovery_extra = (
+                                            f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=total)}\n"
+                                            + phrases.RECOVERY_EVENING_EXACT.format(
+                                                spent=int(spent_today), target=int(active.target)
+                                            )
+                                            + f"\n{phrases.RECOVERY_EVENING_HEAVY}"
+                                        )
+                except Exception as e:
+                    logger.error(f"Recovery evening failed {tg_id}: {e}", exc_info=True)
+
             kb = None
             if not settings.EXPENSE_SIMPLE_CHECK:
                 kb = InlineKeyboardMarkup(
@@ -203,7 +330,7 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                 )
             await bot.send_message(
                 tg_id,
-                random.choice(phrases.AUTO_CLOSE).format(total=f"{int(total):,}"),
+                random.choice(phrases.AUTO_CLOSE).format(total=f"{int(total):,}") + recovery_extra,
                 reply_markup=kb,
             )
 

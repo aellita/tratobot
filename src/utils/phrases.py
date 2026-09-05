@@ -656,6 +656,61 @@ DUP_DELETED = (
     "Ок, дубль отменён. Первая трата «{amount} ₽ на {desc}» на месте, баланс в безопасности."
 )
 
+# ── Recovery ─────────────────────────────────────────────
+BTN_RECOVERY_FAST = "⚡ Быстрее"
+BTN_RECOVERY_BALANCED = "⚖️ Баланс"
+BTN_RECOVERY_SOFT = "🌿 Мягче"
+BTN_RECOVERY_TRY = "👍 Попробую"
+BTN_RECOVERY_DISMISS = "Не сейчас"
+BTN_RECOVERY_PLAN = "📋 План восстановления"
+BTN_RECOVERY_STOP = "⏹ Остановить восстановление"
+BTN_RECOVERY_CHOOSE = "Выбрать план"
+
+RECOVERY_OFFER_TITLE = "🧘 Восстановление"
+RECOVERY_OFFER_SINGLE = "Сейчас подходит только один план восстановления."
+RECOVERY_OFFER_MULTI = "🧘 Можно восстановить обычный лимит."
+RECOVERY_BASELINE = "Обычный лимит: {amount} ₽/день"
+RECOVERY_OPTION_LINE = "{icon} {label} — {target} ₽ · {days} {days_word}"
+RECOVERY_TAIL_LINE = "→ потом {baseline} ₽/день ещё {tail} {tail_word}"
+RECOVERY_DISMISSED = "Хорошо. Пока просто продолжаем по текущему лимиту."
+RECOVERY_CHOSEN = "Договорились. Начинаем."
+RECOVERY_STOPPED = "Восстановление остановлено."
+RECOVERY_DAILY_ACTIVE = (
+    "🧘 Восстановление · день {cur} из {total}\n"
+    "{target} ₽ · {days} {days_word}\n"
+    "После этого — {baseline} ₽/день ещё {tail} {tail_word}."
+)
+RECOVERY_DAILY_OFFER = "💡 Можно вернуть обычный лимит\nСейчас: {dl_pred} ₽/день\n"
+RECOVERY_EVENING_SAVED = "Потрачено {spent} ₽ из {target} ₽ · сэкономлено {saved} ₽"
+RECOVERY_EVENING_EXACT = "Потрачено {spent} ₽ из {target} ₽."
+RECOVERY_EVENING_GOOD = "Так держать 👍"
+RECOVERY_EVENING_SHORTENED = "🎉 Восстановление: {old} → {new} {word}"
+RECOVERY_EVENING_FORECAST = (
+    "Если завтра получится так же, восстановление сократится ещё на {n} {word}."
+)
+RECOVERY_EVENING_SLIGHT = "Сегодня немного вышел за план. Завтра разберёмся."
+RECOVERY_EVENING_HEAVY = "Сегодня вышел за план. Завтра разберёмся. Спокойной ночи 🌙"
+RECOVERY_SUCCESS = (
+    "🎉 Обычный лимит вернулся\nТеперь можно снова ориентироваться на {baseline} ₽/день."
+)
+RECOVERY_BUDGET_DONE = (
+    "🎉 Доход обновлён — обычный лимит снова доступен.\nВосстановление больше не нужно."
+)
+RECOVERY_BUDGET_SHORTENED = (
+    "🎉 После изменения бюджета восстановление стало короче: {old} → {new} {word}."
+)
+RECOVERY_PERIOD_END = (
+    "Период заканчивается, поэтому восстановление здесь уже не запускаем.\n"
+    "Дальше ориентируемся на текущий дневной лимит."
+)
+RECOVERY_NEED_REPLAN = "План нужно немного скорректировать."
+RECOVERY_BUDGET_REPLAN = "Бюджет изменился, поэтому план восстановления нужно обновить."
+RECOVERY_ALREADY_ACTIVE = "Уже есть активное восстановление"
+RECOVERY_OPTION_STALE = "Вариант больше не доступен, показал актуальные"
+RECOVERY_EVENING_HEADER = "🧘 Восстановление · день {cur} из {total}"
+ERR_ROLLOVER_NOT_FOUND = "⚠️ Исходный бюджет не найден."
+ROLLOVER_ASK_INCOME = "💰 В прошлом периоде твой доход был {amount} ₽. Сколько залетает сейчас?"
+
 # ── Fallback values ────────────────────────────────────────
 FALLBACK_DESC = "трата"
 DEFAULT_WISHLIST_NAME = "Хотелка"

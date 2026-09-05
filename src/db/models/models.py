@@ -15,6 +15,14 @@ def _msk_now() -> datetime:
     return datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
 
 
+def _get_user_now(telegram_id: int | None = None) -> datetime:
+    return datetime.now(ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
+
+
+def _get_user_now_aware(telegram_id: int | None = None) -> datetime:
+    return datetime.now(ZoneInfo("Europe/Moscow"))
+
+
 class CategoryType(StrEnum):
     FOOD = "food"
     TRANSPORT = "transport"
@@ -47,6 +55,7 @@ class Budget(Base):
     wishlist_target: Mapped[float] = mapped_column(Float, default=0)
     period_start_day: Mapped[int] = mapped_column(Integer, default=1)
     free_money: Mapped[float] = mapped_column(Float, default=0)
+    base_daily_limit: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now, onupdate=_msk_now)
@@ -154,6 +163,36 @@ class UserSettings(Base):
     evening_report_time: Mapped[str] = mapped_column(String(5), default="22:00")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     rounding_mode: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class RecoveryState(Base):
+    __tablename__ = "recovery_states"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"))
+    budget_id: Mapped[int] = mapped_column(ForeignKey("budgets.id"))
+    status: Mapped[str] = mapped_column(String(20))
+    completion_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    baseline: Mapped[float] = mapped_column(Float)
+    target: Mapped[float] = mapped_column(Float)
+    total_days: Mapped[int] = mapped_column(Integer)
+    initial_deficit: Mapped[float] = mapped_column(Float)
+    initial_target: Mapped[float] = mapped_column(Float)
+    initial_total_days: Mapped[int] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now)
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now, onupdate=_msk_now)
+
+
+class RecoveryOfferState(Base):
+    __tablename__ = "recovery_offer_state"
+
+    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"), primary_key=True)
+    dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_offer_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_offer_deficit: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class DailyReportsLog(Base):

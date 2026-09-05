@@ -17,6 +17,12 @@ from .expense_service import get_current_period_expenses_sum, get_yesterday_expe
 logger = logging.getLogger(__name__)
 
 
+def _build_recovery_morning_extra(tg_id: int) -> list[list[InlineKeyboardButton]] | None:
+    if not settings.RECOVERY_ENABLED:
+        return None
+    return None
+
+
 def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup | None:
     has_reply_kb = settings.EXPENSE_SIMPLE_CHECK
     base: list[list[InlineKeyboardButton]] = []
@@ -143,6 +149,13 @@ async def send_morning_reports(bot: Bot):
                                 offer,
                                 reply_markup=get_rollover_keyboard(b.id),
                             )
+                            if settings.RECOVERY_ENABLED:
+                                try:
+                                    from .recovery_service import expire_active_recoveries_for_budget
+
+                                    await expire_active_recoveries_for_budget(b.id)
+                                except Exception:
+                                    pass
 
                             async with async_session_maker() as log_session:
                                 await _log_morning_report(tg_id, log_session)
@@ -342,6 +355,106 @@ async def send_morning_reports(bot: Bot):
                 )
 
                 kb = _build_morning_keyboard(btn_type)
+                if settings.RECOVERY_ENABLED:
+                    try:
+                        from ..utils.helpers import get_user_now
+                        from .budget_service import resolve_frozen_baseline
+                        from .recovery_service import (
+                            calculate_recovery_options,
+                            check_success,
+                            complete_recovery,
+                            get_active_recovery,
+                            get_offer_state,
+                            should_repeat_offer,
+                        )
+
+                        active = await get_active_recovery(tg_id)
+                        if active:
+                            if check_success(dl_pred, active.baseline):
+                                await complete_recovery(tg_id, "success")
+                                full_text += "\n\n" + phrases.RECOVERY_SUCCESS.format(
+                                    baseline=int(active.baseline)
+                                )
+                            else:
+                                cur_day = (get_user_now().date() - active.started_at.date()).days + 1
+                                cur_day = max(cur_day, 1)
+                                tail = max(days_left - active.total_days, 0)
+                                full_text += "\n\n" + phrases.RECOVERY_DAILY_ACTIVE.format(
+                                    cur=cur_day,
+                                    total=active.total_days,
+                                    target=int(active.target),
+                                    days=active.total_days,
+                                    days_word="дней" if active.total_days % 10 != 1 else "день",
+                                    baseline=int(active.baseline),
+                                    tail=tail,
+                                    tail_word="дней" if tail % 10 != 1 else "день",
+                                )
+                                if kb:
+                                    rows = list(kb.inline_keyboard)
+                                    rows.append(
+                                        [
+                                            InlineKeyboardButton(
+                                                text=phrases.BTN_RECOVERY_STOP,
+                                                callback_data="recovery:stop",
+                                            )
+                                        ]
+                                    )
+                                    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+                                else:
+                                    kb = InlineKeyboardMarkup(
+                                        inline_keyboard=[
+                                            [
+                                                InlineKeyboardButton(
+                                                    text=phrases.BTN_RECOVERY_STOP,
+                                                    callback_data="recovery:stop",
+                                                )
+                                            ]
+                                        ]
+                                    )
+                        else:
+                            b_val = await resolve_frozen_baseline(budget)
+                            opts = calculate_recovery_options(b_val, money_for_life, days_left)
+                            if opts:
+                                offer_state = await get_offer_state(tg_id)
+                                should_show = True
+                                if offer_state and offer_state.dismissed and offer_state.last_offer_at:
+                                    days_since = (
+                                        get_user_now().date() - offer_state.last_offer_at.date()
+                                    ).days
+                                    cur_deficit = max(b_val * days_left - money_for_life, 0)
+                                    if not should_repeat_offer(
+                                        offer_state.last_offer_deficit, cur_deficit, b_val, days_since
+                                    ):
+                                        should_show = False
+                                if should_show:
+                                    full_text += "\n\n" + phrases.RECOVERY_DAILY_OFFER.format(
+                                        dl_pred=int(dl_pred)
+                                    )
+                                    if kb:
+                                        rows = list(kb.inline_keyboard)
+                                        rows.append(
+                                            [
+                                                InlineKeyboardButton(
+                                                    text=phrases.BTN_RECOVERY_PLAN,
+                                                    callback_data="recovery:show_options",
+                                                )
+                                            ]
+                                        )
+                                        kb = InlineKeyboardMarkup(inline_keyboard=rows)
+                                    else:
+                                        kb = InlineKeyboardMarkup(
+                                            inline_keyboard=[
+                                                [
+                                                    InlineKeyboardButton(
+                                                        text=phrases.BTN_RECOVERY_PLAN,
+                                                        callback_data="recovery:show_options",
+                                                    )
+                                                ]
+                                            ]
+                                        )
+                    except Exception as e:
+                        logger.error(f"Recovery morning failed {tg_id}: {e}", exc_info=True)
+
                 await bot.send_message(tg_id, full_text, reply_markup=kb)
 
                 async with async_session_maker() as session:

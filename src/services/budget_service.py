@@ -33,6 +33,39 @@ async def get_active_budget(telegram_id: int) -> Budget | None:
     return None
 
 
+async def _compute_base_limit(
+    income: float, mandatory: float, black_day: float, period_start_day: int
+) -> float:
+    import calendar
+
+    from ..utils.helpers import get_msk_now
+
+    today = get_msk_now()
+    start = min(period_start_day or 1, calendar.monthrange(today.year, today.month)[1])
+    if start == 1:
+        total = calendar.monthrange(today.year, today.month)[1]
+    else:
+        total = 30
+    available = max(income - mandatory - black_day, 0)
+    return max(available / max(total, 1), 0)
+
+
+async def resolve_frozen_baseline(budget: Budget) -> float:
+    if budget.base_daily_limit is not None:
+        return budget.base_daily_limit
+    b = float(budget.daily_limit)
+    async with async_session_maker() as session:
+        result = await session.execute(select(Budget).where(Budget.id == budget.id))
+        fresh = result.scalar_one_or_none()
+        if fresh and fresh.base_daily_limit is None:
+            fresh.base_daily_limit = b
+            await session.commit()
+            return b
+        if fresh and fresh.base_daily_limit is not None:
+            return fresh.base_daily_limit
+    return b
+
+
 async def save_budget(
     telegram_id: int,
     month: str,
@@ -44,6 +77,7 @@ async def save_budget(
     period_start_day: int = 1,
     free_money: float = 0,
 ):
+    base_limit = await _compute_base_limit(income, mandatory, black_day, period_start_day)
     async with async_session_maker() as session:
         result = await session.execute(
             select(Budget).where(Budget.telegram_id == telegram_id, Budget.month == month)
@@ -58,6 +92,7 @@ async def save_budget(
             budget.wishlist_target = wishlist_price
             budget.period_start_day = period_start_day
             budget.free_money = free_money
+            budget.base_daily_limit = base_limit
         else:
             budget = Budget(
                 telegram_id=telegram_id,
@@ -69,6 +104,7 @@ async def save_budget(
                 wishlist_target=wishlist_price,
                 period_start_day=period_start_day,
                 free_money=free_money,
+                base_daily_limit=base_limit,
             )
             session.add(budget)
 
