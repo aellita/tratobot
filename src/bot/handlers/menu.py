@@ -436,12 +436,7 @@ async def rollover_keep_budget(
         carried_parts.append(f"• {safe(old_wishlist_name)}: {int(old_wishlist_target):,}₽")
 
     if carried_parts:
-        text = (
-            "✅ План продлён.\n\n"
-            "📋 Перенесено из прошлого периода:\n"
-            + "\n".join(carried_parts)
-            + f"\n\n💰 Дневной лимит: {dl}₽. Поехали. 🚀"
-        )
+        text = phrases.ROLLOVER_WITH_DETAILS.format(parts="\n".join(carried_parts), limit=dl)
     else:
         text = phrases.ROLLOVER_CONFIRMED.format(daily_limit=dl)
 
@@ -544,31 +539,31 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
 
     if end_of_period and money_for_life <= 0:
         zone_emoji = "🔴"
-        zone_label = "Атас"
+        zone_label = phrases.STATUS_ZONE_ATAS
     elif end_of_period:
         zone_emoji = "🟢"
-        zone_label = "Финиш"
+        zone_label = phrases.STATUS_ZONE_FINISH
     elif pct_pred > 80:
         zone_emoji = "🟢"
-        zone_label = "В лимите"
+        zone_label = phrases.STATUS_ZONE_IN_LIMIT
     elif pct_pred >= 51:
         zone_emoji = "🔵"
-        zone_label = "Можно больше"
+        zone_label = phrases.STATUS_ZONE_CAN_MORE
     elif pct_pred >= 26:
         zone_emoji = "🟡"
-        zone_label = "На грани"
+        zone_label = phrases.STATUS_ZONE_ON_EDGE
     else:
         zone_emoji = "🔴"
-        zone_label = "Критично"
+        zone_label = phrases.STATUS_ZONE_CRITICAL
 
     wishlist_amount = await get_goal_current_amount(tg_id)
 
     if remaining_today > 0:
-        today_line = f"Свободно {int(remaining_today):,} ₽"
+        today_line = phrases.STATUS_REMAINING_FREE.format(amount=f"{int(remaining_today):,}")
     else:
-        today_line = "Свободно 0 ₽ ⛔"
+        today_line = phrases.STATUS_REMAINING_ZERO
 
-    spent_line = f"Потрачено {int(spent_today):,} ₽"
+    spent_line = phrases.STATUS_SPENT.format(amount=f"{int(spent_today):,}")
     if spent_today > dl_pred:
         spent_line += " ⚠️"
 
@@ -587,14 +582,14 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
 
     reserves_block = ""
     if reserve_parts:
-        reserves_block = "\n\n<b>Резервы под охраной</b>\n" + " · ".join(reserve_parts)
+        reserves_block = f"\n\n<b>{phrases.STATUS_RESERVES_HEADER}</b>\n" + " · ".join(reserve_parts)
 
     text = (
-        f"<b>БАЛАНС</b> · {zone_emoji} {zone_label}\n\n"
-        f"<b>Сегодня</b>\n"
+        f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_emoji} {zone_label}\n\n"
+        f"<b>{phrases.STATUS_TODAY_TITLE}</b>\n"
         f"{today_line} · {spent_line}{expenses_block}\n\n"
-        f"<b>Период (до {period_end_str} · {days_left} дн.)</b>\n"
-        f"Остаток {int(remaining_period):,} ₽ · Лимит {int(dl_pred):,} ₽/день"
+        f"<b>{phrases.STATUS_PERIOD_TITLE.format(end=period_end_str, days=days_left)}</b>\n"
+        f"{phrases.STATUS_REMAINING_PERIOD.format(amount=f'{int(remaining_period):,}', limit=f'{int(dl_pred):,}')}"
         f"{reserves_block}"
     )
 
@@ -651,36 +646,36 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         if money_for_life <= 0:
             footer = random.choice(
                 [
-                    "Финишная прямая! Кошелёк пуст. Держимся на морально-волевых, без новых долгов!",
-                    "До конца периода пара дней, а мы на нуле. Терпим, финиш уже виден!",
-                    "Последние метры, денег нет. Но мы доползём без кредитов!",
+                    phrases.STATUS_FOOTER_END_EMPTY_1,
+                    phrases.STATUS_FOOTER_END_EMPTY_2,
+                    phrases.STATUS_FOOTER_END_EMPTY_3,
                 ]
             )
             btns = "REGULAR"
         else:
             footer = random.choice(
                 [
-                    "Осталось пару дней, а у нас ещё есть кэш! Досрочная победа!",
-                    "Финишная прямая, в кармане шуршат купюры! Горжусь дисциплиной!",
-                    "Период почти закрыт, бюджет не пробит! Абсолютная победа!",
+                    phrases.STATUS_FOOTER_END_OK_1,
+                    phrases.STATUS_FOOTER_END_OK_2,
+                    phrases.STATUS_FOOTER_END_OK_3,
                 ]
             )
             btns = "REGULAR"
     elif pct_pred > 80:
         footer = random.choice(
             [
-                f"Идём идеально по графику! Прогнозный лимит: {int(dl_pred):,} ₽/день. Жаба спокойна!",
-                "Всё пучком. Лимит комфортный. Продолжай в том же духе!",
-                "Финансовая карма в порядке. Можно позволить себе чуточку больше!",
+                phrases.STATUS_FOOTER_GREEN_1.format(limit=f"{int(dl_pred):,}"),
+                phrases.STATUS_FOOTER_GREEN_2,
+                phrases.STATUS_FOOTER_GREEN_3,
             ]
         )
         btns = "REGULAR"
     elif pct_pred >= 51:
         footer = random.choice(
             [
-                f"Заметил, мы ускорились. Лимит сожмётся до {int(dl_pred):,} ₽. Притормози?",
-                f"Съезжаем с курса. Прогноз {int(dl_pred):,} ₽/день. Включи осознанность.",
-                f"График пополз вниз. Прогноз {int(dl_pred):,} ₽/день — удержим планку?",
+                phrases.STATUS_FOOTER_YELLOW_LIGHT_1.format(limit=f"{int(dl_pred):,}"),
+                phrases.STATUS_FOOTER_YELLOW_LIGHT_2.format(limit=f"{int(dl_pred):,}"),
+                phrases.STATUS_FOOTER_YELLOW_LIGHT_3.format(limit=f"{int(dl_pred):,}"),
             ]
         )
         btns = "REGULAR"
