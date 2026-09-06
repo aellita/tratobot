@@ -681,36 +681,40 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         btns = "REGULAR"
     elif pct_pred >= 26:
         if pct_sim > 80:
-            footer = f"Кубышка ({int(savings):,}₽) вернёт в зелень — {int(dl_simulated):,}₽/день"
+            footer = phrases.STATUS_FOOTER_YELLOW_CUBBY_GREEN.format(
+                saving=f"{int(savings):,}", limit=f"{int(dl_simulated):,}"
+            )
             btns = "FROM_YELLOW_TO_GREEN"
         elif pct_sim >= 51:
-            footer = f"Кубышка подстрахует — {int(dl_simulated):,}₽/день"
+            footer = phrases.STATUS_FOOTER_YELLOW_CUBBY_BLUE.format(limit=f"{int(dl_simulated):,}")
             btns = "FROM_YELLOW_TO_BLUE"
         else:
             footer = random.choice(
                 [
-                    f"Лимит сожмётся до {int(dl_pred):,} ₽/день. Режим супер-экономии.",
-                    f"Прогноз {int(dl_pred):,} ₽/день. Постарайся сегодня ничего не покупать!",
-                    f"До конца периода — гречка. Лимит {int(dl_pred):,} ₽/день. Держимся!",
+                    phrases.STATUS_FOOTER_YELLOW_NONE_1.format(limit=f"{int(dl_pred):,}"),
+                    phrases.STATUS_FOOTER_YELLOW_NONE_2.format(limit=f"{int(dl_pred):,}"),
+                    phrases.STATUS_FOOTER_YELLOW_NONE_3.format(limit=f"{int(dl_pred):,}"),
                 ]
             )
             btns = "REGULAR"
     else:
         if pct_sim > 80:
-            footer = f"Кубышка ({int(savings):,}₽) вернёт в зелень — {int(dl_simulated):,}₽/день"
+            footer = phrases.STATUS_FOOTER_RED_CUBBY_GREEN.format(
+                saving=f"{int(savings):,}", limit=f"{int(dl_simulated):,}"
+            )
             btns = "FROM_RED_TO_GREEN"
         elif pct_sim >= 51:
-            footer = f"Кубышка смягчит до {int(dl_simulated):,}₽/день"
+            footer = phrases.STATUS_FOOTER_RED_CUBBY_BLUE.format(limit=f"{int(dl_simulated):,}")
             btns = "FROM_RED_TO_BLUE"
         elif pct_sim >= 26:
-            footer = f"Кубышка поднимет до {int(dl_simulated):,}₽/день"
+            footer = phrases.STATUS_FOOTER_RED_CUBBY_YELLOW.format(limit=f"{int(dl_simulated):,}")
             btns = "FROM_RED_TO_YELLOW"
         else:
             footer = random.choice(
                 [
-                    "Пробили дно! Деньги кончились. Пора пересобрать бюджет.",
-                    "Дальше ехать некуда. Пора пересчитать лимит?",
-                    "Математика не бьётся с картой. Пора обнулить месяц!",
+                    phrases.STATUS_FOOTER_RED_DEAD_1,
+                    phrases.STATUS_FOOTER_RED_DEAD_2,
+                    phrases.STATUS_FOOTER_RED_DEAD_3,
                 ]
             )
             btns = "REGULAR"
@@ -1299,7 +1303,7 @@ async def process_income(message: Message, state: FSMContext):
     await state.update_data(income=amount)
     await state.set_state(BudgetSetup.waiting_for_period_start)
     await message.answer(
-        text=f"✅ Принял!\n\n{phrases.PERIOD_START_CHOICE}",
+        text=f"{phrases.ONBOARDING_INCOME_ACCEPTED}\n\n{phrases.PERIOD_START_CHOICE}",
         reply_markup=get_period_start_keyboard(),
     )
 
@@ -1470,7 +1474,7 @@ async def _advance_new_period(source: CallbackQuery | Message, state: FSMContext
     if current == NewPeriodSetup.waiting_for_income.state:
         data = await state.get_data()
         old_date = data.get("old_date", 1)
-        text = f"🗓️ Обычно мы стартуем {old_date}-го числа. Меняем дату начала периода?"
+        text = phrases.ROLLOVER_KEEP_DATE_PROMPT.format(date=old_date)
         if isinstance(source, CallbackQuery):
             await source.message.answer(text=text, reply_markup=get_keep_date_keyboard(old_date))
         else:
@@ -2146,12 +2150,16 @@ async def _render_settings(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]
         return phrases.NO_BUDGET_SETTINGS, await get_main_menu_keyboard(telegram_id)
 
     period_day = budget.period_start_day or 1
-    period_info = f"📅 Период: с {period_day}-го" if period_day != 1 else "📅 Период: весь месяц"
+    period_info = (
+        phrases.SETTINGS_PERIOD_FROM.format(day=period_day)
+        if period_day != 1
+        else phrases.SETTINGS_PERIOD_WHOLE
+    )
     if budget.free_money > 0:
-        money_line = f"💰 Свободно: {budget.free_money:,.0f}₽"
+        money_line = phrases.SETTINGS_MONEY_FREE.format(amount=f"{budget.free_money:,.0f}")
     else:
-        money_line = f"💰 Доход: {budget.total_income:,.0f}₽"
-    text = f"⚙️ Что меняем?\n\n📊 Бюджет\n<blockquote>{money_line}\n{period_info}</blockquote>"
+        money_line = phrases.SETTINGS_MONEY_INCOME.format(amount=f"{budget.total_income:,.0f}")
+    text = phrases.SETTINGS_BUDGET_TITLE.format(money=money_line, period=period_info)
     return text, get_settings_keyboard()
 
 
@@ -2161,11 +2169,11 @@ async def _render_advanced_planning(telegram_id: int) -> tuple[str, InlineKeyboa
         return phrases.NO_BUDGET_SETTINGS, await get_main_menu_keyboard(telegram_id)
 
     wishlist_name = safe(budget.wishlist_name or phrases.DEFAULT_WISHLIST_NAME)
-    text = (
-        f"🧾 Дополнительное планирование\n\n"
-        f"📌 Обязательные: {budget.mandatory_payments:,.0f}₽\n"
-        f"🏦 Кубышка: {budget.black_day_fund:,.0f}₽\n"
-        f"🎯 {wishlist_name}: {budget.wishlist_target:,.0f}₽"
+    text = phrases.ADVANCED_PLANNING_TITLE.format(
+        mandatory=f"{budget.mandatory_payments:,.0f}",
+        saving=f"{budget.black_day_fund:,.0f}",
+        wishlist=wishlist_name,
+        target=f"{budget.wishlist_target:,.0f}",
     )
     return text, get_advanced_planning_keyboard()
 
