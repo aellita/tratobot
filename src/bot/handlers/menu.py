@@ -429,11 +429,19 @@ async def rollover_keep_budget(
 
     carried_parts = []
     if old_mandatory > 0:
-        carried_parts.append(f"• Обязательные: {int(old_mandatory):,}₽")
+        carried_parts.append(
+            phrases.ROLLOVER_CARRIED_MANDATORY.format(amount=f"{int(old_mandatory):,}")
+        )
     if old_black_day > 0:
-        carried_parts.append(f"• Кубышка: {int(old_black_day):,}₽")
+        carried_parts.append(
+            phrases.ROLLOVER_CARRIED_SAVINGS.format(amount=f"{int(old_black_day):,}")
+        )
     if old_wishlist_target > 0 and old_wishlist_name:
-        carried_parts.append(f"• {safe(old_wishlist_name)}: {int(old_wishlist_target):,}₽")
+        carried_parts.append(
+            phrases.ROLLOVER_CARRIED_WISHLIST.format(
+                name=safe(old_wishlist_name), amount=f"{int(old_wishlist_target):,}"
+            )
+        )
 
     if carried_parts:
         text = phrases.ROLLOVER_WITH_DETAILS.format(parts="\n".join(carried_parts), limit=dl)
@@ -533,7 +541,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     remaining_today = max(dl_pred - spent_today, 0)
     remaining_period = money_for_life
     period_end_day = budget.period_start_day or 1
-    period_end_str = f"{period_end_day}-го" if period_end_day > 1 else f"{period_end_day}-го"
+    period_end_str = f"{period_end_day}{phrases.PERIOD_DAY_SUFFIX}"
 
     end_of_period = days_left <= 3
 
@@ -574,15 +582,21 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
 
     reserve_parts: list[str] = []
     if budget.mandatory_payments:
-        reserve_parts.append(f"Обязательные {int(budget.mandatory_payments):,}")
+        reserve_parts.append(
+            phrases.STATUS_RESERVE_MANDATORY.format(amount=f"{int(budget.mandatory_payments):,}")
+        )
     if savings:
-        reserve_parts.append(f"Кубышка {int(savings):,}")
+        reserve_parts.append(phrases.STATUS_RESERVE_SAVINGS.format(amount=f"{int(savings):,}"))
     if wishlist_amount:
-        reserve_parts.append(f"Хотелка {int(wishlist_amount):,}")
+        reserve_parts.append(
+            phrases.STATUS_RESERVE_WISHLIST.format(amount=f"{int(wishlist_amount):,}")
+        )
 
     reserves_block = ""
     if reserve_parts:
-        reserves_block = f"\n\n<b>{phrases.STATUS_RESERVES_HEADER}</b>\n" + " · ".join(reserve_parts)
+        reserves_block = f"\n\n<b>{phrases.STATUS_RESERVES_HEADER}</b>\n" + " · ".join(
+            reserve_parts
+        )
 
     text = (
         f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_emoji} {zone_label}\n\n"
@@ -882,15 +896,6 @@ async def recovery_show_options(callback: CallbackQuery):
     b_val = await resolve_frozen_baseline(budget)
     days_left = budget.days_remaining
     async with async_session_maker() as session:
-        today_start = get_user_now().replace(hour=0, minute=0, second=0, microsecond=0)
-        result = await session.execute(
-            select(func.sum(Expense.amount)).where(
-                Expense.telegram_id == tg_id,
-                Expense.is_deleted == False,
-                Expense.date >= today_start,
-            )
-        )
-        spent_today = result.scalar() or 0
         from ...services.monthly_report import get_period_dates
 
         period_start, period_end = get_period_dates(budget)
@@ -1253,16 +1258,10 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         days_remaining = clamped_start - today.day
     daily_limit = max(available / max(days_remaining, 1), 0)
 
-    text = (
-        "🎉 <b>Готово!</b>\n\n"
-        "📊 Бюджет на {month}:\n"
-        "• Доход: {income}₽\n"
-        "💰 <b>Дневной лимит: {daily_limit}₽</b>\n\n"
-        "{hint}"
-    ).format(
+    text = phrases.STATUS_BUDGET_COMPLETE.format(
         month=month,
         income=f"{data.get('income', 0):,.0f}",
-        daily_limit=f"{daily_limit:,.0f}",
+        limit=f"{daily_limit:,.0f}",
         hint=phrases.ONBOARDING_HINT_SETTINGS,
     )
 
@@ -2394,7 +2393,9 @@ async def save_wishlist(message: Message, state: FSMContext):
         await message.answer(text=text, reply_markup=kb)
     else:
         await message.answer(
-            text=f"✅ Готово, {user_name}! Хотелка: {safe(name)} — {price:,.0f}₽",
+            text=phrases.WISHLIST_SAVED.format(
+                name=user_name, wishlist=safe(name), price=f"{price:,.0f}"
+            ),
             reply_markup=await get_main_menu_keyboard(message.from_user.id),
         )
         await state.clear()
@@ -2467,7 +2468,7 @@ async def handle_duplicate_confirm(callback: CallbackQuery):
         return
 
     spent = await get_today_expenses_sum(user_id)
-    balance = "неизвестно"
+    balance = phrases.BALANCE_UNKNOWN
     try:
         budget = await get_active_budget(user_id)
         if budget:

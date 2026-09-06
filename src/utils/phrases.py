@@ -755,9 +755,7 @@ RECOVERY_OPTION_STALE = "Вариант больше не доступен, по
 RECOVERY_EVENING_HEADER = "🧘 Восстановление · день {cur} из {total}"
 ERR_ROLLOVER_NOT_FOUND = "⚠️ Исходный бюджет не найден."
 ROLLOVER_ASK_INCOME = "💰 В прошлом периоде твой доход был {amount} ₽. Сколько залетает сейчас?"
-ROLLOVER_WITH_DETAILS = (
-    "✅ План продлён.\n\n📋 Перенесено из прошлого периода:\n{parts}\n\n💰 Дневной лимит: {limit}₽. Поехали. 🚀"
-)
+ROLLOVER_WITH_DETAILS = "✅ План продлён.\n\n📋 Перенесено из прошлого периода:\n{parts}\n\n💰 Дневной лимит: {limit}₽. Поехали. 🚀"
 
 STATUS_ZONE_ATAS = "Атас"
 STATUS_ZONE_FINISH = "Финиш"
@@ -773,7 +771,9 @@ STATUS_BALANCE_TITLE = "БАЛАНС"
 STATUS_TODAY_TITLE = "Сегодня"
 STATUS_PERIOD_TITLE = "Период (до {end} · {days} дн.)"
 STATUS_REMAINING_PERIOD = "Остаток {amount} ₽ · Лимит {limit} ₽/день"
-STATUS_FOOTER_END_EMPTY_1 = "Финишная прямая! Кошелёк пуст. Держимся на морально-волевых, без новых долгов!"
+STATUS_FOOTER_END_EMPTY_1 = (
+    "Финишная прямая! Кошелёк пуст. Держимся на морально-волевых, без новых долгов!"
+)
 STATUS_FOOTER_END_EMPTY_2 = "До конца периода пара дней, а мы на нуле. Терпим, финиш уже виден!"
 STATUS_FOOTER_END_EMPTY_3 = "Последние метры, денег нет. Но мы доползём без кредитов!"
 STATUS_FOOTER_END_OK_1 = "Осталось пару дней, а у нас ещё есть кэш! Досрочная победа!"
@@ -804,6 +804,16 @@ SETTINGS_BUDGET_TITLE = "⚙️ Что меняем?\n\n📊 Бюджет\n<bloc
 ADVANCED_PLANNING_TITLE = "🧾 Дополнительное планирование\n\n📌 Обязательные: {mandatory}₽\n🏦 Кубышка: {saving}₽\n🎯 {wishlist}: {target}₽"
 ONBOARDING_INCOME_ACCEPTED = "✅ Принял!"
 ROLLOVER_KEEP_DATE_PROMPT = "🗓️ Обычно мы стартуем {date}-го числа. Меняем дату начала периода?"
+ROLLOVER_CARRIED_MANDATORY = "• Обязательные: {amount}₽"
+ROLLOVER_CARRIED_SAVINGS = "• Кубышка: {amount}₽"
+ROLLOVER_CARRIED_WISHLIST = "• {name}: {amount}₽"
+STATUS_RESERVE_MANDATORY = "Обязательные {amount}"
+STATUS_RESERVE_SAVINGS = "Кубышка {amount}"
+STATUS_RESERVE_WISHLIST = "Хотелка {amount}"
+STATUS_BUDGET_COMPLETE = "🎉 <b>Готово!</b>\n\n📊 Бюджет на {month}:\n• Доход: {income}₽\n💰 <b>Дневной лимит: {limit}₽</b>\n\n{hint}"
+WISHLIST_SAVED = "✅ Готово, {name}! Хотелка: {wishlist} — {price}₽"
+BALANCE_UNKNOWN = "неизвестно"
+PERIOD_DAY_SUFFIX = "-го"
 
 # ── Fallback values ────────────────────────────────────────
 FALLBACK_DESC = "трата"
