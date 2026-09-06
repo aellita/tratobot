@@ -151,7 +151,9 @@ async def send_morning_reports(bot: Bot):
                             )
                             if settings.RECOVERY_ENABLED:
                                 try:
-                                    from .recovery_service import expire_active_recoveries_for_budget
+                                    from .recovery_service import (
+                                        expire_active_recoveries_for_budget,
+                                    )
 
                                     await expire_active_recoveries_for_budget(b.id)
                                 except Exception:
@@ -279,69 +281,78 @@ async def send_morning_reports(bot: Bot):
                         ]
                     )
                 elif zone == "YELLOW_SIM_GREEN":
-                    # TODO: extract to phrases.py
                     zone_text = random.choice(
                         [
-                            f"🟨 Режим турбо-экономии! Прогноз: {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Кубышка ({int(savings):,} ₽) вернёт нас в зелёную зону — лимит будет {int(dl_simulated):,} ₽/день!",
-                            f"🟨 Затягиваем пояса — прогноз {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Вскрываем Кубышку? Это подбросит лимит до {int(dl_simulated):,} ₽/день!",
+                            phrases.MORNING_YELLOW_SIM_GREEN_1.format(
+                                limit=int(dl_pred),
+                                savings=int(savings),
+                                sim_limit=int(dl_simulated),
+                            ),
+                            phrases.MORNING_YELLOW_SIM_GREEN_2.format(
+                                limit=int(dl_pred), sim_limit=int(dl_simulated)
+                            ),
                         ]
                     )
                 elif zone == "YELLOW_SIM_BLUE":
-                    # TODO: extract to phrases.py
                     zone_text = random.choice(
                         [
-                            f"🟨 Режим турбо-экономии! Прогноз: {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Кубышка поднимет лимит до <b>{int(dl_simulated):,} ₽</b>/день.",
-                            f"🟨 Бюджет трещит по швам, прогноз {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Кубышка готова помочь — поднимем планку до {int(dl_simulated):,} ₽/день!",
+                            phrases.MORNING_YELLOW_SIM_BLUE_1.format(
+                                limit=int(dl_pred), sim_limit=int(dl_simulated)
+                            ),
+                            phrases.MORNING_YELLOW_SIM_BLUE_2.format(
+                                limit=int(dl_pred), sim_limit=int(dl_simulated)
+                            ),
                         ]
                     )
                 elif zone == "YELLOW_SIM_NONE":
-                    # TODO: extract to phrases.py
                     zone_text = random.choice(
                         [
-                            f"🟨 Режим турбо-экономии. Прогноз: {int(dl_pred):,} ₽/день. Держимся!",
-                            f"🟨 Включаю режим супер-экономии. Прогноз {int(dl_pred):,} ₽/день.",
+                            phrases.MORNING_YELLOW_SIM_NONE_1.format(limit=int(dl_pred)),
+                            phrases.MORNING_YELLOW_SIM_NONE_2.format(limit=int(dl_pred)),
                         ]
                     )
                 elif zone == "RED_SIM_GREEN":
-                    # TODO: extract to phrases.py
                     zone_text = random.choice(
                         [
-                            f"🔴 Мы на дне! Прогноз: {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Кубышка ({int(savings):,} ₽) моментом вытащит нас! Лимит взлетит до <b>{int(dl_simulated):,} ₽</b>/день!",
-                            f"🔴 Критическая ситуация: {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Секретное оружие — Кубышка! Лимит станет {int(dl_simulated):,} ₽/день!",
+                            phrases.MORNING_RED_SIM_GREEN_1.format(
+                                limit=int(dl_pred),
+                                savings=int(savings),
+                                sim_limit=int(dl_simulated),
+                            ),
+                            phrases.MORNING_RED_SIM_GREEN_2.format(
+                                limit=int(dl_pred), sim_limit=int(dl_simulated)
+                            ),
                         ]
                     )
                 elif zone == "RED_SIM_BLUE":
-                    # TODO: extract to phrases.py
                     zone_text = random.choice(
                         [
-                            f"🔴 Глубокое пике. Прогноз: {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Кубышка вытащит нас в стабильную зону: {int(dl_simulated):,} ₽/день!",
-                            f"🔴 Бюджет на минимуме — {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Время вскрывать резервы! Кубышка поднимет лимит до {int(dl_simulated):,} ₽/день!",
+                            phrases.MORNING_RED_SIM_BLUE_1.format(
+                                limit=int(dl_pred), sim_limit=int(dl_simulated)
+                            ),
+                            phrases.MORNING_RED_SIM_BLUE_2.format(
+                                limit=int(dl_pred), sim_limit=int(dl_simulated)
+                            ),
                         ]
                     )
                 elif zone == "RED_SIM_YELLOW":
-                    # TODO: extract to phrases.py
                     zone_text = random.choice(
                         [
-                            f"🔴 Мы на дне. Прогноз: {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Кубышка ({int(savings):,} ₽) подрастит лимит до {int(dl_simulated):,} ₽/день.",
-                            f"🔴 Денег почти не осталось — {int(dl_pred):,} ₽/день.\n"
-                            f"💡 Кубышка смягчит падение: лимит будет {int(dl_simulated):,} ₽/день.",
+                            phrases.MORNING_RED_SIM_YELLOW_1.format(
+                                limit=int(dl_pred),
+                                savings=int(savings),
+                                sim_limit=int(dl_simulated),
+                            ),
+                            phrases.MORNING_RED_SIM_YELLOW_2.format(
+                                limit=int(dl_pred), sim_limit=int(dl_simulated)
+                            ),
                         ]
                     )
                 else:
-                    # TODO: extract to phrases.py
                     zone_text = random.choice(
                         [
-                            "🔴 Мы пробили дно. Денег нет. 🚀 Нужен пересчёт лимита.",
-                            "🔴 Катастрофа! Бюджет исчерпан. Пора пересчитать лимит.",
+                            phrases.MORNING_RED_DEAD_1,
+                            phrases.MORNING_RED_DEAD_2,
                         ]
                     )
 
@@ -376,7 +387,9 @@ async def send_morning_reports(bot: Bot):
                                     baseline=int(active.baseline)
                                 )
                             else:
-                                cur_day = (get_user_now().date() - active.started_at.date()).days + 1
+                                cur_day = (
+                                    get_user_now().date() - active.started_at.date()
+                                ).days + 1
                                 cur_day = max(cur_day, 1)
                                 tail = max(days_left - active.total_days, 0)
                                 full_text += "\n\n" + phrases.RECOVERY_DAILY_ACTIVE.format(
@@ -417,13 +430,20 @@ async def send_morning_reports(bot: Bot):
                             if opts:
                                 offer_state = await get_offer_state(tg_id)
                                 should_show = True
-                                if offer_state and offer_state.dismissed and offer_state.last_offer_at:
+                                if (
+                                    offer_state
+                                    and offer_state.dismissed
+                                    and offer_state.last_offer_at
+                                ):
                                     days_since = (
                                         get_user_now().date() - offer_state.last_offer_at.date()
                                     ).days
                                     cur_deficit = max(b_val * days_left - money_for_life, 0)
                                     if not should_repeat_offer(
-                                        offer_state.last_offer_deficit, cur_deficit, b_val, days_since
+                                        offer_state.last_offer_deficit,
+                                        cur_deficit,
+                                        b_val,
+                                        days_since,
                                     ):
                                         should_show = False
                                 if should_show:

@@ -149,6 +149,15 @@
 - [x] ✅ `pyproject.toml` — `ignore E712` (SQLAlchemy `== False`)
 - [x] ✅ `ruff` + `pytest 357 passed` — Review: `datetime.now()→get_msk_now()` fixed, safe to push
 
+### P0: Morning phrases extraction (hardcode → phrases.py)
+
+> **Цель:** убрать `TODO: extract` в `morning_report.py` — все утренние строки через `phrases.py`.
+
+- [x] ✅ `phrases.py:347` — `MORNING_YELLOW_SIM_GREEN_1/2`, `MORNING_YELLOW_SIM_BLUE_1/2`, `MORNING_YELLOW_SIM_NONE_1/2`, `MORNING_RED_SIM_GREEN_1/2`, `MORNING_RED_SIM_BLUE_1/2`, `MORNING_RED_SIM_YELLOW_1/2`, `MORNING_RED_DEAD_1/2` (14 ключей)
+- [x] ✅ `morning_report.py:281` — `TODO` блоки → `phrases.MORNING_*` (7 веток `YELLOW_SIM_GREEN/BLUE/NONE`, `RED_SIM_GREEN/BLUE/YELLOW`, `RED_DEAD`)
+- [x] ✅ Review P0: PASS — no hardcoded Russian, no SQLi, no lifecycle violations
+- [x] ✅ `ruff format` + `pytest 357 passed`
+
 ---
 
 ### День 5: Dogfooding
