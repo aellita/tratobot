@@ -258,6 +258,7 @@ history.py 1, evening_flow.py 2) теперь вызывают её одной �
 - Оркестрация за `RECOVERY_ENABLED=false`: `menu.py:_build_status` рендер (скрытие нулевых резервов, `🧘 день 3 из 10 / 7000·10дн / После этого — 10000 ещё 7дн`), коллбэки `recovery:choose:fast|balanced|soft` (re-validate `B*days- money`, `days+7<=remaining`), `dismiss/stop/show_options`, бюджет-хуки `add_income/recalc/mandatory/black_day/period_start` (не `saving_today`, отдельный flow), `morning_report` (active/success/offer), `evening_report` (факт `saving_today=max(0,target-spent)`, `10→8` честно, прогноз только `+`), `rollover` + `period_end` → `expired(period_end)`.
 - `phrases.py` 16 групп (`BTN_RECOVERY_*`, `RECOVERY_*`), `keyboards.py` 3 клавиатуры, `get_user_now()` обёртка, `pyproject.toml` `ignore E712`.
 **Файлы:** `models.py:58,159`, `database.py:13,204`, `config.py:18`, `helpers.py:224`, `recovery_service.py`, `budget_service.py:36`, `menu.py:76,590,854`, `keyboards.py:233`, `morning_report.py:343`, `evening_report.py:240`, `phrases.py:664`.
+**P1a-c:** `phrases.py:762,788,806` — `STATUS_*`/`MORNING_*`/`ROLLOVER_*` 45 ключей → `menu.py` статусы/ролловер/настройки полностью на `phrases.*` (`ade2696`, `efb058e`, `8fd4f45`).
 
 ## 📌 Feature Flags
 

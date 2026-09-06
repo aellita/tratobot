@@ -158,6 +158,31 @@
 - [x] ✅ Review P0: PASS — no hardcoded Russian, no SQLi, no lifecycle violations
 - [x] ✅ `ruff format` + `pytest 357 passed`
 
+### P1a: Menu status → phrases (zone, remaining, rollover, footers green/yellow-light)
+
+> **Цель:** вынести статус-шапку и зелёные/жёлтые-light футовки в `phrases.py`.
+
+- [x] ✅ `phrases.py:762` — `ROLLOVER_WITH_DETAILS`, `STATUS_ZONE_*` (6), `STATUS_REMAINING_*` (3), `STATUS_RESERVES_HEADER/BALANCE/TODAY/PERIOD`, `STATUS_FOOTER_END_*` (6), `GREEN_*` (3), `YELLOW_LIGHT_*` (3), `SETTINGS_*` (4), `ADVANCED_PLANNING_TITLE`, `ONBOARDING_INCOME_ACCEPTED` — 20 ключей
+- [x] ✅ `menu.py:430,541,564,580,590,645,664,673,677` — rollover, zone_label, today/spent, reserves, BALANCE шаблон, footers `END_EMPTY/OK` + `GREEN` + `YELLOW_LIGHT` → `phrases.*`
+- [x] ✅ Review P1a: PASS шапка, REQUEST CHANGES — остались cubby-футовки
+- [x] ✅ `ade2696` → push
+
+### P1b: Menu cubby footers + settings titles → phrases
+
+> **Цель:** добить жёлтые/красные с кубышкой и настройки.
+
+- [x] ✅ `phrases.py:788` — `STATUS_FOOTER_YELLOW_CUBBY_GREEN/BLUE`, `YELLOW_NONE_1-3`, `RED_CUBBY_GREEN/BLUE/YELLOW`, `RED_DEAD_1-3`, `ROLLOVER_KEEP_DATE_PROMPT` — 11 ключей
+- [x] ✅ `menu.py:682,2147,2162,1295,1477` — `YELLOW_CUBBY_*`, `RED_CUBBY_*`, `RED_DEAD`, `_render_settings` (`PERIOD_FROM/WHOLE`, `MONEY_FREE/INCOME`, `BUDGET_TITLE`), `_render_advanced_planning`, `ONBOARDING_INCOME_ACCEPTED`, `ROLLOVER_KEEP_DATE_PROMPT` → `phrases.*`
+- [x] ✅ `efb058e` → push
+
+### P1c: Menu reserves/budgetComplete → phrases
+
+> **Цель:** добить последние 5 хардкодов статуса.
+
+- [x] ✅ `phrases.py:806` — `ROLLOVER_CARRIED_MANDATORY/SAVINGS/WISHLIST`, `STATUS_RESERVE_MANDATORY/SAVINGS/WISHLIST`, `STATUS_BUDGET_COMPLETE`, `WISHLIST_SAVED`, `BALANCE_UNKNOWN`, `PERIOD_DAY_SUFFIX`
+- [x] ✅ `menu.py:431,538,577,1252,2388,2468` — carried/reserve bullets, `period_end_str`, `_finish_onboarding` `Готово!`, `save_wishlist`, `balance="неизвестно"` → `phrases.*` + fix `F841` spent_today
+- [x] ✅ Review P1c: ✅ Чисто, `8fd4f45` → push
+
 ---
 
 ### День 5: Dogfooding
