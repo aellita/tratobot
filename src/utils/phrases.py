@@ -662,7 +662,7 @@ BTN_RECOVERY_BALANCED = "⚖️ Баланс"
 BTN_RECOVERY_SOFT = "🌿 Мягче"
 BTN_RECOVERY_TRY = "👍 Попробую"
 BTN_RECOVERY_DISMISS = "Не сейчас"
-BTN_RECOVERY_PLAN = "📋 План восстановления"
+BTN_RECOVERY_PLAN = "💡 План восстановления"
 BTN_RECOVERY_STOP = "⏹ Остановить восстановление"
 BTN_RECOVERY_CHOOSE = "Выбрать план"
 

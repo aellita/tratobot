@@ -105,8 +105,8 @@ async def send_evening_teaser(bot: Bot, storage: BaseStorage):
                 settings_result = await session.execute(
                     select(UserSettings).where(UserSettings.telegram_id == tg_id)
                 )
-                settings = settings_result.scalar_one_or_none()
-                if settings and not settings.notifications_enabled:
+                user_settings = settings_result.scalar_one_or_none()
+                if user_settings and not user_settings.notifications_enabled:
                     continue
 
             from .budget_service import get_active_budget
@@ -193,10 +193,11 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
             recovery_extra = ""
             if settings.RECOVERY_ENABLED:
                 try:
-                    from sqlalchemy import func, select as sa_select
+                    from sqlalchemy import func
+                    from sqlalchemy import select as sa_select
 
                     from ..db.database import async_session_maker as _asm
-                    from ..db.models.models import Budget as _Budget, Expense as _Expense
+                    from ..db.models.models import Expense as _Expense
                     from ..services.budget_service import get_active_budget as _get_budget
                     from ..services.recovery_service import (
                         get_active_recovery,
