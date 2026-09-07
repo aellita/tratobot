@@ -183,6 +183,15 @@
 - [x] ✅ `menu.py:431,538,577,1252,2388,2468` — carried/reserve bullets, `period_end_str`, `_finish_onboarding` `Готово!`, `save_wishlist`, `balance="неизвестно"` → `phrases.*` + fix `F841` spent_today
 - [x] ✅ Review P1c: ✅ Чисто, `8fd4f45` → push
 
+### P2: Monthly/budget → phrases (MONTHLY_*, DEFAULT_*)
+
+> **Цель:** перенести оставшиеся 24 хардкода monthly/budget в `phrases.py` — 1 комит.
+
+- [x] ✅ `phrases.py:762` — `MONTHLY_NO_CATEGORY`, `MONTHLY_NO_DATA`, `MONTHLY_ZONE_*` (4), `MONTHLY_TOTAL_SPENT/BUDGET_LABEL`, `MONTHLY_TOP_HEADER`, `MONTHLY_TABLE_*` (4), `MONTHLY_TOTAL_LABEL`, `MONTHLY_ROUNDING_LABEL`, `MONTHLY_PERIOD_LABEL`, `MONTHLY_DETAILS_SUMMARY` — 16 ключей
+- [x] ✅ `monthly_report.py:150,213,239,241,262,271,280,289,320` — `Без категории`, зоны, `Итог за/в процессе`, `Всего потрачено/Бюджет/Топ`, `Прочее`, `Итого`, `Округления`, `Период/Детали` → `phrases.*`
+- [x] ✅ `budget_service.py:91,103` + `goal_service.py:49` + `expense_service.py:321` + `category_service.py:66` — `"Хотелка"/"Прочее"` → `DEFAULT_WISHLIST_NAME`/`DEFAULT_CATEGORY`
+- [x] ✅ Review P2: ✅ Чисто, `b125fa1` → push
+
 ---
 
 ### День 5: Dogfooding
