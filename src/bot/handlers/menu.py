@@ -397,7 +397,6 @@ async def rollover_keep_budget(
     month = get_msk_now().strftime("%Y-%m")
 
     old_mandatory = old.mandatory_payments
-    old_black_day = old.black_day_fund
     old_wishlist_name = old.wishlist_name
     old_wishlist_target = old.wishlist_target
 
@@ -407,7 +406,7 @@ async def rollover_keep_budget(
         free_money=0,
         income=old.total_income,
         mandatory=old_mandatory,
-        black_day=old_black_day,
+        black_day=0,
         wishlist_name=old_wishlist_name or phrases.DEFAULT_WISHLIST_NAME,
         wishlist_price=old_wishlist_target,
         period_start_day=old.period_start_day or 1,
@@ -431,10 +430,6 @@ async def rollover_keep_budget(
     if old_mandatory > 0:
         carried_parts.append(
             phrases.ROLLOVER_CARRIED_MANDATORY.format(amount=f"{int(old_mandatory):,}")
-        )
-    if old_black_day > 0:
-        carried_parts.append(
-            phrases.ROLLOVER_CARRIED_SAVINGS.format(amount=f"{int(old_black_day):,}")
         )
     if old_wishlist_target > 0 and old_wishlist_name:
         carried_parts.append(
@@ -524,19 +519,14 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
 
     days_left = budget.days_remaining
     dl_base = budget.daily_limit
-    savings = budget.black_day_fund
 
     if budget.free_money > 0:
         money_for_life = budget.free_money
     else:
-        money_for_life = (
-            budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period
-        )
+        money_for_life = budget.total_income - budget.mandatory_payments - spent_period
 
     dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
-    dl_simulated = max((money_for_life + savings) / max(days_left, 1), 0)
     pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0
-    pct_sim = dl_simulated / max(dl_base, 1) * 100 if dl_base > 0 else 0
 
     remaining_today = max(dl_pred - spent_today, 0)
     remaining_period = money_for_life
@@ -585,8 +575,6 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         reserve_parts.append(
             phrases.STATUS_RESERVE_MANDATORY.format(amount=f"{int(budget.mandatory_payments):,}")
         )
-    if savings:
-        reserve_parts.append(phrases.STATUS_RESERVE_SAVINGS.format(amount=f"{int(savings):,}"))
     if wishlist_amount:
         reserve_parts.append(
             phrases.STATUS_RESERVE_WISHLIST.format(amount=f"{int(wishlist_amount):,}")
@@ -694,44 +682,23 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         )
         btns = "REGULAR"
     elif pct_pred >= 26:
-        if pct_sim > 80:
-            footer = phrases.STATUS_FOOTER_YELLOW_CUBBY_GREEN.format(
-                saving=f"{int(savings):,}", limit=f"{int(dl_simulated):,}"
-            )
-            btns = "FROM_YELLOW_TO_GREEN"
-        elif pct_sim >= 51:
-            footer = phrases.STATUS_FOOTER_YELLOW_CUBBY_BLUE.format(limit=f"{int(dl_simulated):,}")
-            btns = "FROM_YELLOW_TO_BLUE"
-        else:
-            footer = random.choice(
-                [
-                    phrases.STATUS_FOOTER_YELLOW_NONE_1.format(limit=f"{int(dl_pred):,}"),
-                    phrases.STATUS_FOOTER_YELLOW_NONE_2.format(limit=f"{int(dl_pred):,}"),
-                    phrases.STATUS_FOOTER_YELLOW_NONE_3.format(limit=f"{int(dl_pred):,}"),
-                ]
-            )
-            btns = "REGULAR"
+        footer = random.choice(
+            [
+                phrases.STATUS_FOOTER_YELLOW_NONE_1.format(limit=f"{int(dl_pred):,}"),
+                phrases.STATUS_FOOTER_YELLOW_NONE_2.format(limit=f"{int(dl_pred):,}"),
+                phrases.STATUS_FOOTER_YELLOW_NONE_3.format(limit=f"{int(dl_pred):,}"),
+            ]
+        )
+        btns = "REGULAR"
     else:
-        if pct_sim > 80:
-            footer = phrases.STATUS_FOOTER_RED_CUBBY_GREEN.format(
-                saving=f"{int(savings):,}", limit=f"{int(dl_simulated):,}"
-            )
-            btns = "FROM_RED_TO_GREEN"
-        elif pct_sim >= 51:
-            footer = phrases.STATUS_FOOTER_RED_CUBBY_BLUE.format(limit=f"{int(dl_simulated):,}")
-            btns = "FROM_RED_TO_BLUE"
-        elif pct_sim >= 26:
-            footer = phrases.STATUS_FOOTER_RED_CUBBY_YELLOW.format(limit=f"{int(dl_simulated):,}")
-            btns = "FROM_RED_TO_YELLOW"
-        else:
-            footer = random.choice(
-                [
-                    phrases.STATUS_FOOTER_RED_DEAD_1,
-                    phrases.STATUS_FOOTER_RED_DEAD_2,
-                    phrases.STATUS_FOOTER_RED_DEAD_3,
-                ]
-            )
-            btns = "REGULAR"
+        footer = random.choice(
+            [
+                phrases.STATUS_FOOTER_RED_NONE_1.format(limit=f"{int(dl_pred):,}"),
+                phrases.STATUS_FOOTER_RED_NONE_2.format(limit=f"{int(dl_pred):,}"),
+                phrases.STATUS_FOOTER_RED_NONE_3.format(limit=f"{int(dl_pred):,}"),
+            ]
+        )
+        btns = "REGULAR"
 
     base_kb = _build_status_keyboard(btns, tg_id)
     if recovery_kb_extra is not None:
@@ -744,124 +711,12 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
 
 def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
     if settings.EXPENSE_SIMPLE_CHECK:
-        if btn_type == "REGULAR":
-            return InlineKeyboardMarkup(inline_keyboard=[])
-        if btn_type in ("FROM_YELLOW_TO_GREEN", "FROM_YELLOW_TO_BLUE"):
-            label = (
-                phrases.BTN_USE_SAVINGS_COMFORT
-                if btn_type == "FROM_YELLOW_TO_GREEN"
-                else phrases.BTN_RAISE_LIMIT_SAVINGS
-            )
-            return InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text=label, callback_data="use_savings")],
-                ]
-            )
-        if btn_type in ("FROM_RED_TO_GREEN", "FROM_RED_TO_BLUE", "FROM_RED_TO_YELLOW"):
-            return InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text={
-                                "FROM_RED_TO_GREEN": phrases.BTN_RESTORE_GREEN_SAVINGS,
-                                "FROM_RED_TO_BLUE": phrases.BTN_EXIT_CRISIS_GREEN,
-                                "FROM_RED_TO_YELLOW": phrases.BTN_SAVE_BUDGET_SAVINGS,
-                            }[btn_type],
-                            callback_data="use_savings",
-                        )
-                    ],
-                ]
-            )
         return InlineKeyboardMarkup(inline_keyboard=[])
-
-    if btn_type == "REGULAR":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-            ]
-        )
-    if btn_type == "FROM_YELLOW_TO_GREEN":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_USE_SAVINGS_COMFORT, callback_data="use_savings"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
-            ]
-        )
-    if btn_type == "FROM_YELLOW_TO_BLUE":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_RAISE_LIMIT_SAVINGS, callback_data="use_savings"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
-            ]
-        )
-    if btn_type == "FROM_RED_TO_GREEN":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-            ]
-        )
-    if btn_type == "FROM_RED_TO_BLUE":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_EXIT_CRISIS_GREEN, callback_data="use_savings"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-            ]
-        )
-    if btn_type == "FROM_RED_TO_YELLOW":
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings"
-                    )
-                ],
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
-            ]
-        )
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="menu_back")],
         ]
     )
-
-
-@router.callback_query(F.data == "use_savings")
-async def handle_use_savings(callback: CallbackQuery):
-    await callback.answer()
-    tg_id = callback.from_user.id
-    async with async_session_maker() as session:
-        month = get_msk_now().strftime("%Y-%m")
-        result = await session.execute(
-            select(Budget).where(Budget.telegram_id == tg_id, Budget.month == month)
-        )
-        budget = result.scalar_one_or_none()
-        if not budget or budget.black_day_fund <= 0:
-            await callback.message.edit_text(
-                text=phrases.ERR_SAVINGS_EMPTY,
-                reply_markup=await get_main_menu_keyboard(tg_id),
-            )
-            return
-        budget.free_money = (budget.free_money or 0) + budget.black_day_fund
-        budget.black_day_fund = 0
-        await session.commit()
-    await menu_status(callback)
 
 
 # ============ RECOVERY ============
@@ -886,7 +741,6 @@ async def recovery_show_options(callback: CallbackQuery):
         return
     from ...services.budget_service import resolve_frozen_baseline
     from ...services.recovery_service import calculate_recovery_options, get_active_recovery
-    from ...utils.helpers import get_user_now
 
     active = await get_active_recovery(tg_id)
     if active:
@@ -912,9 +766,7 @@ async def recovery_show_options(callback: CallbackQuery):
     if budget.free_money > 0:
         money_for_life = budget.free_money
     else:
-        money_for_life = (
-            budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period
-        )
+        money_for_life = budget.total_income - budget.mandatory_payments - spent_period
     opts = calculate_recovery_options(b_val, money_for_life, days_left)
     if not opts:
         await callback.answer(phrases.RECOVERY_PERIOD_END, show_alert=True)
@@ -929,7 +781,7 @@ async def recovery_show_options(callback: CallbackQuery):
             f"{phrases.RECOVERY_BASELINE.format(amount=int(b_val))}\n"
             f"{phrases.RECOVERY_OFFER_SINGLE}\n"
             f"{phrases.RECOVERY_OPTION_LINE.format(icon='⚡' if opt.level == 'fast' else '⚖️' if opt.level == 'balanced' else '🌿', label=opt.level, target=int(opt.target), days=opt.days, days_word=_plural_days(opt.days))}\n"
-            f"{phrases.RECOVERY_TAIL_LINE.format(baseline=int(b_val), tail=tail, tail_word=_plural_days(tail))}"
+            f"{phrases.RECOVERY_TAIL_LINE_OFFER.format(baseline=int(b_val), tail=tail, tail_word=_plural_days(tail))}"
         )
         kb = get_recovery_single_keyboard(opt.level)
     else:
@@ -950,7 +802,7 @@ async def recovery_show_options(callback: CallbackQuery):
                 )
             )
             lines.append(
-                phrases.RECOVERY_TAIL_LINE.format(
+                phrases.RECOVERY_TAIL_LINE_OFFER.format(
                     baseline=int(b_val), tail=opt.tail_days, tail_word=_plural_days(opt.tail_days)
                 )
             )
@@ -1005,9 +857,7 @@ async def recovery_choose(callback: CallbackQuery):
     if budget.free_money > 0:
         money_for_life = budget.free_money
     else:
-        money_for_life = (
-            budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period
-        )
+        money_for_life = budget.total_income - budget.mandatory_payments - spent_period
     opts = calculate_recovery_options(b_val, money_for_life, days_left)
     chosen = next((o for o in opts if o.level == level), None)
     if not chosen:
@@ -1026,7 +876,7 @@ async def recovery_choose(callback: CallbackQuery):
                 f"{phrases.RECOVERY_BASELINE.format(amount=int(b_val))}\n"
                 f"{phrases.RECOVERY_OFFER_SINGLE}\n"
                 f"{phrases.RECOVERY_OPTION_LINE.format(icon='⚡', label=opt.level, target=int(opt.target), days=opt.days, days_word=_plural_days(opt.days))}\n"
-                f"{phrases.RECOVERY_TAIL_LINE.format(baseline=int(b_val), tail=opt.tail_days, tail_word=_plural_days(opt.tail_days))}"
+                f"{phrases.RECOVERY_TAIL_LINE_OFFER.format(baseline=int(b_val), tail=opt.tail_days, tail_word=_plural_days(opt.tail_days))}"
             )
             kb = get_recovery_single_keyboard(opt.level)
         else:
@@ -1047,7 +897,7 @@ async def recovery_choose(callback: CallbackQuery):
                     )
                 )
                 lines.append(
-                    phrases.RECOVERY_TAIL_LINE.format(
+                    phrases.RECOVERY_TAIL_LINE_OFFER.format(
                         baseline=int(b_val),
                         tail=opt.tail_days,
                         tail_word=_plural_days(opt.tail_days),
@@ -1102,9 +952,7 @@ async def recovery_dismiss(callback: CallbackQuery):
     if budget.free_money > 0:
         money_for_life = budget.free_money
     else:
-        money_for_life = (
-            budget.total_income - budget.mandatory_payments - budget.black_day_fund - spent_period
-        )
+        money_for_life = budget.total_income - budget.mandatory_payments - spent_period
     deficit = max(b_val * days_left - money_for_life, 0)
     await dismiss_offer(tg_id, deficit)
     await callback.message.edit_text(
@@ -1495,12 +1343,10 @@ async def _finish_new_period(source: CallbackQuery | Message, state: FSMContext)
     if budgets:
         old = budgets[0]
         mandatory = old.mandatory_payments
-        black_day = old.black_day_fund
         wishlist_name = old.wishlist_name or phrases.DEFAULT_WISHLIST_NAME
         wishlist_target = old.wishlist_target
     else:
         mandatory = 0
-        black_day = 0
         wishlist_name = phrases.DEFAULT_WISHLIST_NAME
         wishlist_target = 0
 
@@ -1510,7 +1356,7 @@ async def _finish_new_period(source: CallbackQuery | Message, state: FSMContext)
         month=month,
         income=income,
         mandatory=mandatory,
-        black_day=black_day,
+        black_day=0,
         wishlist_name=wishlist_name,
         wishlist_price=wishlist_target,
         period_start_day=period_start_day,
@@ -2056,15 +1902,8 @@ async def handle_fix_overdraft(callback: CallbackQuery):
         )
 
     elif action == "cubyshka":
-        budget = await get_budget_or_none(callback.from_user.id)
-        if budget and budget.black_day_fund > 0:
-            new_fund = max(budget.black_day_fund - overdraft, 0)
-            await update_budget_field(callback.from_user.id, "black_day_fund", new_fund)
-            text = phrases.TAKEN_FROM_SAVINGS.format(amount=int(new_fund))
-        else:
-            text = phrases.ERR_SAVINGS_EMPTY
         await callback.message.edit_text(
-            text=text, reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            text=phrases.ERR_GENERIC, reply_markup=await get_main_menu_keyboard(callback.from_user.id)
         )
 
 
@@ -2170,7 +2009,6 @@ async def _render_advanced_planning(telegram_id: int) -> tuple[str, InlineKeyboa
     wishlist_name = safe(budget.wishlist_name or phrases.DEFAULT_WISHLIST_NAME)
     text = phrases.ADVANCED_PLANNING_TITLE.format(
         mandatory=f"{budget.mandatory_payments:,.0f}",
-        saving=f"{budget.black_day_fund:,.0f}",
         wishlist=wishlist_name,
         target=f"{budget.wishlist_target:,.0f}",
     )
@@ -2210,8 +2048,9 @@ async def adv_mandatory(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "adv_black_day")
 async def adv_black_day(callback: CallbackQuery, state: FSMContext):
-    _from_advanced_planning.add(callback.from_user.id)
-    await edit_black_day(callback, state)
+    await callback.answer()
+    text, kb = await _render_advanced_planning(callback.from_user.id)
+    await callback.message.edit_text(text=text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "adv_wishlist")

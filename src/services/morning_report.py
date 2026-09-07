@@ -30,47 +30,6 @@ def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup | None:
         base = [
             [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
         ]
-    elif btn_type == "FROM_YELLOW_TO_GREEN":
-        base = [
-            [
-                InlineKeyboardButton(
-                    text=phrases.BTN_USE_SAVINGS_COMFORT, callback_data="use_savings"
-                )
-            ],
-            [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
-        ]
-    elif btn_type == "FROM_YELLOW_TO_BLUE":
-        base = [
-            [
-                InlineKeyboardButton(
-                    text=phrases.BTN_RAISE_LIMIT_SAVINGS, callback_data="use_savings"
-                )
-            ],
-            [InlineKeyboardButton(text=phrases.BTN_ECONOMIZE, callback_data="menu_back")],
-        ]
-    elif btn_type == "FROM_RED_TO_GREEN":
-        base = [
-            [
-                InlineKeyboardButton(
-                    text=phrases.BTN_RESTORE_GREEN_SAVINGS, callback_data="use_savings"
-                )
-            ],
-            [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
-        ]
-    elif btn_type == "FROM_RED_TO_BLUE":
-        base = [
-            [InlineKeyboardButton(text=phrases.BTN_EXIT_CRISIS_GREEN, callback_data="use_savings")],
-            [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
-        ]
-    elif btn_type == "FROM_RED_TO_YELLOW":
-        base = [
-            [
-                InlineKeyboardButton(
-                    text=phrases.BTN_SAVE_BUDGET_SAVINGS, callback_data="use_savings"
-                )
-            ],
-            [InlineKeyboardButton(text=phrases.BTN_RECALC_LIMIT, callback_data="recalc_limit")],
-        ]
     if not has_reply_kb:
         base.append([InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="report_back")])
     return InlineKeyboardMarkup(inline_keyboard=base) if base else None
@@ -182,22 +141,14 @@ async def send_morning_reports(bot: Bot):
 
                 days_left = budget.days_remaining
                 dl_base = budget.daily_limit
-                savings = budget.black_day_fund
 
                 if budget.free_money > 0:
                     money_for_life = budget.free_money
                 else:
-                    money_for_life = (
-                        budget.total_income
-                        - budget.mandatory_payments
-                        - budget.black_day_fund
-                        - spent_period
-                    )
+                    money_for_life = budget.total_income - budget.mandatory_payments - spent_period
 
                 dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
-                dl_simulated = max((money_for_life + savings) / max(days_left, 1), 0)
                 pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0
-                pct_sim = dl_simulated / max(dl_base, 1) * 100 if dl_base > 0 else 0
 
                 end_of_period = days_left <= 3
 
@@ -225,28 +176,11 @@ async def send_morning_reports(bot: Bot):
                     zone = "YELLOW_LIGHT"
                     btn_type = "REGULAR"
                 elif pct_pred >= 26:
-                    if pct_sim > 80:
-                        zone = "YELLOW_SIM_GREEN"
-                        btn_type = "FROM_YELLOW_TO_GREEN"
-                    elif pct_sim >= 51:
-                        zone = "YELLOW_SIM_BLUE"
-                        btn_type = "FROM_YELLOW_TO_BLUE"
-                    else:
-                        zone = "YELLOW_SIM_NONE"
-                        btn_type = "REGULAR"
+                    zone = "YELLOW_SIM_NONE"
+                    btn_type = "REGULAR"
                 else:
-                    if pct_sim > 80:
-                        zone = "RED_SIM_GREEN"
-                        btn_type = "FROM_RED_TO_GREEN"
-                    elif pct_sim >= 51:
-                        zone = "RED_SIM_BLUE"
-                        btn_type = "FROM_RED_TO_BLUE"
-                    elif pct_sim >= 26:
-                        zone = "RED_SIM_YELLOW"
-                        btn_type = "FROM_RED_TO_YELLOW"
-                    else:
-                        zone = "RED_DEAD"
-                        btn_type = "FRESH_START"
+                    zone = "RED_DEAD"
+                    btn_type = "FRESH_START"
 
                 if zone == "END_EMPTY":
                     zone_text = random.choice(
@@ -280,72 +214,11 @@ async def send_morning_reports(bot: Bot):
                             phrases.ZONE_YELLOW_LIGHT_2.format(limit=int(dl_pred)),
                         ]
                     )
-                elif zone == "YELLOW_SIM_GREEN":
-                    zone_text = random.choice(
-                        [
-                            phrases.MORNING_YELLOW_SIM_GREEN_1.format(
-                                limit=int(dl_pred),
-                                savings=int(savings),
-                                sim_limit=int(dl_simulated),
-                            ),
-                            phrases.MORNING_YELLOW_SIM_GREEN_2.format(
-                                limit=int(dl_pred), sim_limit=int(dl_simulated)
-                            ),
-                        ]
-                    )
-                elif zone == "YELLOW_SIM_BLUE":
-                    zone_text = random.choice(
-                        [
-                            phrases.MORNING_YELLOW_SIM_BLUE_1.format(
-                                limit=int(dl_pred), sim_limit=int(dl_simulated)
-                            ),
-                            phrases.MORNING_YELLOW_SIM_BLUE_2.format(
-                                limit=int(dl_pred), sim_limit=int(dl_simulated)
-                            ),
-                        ]
-                    )
                 elif zone == "YELLOW_SIM_NONE":
                     zone_text = random.choice(
                         [
                             phrases.MORNING_YELLOW_SIM_NONE_1.format(limit=int(dl_pred)),
                             phrases.MORNING_YELLOW_SIM_NONE_2.format(limit=int(dl_pred)),
-                        ]
-                    )
-                elif zone == "RED_SIM_GREEN":
-                    zone_text = random.choice(
-                        [
-                            phrases.MORNING_RED_SIM_GREEN_1.format(
-                                limit=int(dl_pred),
-                                savings=int(savings),
-                                sim_limit=int(dl_simulated),
-                            ),
-                            phrases.MORNING_RED_SIM_GREEN_2.format(
-                                limit=int(dl_pred), sim_limit=int(dl_simulated)
-                            ),
-                        ]
-                    )
-                elif zone == "RED_SIM_BLUE":
-                    zone_text = random.choice(
-                        [
-                            phrases.MORNING_RED_SIM_BLUE_1.format(
-                                limit=int(dl_pred), sim_limit=int(dl_simulated)
-                            ),
-                            phrases.MORNING_RED_SIM_BLUE_2.format(
-                                limit=int(dl_pred), sim_limit=int(dl_simulated)
-                            ),
-                        ]
-                    )
-                elif zone == "RED_SIM_YELLOW":
-                    zone_text = random.choice(
-                        [
-                            phrases.MORNING_RED_SIM_YELLOW_1.format(
-                                limit=int(dl_pred),
-                                savings=int(savings),
-                                sim_limit=int(dl_simulated),
-                            ),
-                            phrases.MORNING_RED_SIM_YELLOW_2.format(
-                                limit=int(dl_pred), sim_limit=int(dl_simulated)
-                            ),
                         ]
                     )
                 else:

@@ -7,9 +7,9 @@
 ## Текущий статус и фокус
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (kill-switch off)**.  
-**Активно:** Recovery v1 — smoke-test (включить `RECOVERY_ENABLED=true`)  
-**Ближайшее:** phrases 3–5 вариантов на группу (A-P), AI weekly insight  
-**В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям  
+**Активно:** День 5.5 — ADR `Recovery≠Recalc≠Savings` + hard clean Кубышки (full, 1 юзер, `black_day_fund` deprecated)  
+**Ближайшее:** редактура Утра 1-26 без Кубышки (твои `Бро, ты машина / Красиво / Брооооо`), затем Вечер→Статус  
+**В планах:** Dogfooding Recovery (после Hard clean), Dogfooding AI, релиз 5-10 пользователям  
 
 ---
 
@@ -259,6 +259,11 @@ history.py 1, evening_flow.py 2) теперь вызывают её одной �
 - `phrases.py` 16 групп (`BTN_RECOVERY_*`, `RECOVERY_*`), `keyboards.py` 3 клавиатуры, `get_user_now()` обёртка, `pyproject.toml` `ignore E712`.
 **Файлы:** `models.py:58,159`, `database.py:13,204`, `config.py:18`, `helpers.py:224`, `recovery_service.py`, `budget_service.py:36`, `menu.py:76,590,854`, `keyboards.py:233`, `morning_report.py:343`, `evening_report.py:240`, `phrases.py:664`.
 **P1a-c:** `phrases.py:762,788,806` — `STATUS_*`/`MORNING_*`/`ROLLOVER_*` 45 ключей → `menu.py` статусы/ролловер/настройки полностью на `phrases.*` (`ade2696`, `efb058e`, `8fd4f45`).
+
+### ADR: Recovery≠Recalc≠Savings (2026-09-07) — hard clean Кубышки
+**Фиксация:** `Recalculate` (`free_money`, источник истины, `budget_service.py:167`) ≠ `Recovery` (временный `target/total_days`, не меняет `Budget.daily_limit/free_money/base_daily_limit`, `recovery_service.py:204`) ≠ `Savings/Cubby deleted` (1 юзер, `black_day_fund` deprecated).
+**Поток:** `Fact → Recalc? (сколько реально денег) → Recovery? (временный план возможен? `days+7<=remaining`, `trigger 0.85`) → Normal`. `RECOVERY_ENABLED` — kill-switch, не бизнес-if: Recovery-aware morning/status имеют приоритет над legacy `simulated/cubby` (не `if enabled: suppress`).
+**Правила:** `recalc` после `apply_reconciliation` обязан вызвать `_handle_recovery_budget_change` `menu.py:98` → `complete` при `dl_pred>=0.90*B` или `shortened` при `new_days<old`; `dismissed` инвалидируется при `deficit≥0.5*B` / 3д / новый период, не при каждом `completed`; `tail=7` объяснить один раз `→ потом {baseline} ещё {tail}, чтобы оставить запас`; `NO_VALID_OPTIONS_TAIL` — только в telemetry. Кубышка: 15 фраз + 5 кнопок + 8 веток `morning_report.py:185`/`menu.py:527` удалены, БД `black_day_fund` nullable без дропа.
 
 ## 📌 Feature Flags
 

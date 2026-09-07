@@ -8,11 +8,11 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 42 |
+| ✅ Готово | 43 |
 | 🔧 В работе | 0 |
 | ⏳ Ожидает | 2 |
 
-**Следующая задача:** День 5 — Dogfooding Recovery (включить `RECOVERY_ENABLED=true`) → фразы 3–5 вариантов
+**Следующая задача:** Редактура Утра 1-26 без Кубышки (твоя таблица `Бро, ты машина / Красиво / Брооооо`) → Вечер → Статус
 
 ---
 
@@ -194,15 +194,26 @@
 
 ---
 
-### День 5: Dogfooding
+### День 5.5: ADR + Hard clean Кубышки + Recovery≠Recalc — ✅ Готово (2026-09-07)
+
+> **ADR:** `Recalculate (free_money, источник истины) ≠ Recovery (временный target/total_days, frozen B) ≠ Savings/Cubby deleted`. Поток `Fact → Recalc? → Recovery? → Normal`. `RECOVERY_ENABLED` — kill-switch, не бизнес-if. `tail=7` — объяснить один раз человечно.
+
+- [x] ✅ `phrases.py` — удалил 15 фраз Кубышки: `MORNING_*_SIM_*` 10 + `STATUS_FOOTER_*_CUBBY_*` 5→`RED_NONE_*` 3 + `BTN_USE_SAVINGS_*` 5 + `ERR_SAVINGS_EMPTY` + `BTN_SAVINGS`/`ROLLOVER_CARRIED_SAVINGS`/`STATUS_RESERVE_SAVINGS` + добавил `RECOVERY_TAIL_LINE_OFFER`
+- [x] ✅ `morning_report.py:26,183` — убрал `savings/dl_simulated/pct_sim/FROM_*`, схлопнул `YELLOW_SIM_GREEN/BLUE`→`YELLOW_SIM_NONE`, `RED_SIM_*`→`RED_DEAD`, ветки `MORNING_*_SIM_*` 10 удалены
+- [x] ✅ `menu.py:525,696,745,817` — `_build_status` без `dl_simulated/pct_sim`/`STATUS_RESERVE_SAVINGS`, футеры `YELLOW_CUBBY/RED_CUBBY`→`YELLOW_NONE/RED_NONE`, `_build_status_keyboard` упрощён до `REGULAR`, `handle_use_savings` удалён, `handle_fix_overdraft:cubyshka`→`ERR_GENERIC`
+- [x] ✅ `menu.py:400,776,1335` + `keyboards.py:85` — `rollover_keep/_finish_new_period` без `black_day`, `ADVANCED_PLANNING_TITLE` без Кубышки, `get_advanced_planning_keyboard` 2 кнопки (без Кубышки), `adv_black_day` заглушка
+- [x] ✅ `menu.py:788,907` — `recovery_show/choose` `RECOVERY_TAIL_LINE_OFFER` `, чтобы оставить запас до конца периода` один раз при выборе, `RECOVERY_PERIOD_END` уже человечно
+- [x] ✅ `tests/test_settings_keyboard.py:28` — `Кубышка not in labels`, `ruff --fix --select F,I`, `pytest 357 passed` (было 1 failed), 1 юзер → full clean без миграции
+
+### День 5: Dogfooding (после Hard clean)
 
 > **Цель:** пройти полный цикл пользователем. Код не писать.
 
 - [ ] ⏳ Новый пользователь → `/start` → доход → период → финал
 - [ ] ⏳ Добавить трату → статус → ещё трату → статус
-- [ ] ⏳ Настройки → Доп. планирование → задать обязательные
-- [ ] ⏳ Статус с обязательными (проверить пересчёт лимита)
-- [ ] ⏳ Новый период → ролловер → проверить перенос обязательных
+- [ ] ⏳ Настройки → Доп. планирование → задать обязательные (Кубышки нет)
+- [ ] ⏳ Статус с обязательными (проверить `recalc` без Кубышки)
+- [ ] ⏳ Новый период → ролловер → проверить перенос обязательных (без Кубышки)
 - [ ] ⏳ Записать найденные баги/неудобства
 
 ---

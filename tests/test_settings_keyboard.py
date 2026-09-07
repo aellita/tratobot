@@ -28,7 +28,7 @@ class TestAdvancedPlanningKeyboard:
     def test_has_mandatory_savings_wishlist(self):
         labels = _labels(get_advanced_planning_keyboard())
         assert "📌 Обязательные" in labels
-        assert "🏦 Кубышка" in labels
+        assert "🏦 Кубышка" not in labels
         assert "🎯 Хотелка" in labels
 
     def test_has_no_rounding(self):

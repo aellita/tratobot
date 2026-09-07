@@ -85,7 +85,6 @@ def get_settings_keyboard():
 def get_advanced_planning_keyboard():
     buttons = [
         [InlineKeyboardButton(text=phrases.BTN_MANDATORY, callback_data="adv_mandatory")],
-        [InlineKeyboardButton(text=phrases.BTN_SAVINGS, callback_data="adv_black_day")],
         [InlineKeyboardButton(text=phrases.BTN_WISHLIST, callback_data="adv_wishlist")],
         [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_settings")],
     ]
@@ -244,7 +243,9 @@ def get_recovery_offer_keyboard(options: list) -> InlineKeyboardMarkup:
         )
     rows.append(
         [
-            InlineKeyboardButton(text=phrases.BTN_RECOVERY_DISMISS, callback_data="recovery:dismiss"),
+            InlineKeyboardButton(
+                text=phrases.BTN_RECOVERY_DISMISS, callback_data="recovery:dismiss"
+            ),
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -253,8 +254,16 @@ def get_recovery_offer_keyboard(options: list) -> InlineKeyboardMarkup:
 def get_recovery_single_keyboard(level: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_RECOVERY_TRY, callback_data=f"recovery:choose:{level}")],
-            [InlineKeyboardButton(text=phrases.BTN_RECOVERY_DISMISS, callback_data="recovery:dismiss")],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_RECOVERY_TRY, callback_data=f"recovery:choose:{level}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_RECOVERY_DISMISS, callback_data="recovery:dismiss"
+                )
+            ],
         ]
     )
 
@@ -270,7 +279,11 @@ def get_recovery_active_keyboard() -> InlineKeyboardMarkup:
 def get_recovery_plan_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=phrases.BTN_RECOVERY_PLAN, callback_data="recovery:show_options")],
+            [
+                InlineKeyboardButton(
+                    text=phrases.BTN_RECOVERY_PLAN, callback_data="recovery:show_options"
+                )
+            ],
         ]
     )
 

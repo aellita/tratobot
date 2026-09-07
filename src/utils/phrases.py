@@ -14,12 +14,6 @@ BTN_ROLLOVER_EDIT = "⚙️ Изменить"
 BTN_ROLLOVER_KEEP_INCOME = "📦 Оставить {amount} ₽"
 BTN_ROLLOVER_KEEP_DATE = "📦 Оставить {day}-е число"
 
-BTN_USE_SAVINGS_COMFORT = "🍏 Вернуть комфорт из Кубышки"
-BTN_RAISE_LIMIT_SAVINGS = "🟩 Поднять лимит из Кубышки"
-BTN_RESTORE_GREEN_SAVINGS = "🚀 Вернуть Зеленую зону из Кубышки"
-BTN_EXIT_CRISIS_GREEN = "🚀 Выйти из кризиса в Зеленую зону"
-BTN_SAVE_BUDGET_SAVINGS = "🚨 Спасти бюджет из Кубышки"
-
 BTN_CHANGE_CATEGORY = "✏️ Сменить категорию"
 BTN_NEW_CATEGORY = "✏️ Новая категория"
 BTN_CHANGE_BUDGET = "🔄 Изменить бюджет"
@@ -34,7 +28,6 @@ BTN_SETTINGS = "⚙️ Настройки"
 BTN_HELP = "📋 Помощь"
 
 BTN_MANDATORY = "📌 Обязательные"
-BTN_SAVINGS = "🏦 Кубышка"
 BTN_WISHLIST = "🎯 Хотелка"
 BTN_PERIOD_START = "📅 День старта"
 BTN_ROUNDING = "🐖 Округление"
@@ -59,7 +52,6 @@ BTN_RESTORE = "↩️ Восстановить"
 
 # ── Error messages ─────────────────────────────────────────
 ERR_GENERIC = "❌ Что-то пошло не так. Попробуй /start ещё раз."
-ERR_SAVINGS_EMPTY = "❌ Кубышка пуста. Нечего переносить."
 ERR_DB = "❌ Ошибка базы данных. Попробуй /start ещё раз."
 ERR_INVALID_NUMBER = "❌ Введи число. Например: {example}"
 ERR_TOO_MANY_RETRIES = "🙅 Слишком много неудачных попыток. Возвращаю в меню."
@@ -345,48 +337,8 @@ ZONE_YELLOW_LIGHT_1 = (
 )
 ZONE_YELLOW_LIGHT_2 = "📉 Прогнозный лимит снизился до {limit} ₽/день. Включаем осознанность!"
 
-MORNING_YELLOW_SIM_GREEN_1 = (
-    "🟨 Режим турбо-экономии! Прогноз: {limit} ₽/день.\n"
-    "💡 Кубышка ({savings} ₽) вернёт нас в зелёную зону — лимит будет {sim_limit} ₽/день!"
-)
-MORNING_YELLOW_SIM_GREEN_2 = (
-    "🟨 Затягиваем пояса — прогноз {limit} ₽/день.\n"
-    "💡 Вскрываем Кубышку? Это подбросит лимит до {sim_limit} ₽/день!"
-)
-MORNING_YELLOW_SIM_BLUE_1 = (
-    "🟨 Режим турбо-экономии! Прогноз: {limit} ₽/день.\n"
-    "💡 Кубышка поднимет лимит до <b>{sim_limit} ₽</b>/день."
-)
-MORNING_YELLOW_SIM_BLUE_2 = (
-    "🟨 Бюджет трещит по швам, прогноз {limit} ₽/день.\n"
-    "💡 Кубышка готова помочь — поднимем планку до {sim_limit} ₽/день!"
-)
-MORNING_YELLOW_SIM_NONE_1 = "🟨 Режим турбо-экономии. Прогноз: {limit} ₽/день. Держимся!"
-MORNING_YELLOW_SIM_NONE_2 = "🟨 Включаю режим супер-экономии. Прогноз {limit} ₽/день."
-MORNING_RED_SIM_GREEN_1 = (
-    "🔴 Мы на дне! Прогноз: {limit} ₽/день.\n"
-    "💡 Кубышка ({savings} ₽) моментом вытащит нас! Лимит взлетит до <b>{sim_limit} ₽</b>/день!"
-)
-MORNING_RED_SIM_GREEN_2 = (
-    "🔴 Критическая ситуация: {limit} ₽/день.\n"
-    "💡 Секретное оружие — Кубышка! Лимит станет {sim_limit} ₽/день!"
-)
-MORNING_RED_SIM_BLUE_1 = (
-    "🔴 Глубокое пике. Прогноз: {limit} ₽/день.\n"
-    "💡 Кубышка вытащит нас в стабильную зону: {sim_limit} ₽/день!"
-)
-MORNING_RED_SIM_BLUE_2 = (
-    "🔴 Бюджет на минимуме — {limit} ₽/день.\n"
-    "💡 Время вскрывать резервы! Кубышка поднимет лимит до {sim_limit} ₽/день!"
-)
-MORNING_RED_SIM_YELLOW_1 = (
-    "🔴 Мы на дне. Прогноз: {limit} ₽/день.\n"
-    "💡 Кубышка ({savings} ₽) подрастит лимит до {sim_limit} ₽/день."
-)
-MORNING_RED_SIM_YELLOW_2 = (
-    "🔴 Денег почти не осталось — {limit} ₽/день.\n"
-    "💡 Кубышка смягчит падение: лимит будет {sim_limit} ₽/день."
-)
+MORNING_YELLOW_SIM_NONE_1 = "🟨 Прогноз: {limit} ₽/день. Держимся!"
+MORNING_YELLOW_SIM_NONE_2 = "🟨 Включаю режим супер-экономии. Прогноз: {limit} ₽/день."
 MORNING_RED_DEAD_1 = "🔴 Мы пробили дно. Денег нет. 🚀 Нужен пересчёт лимита."
 MORNING_RED_DEAD_2 = "🔴 Катастрофа! Бюджет исчерпан. Пора пересчитать лимит."
 
@@ -735,6 +687,9 @@ RECOVERY_OFFER_MULTI = "🧘 Можно восстановить обычный 
 RECOVERY_BASELINE = "Обычный лимит: {amount} ₽/день"
 RECOVERY_OPTION_LINE = "{icon} {label} — {target} ₽ · {days} {days_word}"
 RECOVERY_TAIL_LINE = "→ потом {baseline} ₽/день ещё {tail} {tail_word}"
+RECOVERY_TAIL_LINE_OFFER = (
+    "→ потом {baseline} ₽/день ещё {tail} {tail_word}, чтобы оставить запас до конца периода"
+)
 RECOVERY_DISMISSED = "Хорошо. Пока просто продолжаем по текущему лимиту."
 RECOVERY_CHOSEN = "Договорились. Начинаем."
 RECOVERY_STOPPED = "Восстановление остановлено."
@@ -803,14 +758,12 @@ STATUS_FOOTER_GREEN_3 = "Финансовая карма в порядке. Мо
 STATUS_FOOTER_YELLOW_LIGHT_1 = "Заметил, мы ускорились. Лимит сожмётся до {limit} ₽. Притормози?"
 STATUS_FOOTER_YELLOW_LIGHT_2 = "Съезжаем с курса. Прогноз {limit} ₽/день. Включи осознанность."
 STATUS_FOOTER_YELLOW_LIGHT_3 = "График пополз вниз. Прогноз {limit} ₽/день — удержим планку?"
-STATUS_FOOTER_YELLOW_CUBBY_GREEN = "Кубышка ({saving}₽) вернёт в зелень — {limit}₽/день"
-STATUS_FOOTER_YELLOW_CUBBY_BLUE = "Кубышка подстрахует — {limit}₽/день"
 STATUS_FOOTER_YELLOW_NONE_1 = "Лимит сожмётся до {limit} ₽/день. Режим супер-экономии."
 STATUS_FOOTER_YELLOW_NONE_2 = "Прогноз {limit} ₽/день. Постарайся сегодня ничего не покупать!"
 STATUS_FOOTER_YELLOW_NONE_3 = "До конца периода — гречка. Лимит {limit} ₽/день. Держимся!"
-STATUS_FOOTER_RED_CUBBY_GREEN = "Кубышка ({saving}₽) вернёт в зелень — {limit}₽/день"
-STATUS_FOOTER_RED_CUBBY_BLUE = "Кубышка смягчит до {limit}₽/день"
-STATUS_FOOTER_RED_CUBBY_YELLOW = "Кубышка поднимет до {limit}₽/день"
+STATUS_FOOTER_RED_NONE_1 = "Лимит просел до {limit} ₽/день. Держимся, бро."
+STATUS_FOOTER_RED_NONE_2 = "Плотно сейчас — {limit} ₽/день. Сегодня полегче, бро."
+STATUS_FOOTER_RED_NONE_3 = "Почти на нуле — {limit} ₽/день. Пересчитаем, если надо."
 STATUS_FOOTER_RED_DEAD_1 = "Пробили дно! Деньги кончились. Пора пересобрать бюджет."
 STATUS_FOOTER_RED_DEAD_2 = "Дальше ехать некуда. Пора пересчитать лимит?"
 STATUS_FOOTER_RED_DEAD_3 = "Математика не бьётся с картой. Пора обнулить месяц!"
@@ -819,14 +772,14 @@ SETTINGS_PERIOD_FROM = "📅 Период: с {day}-го"
 SETTINGS_MONEY_FREE = "💰 Свободно: {amount}₽"
 SETTINGS_MONEY_INCOME = "💰 Доход: {amount}₽"
 SETTINGS_BUDGET_TITLE = "⚙️ Что меняем?\n\n📊 Бюджет\n<blockquote>{money}\n{period}</blockquote>"
-ADVANCED_PLANNING_TITLE = "🧾 Дополнительное планирование\n\n📌 Обязательные: {mandatory}₽\n🏦 Кубышка: {saving}₽\n🎯 {wishlist}: {target}₽"
+ADVANCED_PLANNING_TITLE = (
+    "🧾 Дополнительное планирование\n\n📌 Обязательные: {mandatory}₽\n🎯 {wishlist}: {target}₽"
+)
 ONBOARDING_INCOME_ACCEPTED = "✅ Принял!"
 ROLLOVER_KEEP_DATE_PROMPT = "🗓️ Обычно мы стартуем {date}-го числа. Меняем дату начала периода?"
 ROLLOVER_CARRIED_MANDATORY = "• Обязательные: {amount}₽"
-ROLLOVER_CARRIED_SAVINGS = "• Кубышка: {amount}₽"
 ROLLOVER_CARRIED_WISHLIST = "• {name}: {amount}₽"
 STATUS_RESERVE_MANDATORY = "Обязательные {amount}"
-STATUS_RESERVE_SAVINGS = "Кубышка {amount}"
 STATUS_RESERVE_WISHLIST = "Хотелка {amount}"
 STATUS_BUDGET_COMPLETE = "🎉 <b>Готово!</b>\n\n📊 Бюджет на {month}:\n• Доход: {income}₽\n💰 <b>Дневной лимит: {limit}₽</b>\n\n{hint}"
 WISHLIST_SAVED = "✅ Готово, {name}! Хотелка: {wishlist} — {price}₽"
