@@ -147,7 +147,7 @@ async def _get_uncategorized_sum(
         total = float(row[1]) if row[1] else 0.0
         if count == 0:
             return None
-        return "Без категории", count, total
+        return phrases.MONTHLY_NO_CATEGORY, count, total
 
 
 async def _get_active_wishlist(telegram_id: int) -> Wishlist | None:
@@ -210,16 +210,16 @@ def _zone_for_period(
 ) -> tuple[str, str]:
     available = total_income - mandatory - black_day
     if available <= 0:
-        return "⚪", "Нет данных"
+        return "⚪", phrases.MONTHLY_NO_DATA
     pct = total_spent / available * 100
     if pct <= 70:
-        return "🟢", "Зелёная"
+        return "🟢", phrases.MONTHLY_ZONE_GREEN
     elif pct <= 90:
-        return "🔵", "Синяя"
+        return "🔵", phrases.MONTHLY_ZONE_BLUE
     elif pct <= 100:
-        return "🟡", "Жёлтая"
+        return "🟡", phrases.MONTHLY_ZONE_YELLOW
     else:
-        return "🔴", "Красная"
+        return "🔴", phrases.MONTHLY_ZONE_RED
 
 
 def _esc(text: str) -> str:
@@ -236,9 +236,11 @@ def format_summary_text(data: dict, label: str = "") -> str:
     month_str = period_start.strftime("%B %Y").lower()
     header_text = label or month_str.capitalize()
     if active:
-        header_text += f" ({period_start.strftime('%B').lower()} в процессе ⏳)"
+        header_text += phrases.MONTHLY_IN_PROGRESS.format(
+            period=period_start.strftime("%B").lower()
+        )
 
-    parts: list[str] = [f"<h2>📊 Итог за {_esc(header_text)}</h2>"]
+    parts: list[str] = [f"<h2>{phrases.MONTHLY_HEADER.format(period_label=_esc(header_text))}</h2>"]
 
     if active:
         egg = phrases.MONTHLY_EGG_TOTEM.format(
@@ -259,25 +261,28 @@ def format_summary_text(data: dict, label: str = "") -> str:
     zone_str = phrases.MONTHLY_ZONE_TAG.format(
         zone_emoji=data["zone_emoji"], zone_label=data["zone_label"]
     )
-    parts.append(f"<p><b>💰 Всего потрачено: {data['total_spent']:,.0f} ₽</b> ({zone_str})</p>")
+    _total = f"{data['total_spent']:,.0f}"
+    parts.append(
+        f"<p><b>💰 {phrases.MONTHLY_TOTAL_SPENT.format(amount=_total)}</b> ({zone_str})</p>"
+    )
 
     budget_income = int(budget.total_income)
-    parts.append(f"<p>💵 Бюджет: {budget_income:,} ₽</p>")
+    parts.append(f"<p>💵 {phrases.MONTHLY_BUDGET_LABEL.format(amount=f'{budget_income:,}')}</p>")
 
     avg_line = phrases.MONTHLY_AVG_DAY.format(avg=data["avg_day"])
     parts.append(f"<p>{_esc(avg_line)}</p>")
 
     if data["breakdown"]:
-        parts.append("<h3>📑 Топ расходов по категориям:</h3>")
+        parts.append(f"<h3>📑 {phrases.MONTHLY_TOP_HEADER}</h3>")
         parts.append("<table bordered striped>")
-        parts.append("  <caption>Распределение трат за период</caption>")
+        parts.append(f"  <caption>{phrases.MONTHLY_TABLE_CAPTION}</caption>")
         parts.append("  <tr>")
-        parts.append('    <th align="left">Категория</th>')
-        parts.append('    <th align="center">Операций</th>')
-        parts.append('    <th align="right">Сумма</th>')
+        parts.append(f'    <th align="left">{phrases.MONTHLY_TABLE_COL_CATEGORY}</th>')
+        parts.append(f'    <th align="center">{phrases.MONTHLY_TABLE_COL_COUNT}</th>')
+        parts.append(f'    <th align="right">{phrases.MONTHLY_TABLE_COL_AMOUNT}</th>')
         parts.append("  </tr>")
         for cat_name, count, amount in data["breakdown"]:
-            clean_name = _esc(cat_name or "Прочее")
+            clean_name = _esc(cat_name or phrases.DEFAULT_CATEGORY[1])
             parts.append("  <tr>")
             parts.append(f"    <td>{clean_name}</td>")
             parts.append(f'    <td align="center">{count}</td>')
@@ -286,10 +291,12 @@ def format_summary_text(data: dict, label: str = "") -> str:
         parts.append("</table>")
 
         parts.append("<hr>")
-        parts.append(f"<p><b>Итого: {int(data['total_spent']):,} ₽</b></p>")
+        _total2 = f"{int(data['total_spent']):,}"
+        parts.append(f"<p><b>{phrases.MONTHLY_TOTAL_LABEL.format(amount=_total2)}</b></p>")
 
         if data["rounding_total"] > 0:
-            parts.append(f"<p>🐸 Округления за период: +{data['rounding_total']:,.0f} ₽</p>")
+            _rnd = f"{data['rounding_total']:,.0f}"
+            parts.append(f"<p>🐸 {phrases.MONTHLY_ROUNDING_LABEL.format(amount=_rnd)}</p>")
 
     details = phrases.MONTHLY_DETAILS.format(
         daily_limit=int(budget.daily_limit),
@@ -317,8 +324,14 @@ def format_summary_text(data: dict, label: str = "") -> str:
 
     period_label = data.get("period_label", "")
     if period_label:
-        det_html = f"• Период: {_esc(period_label)}<br>" + det_html
-    parts.append("<details>\n<summary>📁 Детали расчёта</summary>\n" + det_html + "\n</details>")
+        det_html = (
+            f"• {phrases.MONTHLY_PERIOD_LABEL.format(label=_esc(period_label))}<br>" + det_html
+        )
+    parts.append(
+        f"<details>\n<summary>📁 {phrases.MONTHLY_DETAILS_SUMMARY}</summary>\n"
+        + det_html
+        + "\n</details>"
+    )
 
     return "\n".join(parts)
 
@@ -335,9 +348,9 @@ async def build_summary_data(telegram_id: int, budget: Budget) -> dict:
     )
 
     top_cat_name = breakdown[0][0] if breakdown else "—"
-    totem_name, totem_phrase, totem_emoji = get_totem(top_cat_name or "Прочее")
+    totem_name, totem_phrase, totem_emoji = get_totem(top_cat_name or phrases.DEFAULT_CATEGORY[1])
     if totem_name == "Чебурашка":
-        totem_phrase = totem_phrase.format(category=top_cat_name or "Прочее")
+        totem_phrase = totem_phrase.format(category=top_cat_name or phrases.DEFAULT_CATEGORY[1])
 
     wishlist = await _get_active_wishlist(telegram_id)
     wishlist_current = wishlist.current_amount if wishlist else 0.0

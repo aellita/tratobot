@@ -2,6 +2,7 @@ from sqlalchemy import select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Budget, Wishlist
+from ..utils import phrases
 from ..utils.helpers import get_msk_now
 
 
@@ -46,7 +47,7 @@ async def add_spare_change_to_goal(telegram_id: int, spare_change: float) -> tup
                 )
             )
             budget = budget_result.scalar_one_or_none()
-            name = budget.wishlist_name if budget else "Хотелка"
+            name = budget.wishlist_name if budget else phrases.DEFAULT_WISHLIST_NAME
             target = budget.wishlist_target if budget else 0
 
             goal = Wishlist(

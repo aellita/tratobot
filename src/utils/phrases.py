@@ -672,6 +672,24 @@ MONTHLY_TOTEM_DEFAULT = (
     "что это за зверь, но выглядит интригующе!"
 )
 
+MONTHLY_NO_CATEGORY = "Без категории"
+MONTHLY_NO_DATA = "Нет данных"
+MONTHLY_ZONE_GREEN = "Зелёная"
+MONTHLY_ZONE_BLUE = "Синяя"
+MONTHLY_ZONE_YELLOW = "Жёлтая"
+MONTHLY_ZONE_RED = "Красная"
+MONTHLY_TOTAL_SPENT = "Всего потрачено: {amount} ₽"
+MONTHLY_BUDGET_LABEL = "Бюджет: {amount} ₽"
+MONTHLY_TOP_HEADER = "Топ расходов по категориям:"
+MONTHLY_TABLE_CAPTION = "Распределение трат за период"
+MONTHLY_TABLE_COL_CATEGORY = "Категория"
+MONTHLY_TABLE_COL_COUNT = "Операций"
+MONTHLY_TABLE_COL_AMOUNT = "Сумма"
+MONTHLY_TOTAL_LABEL = "Итого: {amount} ₽"
+MONTHLY_ROUNDING_LABEL = "Округления за период: +{amount} ₽"
+MONTHLY_PERIOD_LABEL = "Период: {label}"
+MONTHLY_DETAILS_SUMMARY = "Детали расчёта"
+
 ROLLOVER_OFFER = (
     "🎯 План на новый период (с {old_date}-го числа):\n"
     "На основе прошлых месяцев твой средний чек — {avg:,.0f} ₽.\n"

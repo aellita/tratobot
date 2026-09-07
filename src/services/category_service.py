@@ -2,6 +2,7 @@ from sqlalchemy import func, select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Category, Expense
+from ..utils import phrases
 
 
 async def get_category_expense_count(telegram_id: int, category_id: int) -> int:
@@ -63,7 +64,7 @@ async def move_expenses_to_default_and_delete(telegram_id: int, category_id: int
         default = await session.execute(
             select(Category).where(
                 Category.telegram_id == telegram_id,
-                Category.name == "Прочее",
+                Category.name == phrases.DEFAULT_CATEGORY[1],
             )
         )
         default_cat = default.scalar_one_or_none()

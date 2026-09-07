@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from ..db.database import async_session_maker
 from ..db.models.models import Budget
+from ..utils import phrases
 from ..utils.helpers import get_msk_now
 
 
@@ -88,7 +89,7 @@ async def save_budget(
             budget.total_income = income
             budget.mandatory_payments = mandatory
             budget.black_day_fund = black_day
-            budget.wishlist_name = wishlist_name or "Хотелка"
+            budget.wishlist_name = wishlist_name or phrases.DEFAULT_WISHLIST_NAME
             budget.wishlist_target = wishlist_price
             budget.period_start_day = period_start_day
             budget.free_money = free_money
@@ -100,7 +101,7 @@ async def save_budget(
                 total_income=income,
                 mandatory_payments=mandatory,
                 black_day_fund=black_day,
-                wishlist_name=wishlist_name or "Хотелка",
+                wishlist_name=wishlist_name or phrases.DEFAULT_WISHLIST_NAME,
                 wishlist_target=wishlist_price,
                 period_start_day=period_start_day,
                 free_money=free_money,
