@@ -197,6 +197,7 @@
 ### День 5.5: ADR + Hard clean Кубышки + Recovery≠Recalc — ✅ Готово (2026-09-07)
 
 > **ADR:** `Recalculate (free_money, источник истины) ≠ Recovery (временный target/total_days, frozen B) ≠ Savings/Cubby deleted`. Поток `Fact → Recalc? → Recovery? → Normal`. `RECOVERY_ENABLED` — kill-switch, не бизнес-if. `tail=7` — объяснить один раз человечно.
+> **ADR-2 (2026-09-07):** `Zone=состояние, Recovery=действие`. Зоны и код `pct>80 🟢/>=51 🔵/>=26 🟡/<26 🔴` `menu.py:546` остаются без изменений. При `Recovery offer/active` `menu.py:611`/`morning_report.py:369` zone footer не показывается, вместо него Recovery footer `phrases.py:693,698`. Zone label всегда по `pct`, не зависит от Recovery. После `finished` — обычный footer. Только 1 фраза меняется: `RECOVERY_DAILY_OFFER` → `💡 Есть варианты восстановить лимит. Сейчас: {dl_pred} ₽/день. Разрулим, бро.`
 
 - [x] ✅ `phrases.py` — удалил 15 фраз Кубышки: `MORNING_*_SIM_*` 10 + `STATUS_FOOTER_*_CUBBY_*` 5→`RED_NONE_*` 3 + `BTN_USE_SAVINGS_*` 5 + `ERR_SAVINGS_EMPTY` + `BTN_SAVINGS`/`ROLLOVER_CARRIED_SAVINGS`/`STATUS_RESERVE_SAVINGS` + добавил `RECOVERY_TAIL_LINE_OFFER`
 - [x] ✅ `morning_report.py:26,183` — убрал `savings/dl_simulated/pct_sim/FROM_*`, схлопнул `YELLOW_SIM_GREEN/BLUE`→`YELLOW_SIM_NONE`, `RED_SIM_*`→`RED_DEAD`, ветки `MORNING_*_SIM_*` 10 удалены
@@ -204,6 +205,16 @@
 - [x] ✅ `menu.py:400,776,1335` + `keyboards.py:85` — `rollover_keep/_finish_new_period` без `black_day`, `ADVANCED_PLANNING_TITLE` без Кубышки, `get_advanced_planning_keyboard` 2 кнопки (без Кубышки), `adv_black_day` заглушка
 - [x] ✅ `menu.py:788,907` — `recovery_show/choose` `RECOVERY_TAIL_LINE_OFFER` `, чтобы оставить запас до конца периода` один раз при выборе, `RECOVERY_PERIOD_END` уже человечно
 - [x] ✅ `tests/test_settings_keyboard.py:28` — `Кубышка not in labels`, `ruff --fix --select F,I`, `pytest 357 passed` (было 1 failed), 1 юзер → full clean без миграции
+
+### День 5.6: Утро 17 фраз — полировка (2026-09-07) — ✅ Готово
+
+> **Цель:** `YESTERDAY с ты`, `дн.→days_text`, убрать `🟩🟨🔴`, оставить `📉`/`🏁`/`🥳`, добавить `Бюджет нервничает`.
+
+- [x] ✅ `phrases.py:322-337` — `YESTERDAY_OK/OVER` `ты потратил`, `ZONE_END_EMPTY_1` `Осталось {days_text} — дотянем`, `ZONE_END_OK_1` `!`, `ZONE_END_OK_2` `Бро, мы красиво заходим`, `MORNING_RED_DEAD_1` `Пересчитаем и едем дальше`, `MORNING_YELLOW_BUDGET_NERVOUS` `Бюджет уже нервничает`
+- [x] ✅ `phrases.py:329-337` — убраны `🟩🟨🔴` из `ZONE_GREEN_*/YELLOW_*_NONE/RED_DEAD`, оставлены `📉` `ZONE_YELLOW_LIGHT_*`, `🏁`/`🥳` финиш
+- [x] ✅ `morning_report.py:20,185` — `_plural_days` + `days_text=f"{days} {word}"` `день/дня/дней`, `ZONE_END_*` `days_text`, `YELLOW_SIM_NONE` 3 варианта `random.choice(3)` с `BUDGET_NERVOUS`
+- [x] ✅ `phrases.py:698` — `RECOVERY_DAILY_OFFER` `Есть варианты восстановить лимит. Разрулим, бро.` — 1 фраза по правилу `Zone footer заменяется`
+- [x] ✅ `ruff --select F,I passed`, `pytest 357 passed`, финиш `4/4` с `бро` — норм (3 дня, `≈10%` утр)
 
 ### День 5: Dogfooding (после Hard clean)
 

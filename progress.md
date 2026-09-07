@@ -265,6 +265,9 @@ history.py 1, evening_flow.py 2) теперь вызывают её одной �
 **Поток:** `Fact → Recalc? (сколько реально денег) → Recovery? (временный план возможен? `days+7<=remaining`, `trigger 0.85`) → Normal`. `RECOVERY_ENABLED` — kill-switch, не бизнес-if: Recovery-aware morning/status имеют приоритет над legacy `simulated/cubby` (не `if enabled: suppress`).
 **Правила:** `recalc` после `apply_reconciliation` обязан вызвать `_handle_recovery_budget_change` `menu.py:98` → `complete` при `dl_pred>=0.90*B` или `shortened` при `new_days<old`; `dismissed` инвалидируется при `deficit≥0.5*B` / 3д / новый период, не при каждом `completed`; `tail=7` объяснить один раз `→ потом {baseline} ещё {tail}, чтобы оставить запас`; `NO_VALID_OPTIONS_TAIL` — только в telemetry. Кубышка: 15 фраз + 5 кнопок + 8 веток `morning_report.py:185`/`menu.py:527` удалены, БД `black_day_fund` nullable без дропа.
 
+### ADR-2: Zone=состояние, Recovery=действие (2026-09-07) — без кода
+**Фиксация без пуша:** зоны и код `pct>80 🟢/>=51 🔵/>=26 🟡/<26 🔴` `menu.py:546`/`morning_report.py:214` остаются без изменений. При `Recovery offer/active` `menu.py:611`/`morning_report.py:369` zone footer не показывается, вместо него Recovery footer `phrases.py:693,698`. Zone label всегда по `pct`, не зависит от Recovery. После `finished` — обычный footer. Только 1 фраза меняется: `RECOVERY_DAILY_OFFER` `phrases.py:698` `💡 Можно вернуть обычный лимит` → `💡 Есть варианты восстановить лимит. Сейчас: {dl_pred} ₽/день. Разрулим, бро.` План, не код.
+
 ## 📌 Feature Flags
 
 | Флаг | По умолчанию | Что контролирует |

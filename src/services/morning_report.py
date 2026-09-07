@@ -17,6 +17,18 @@ from .expense_service import get_current_period_expenses_sum, get_yesterday_expe
 logger = logging.getLogger(__name__)
 
 
+def _plural_days(n: int) -> str:
+    n = abs(n) % 100
+    n1 = n % 10
+    if 11 <= n <= 14:
+        return "дней"
+    if n1 == 1:
+        return "день"
+    if 2 <= n1 <= 4:
+        return "дня"
+    return "дней"
+
+
 def _build_recovery_morning_extra(tg_id: int) -> list[list[InlineKeyboardButton]] | None:
     if not settings.RECOVERY_ENABLED:
         return None
@@ -182,21 +194,22 @@ async def send_morning_reports(bot: Bot):
                     zone = "RED_DEAD"
                     btn_type = "FRESH_START"
 
+                days_text = f"{days_left} {_plural_days(days_left)}"
                 if zone == "END_EMPTY":
                     zone_text = random.choice(
                         [
-                            phrases.ZONE_END_EMPTY_1.format(days_left=days_left),
-                            phrases.ZONE_END_EMPTY_2.format(days_left=days_left),
+                            phrases.ZONE_END_EMPTY_1.format(days_text=days_text),
+                            phrases.ZONE_END_EMPTY_2.format(days_text=days_text),
                         ]
                     )
                 elif zone == "END_OK":
                     zone_text = random.choice(
                         [
                             phrases.ZONE_END_OK_1.format(
-                                days_left=days_left, money=int(money_for_life)
+                                days_text=days_text, money=int(money_for_life)
                             ),
                             phrases.ZONE_END_OK_2.format(
-                                days_left=days_left, money=int(money_for_life)
+                                days_text=days_text, money=int(money_for_life)
                             ),
                         ]
                     )
@@ -219,6 +232,7 @@ async def send_morning_reports(bot: Bot):
                         [
                             phrases.MORNING_YELLOW_SIM_NONE_1.format(limit=int(dl_pred)),
                             phrases.MORNING_YELLOW_SIM_NONE_2.format(limit=int(dl_pred)),
+                            phrases.MORNING_YELLOW_BUDGET_NERVOUS.format(limit=int(dl_pred)),
                         ]
                     )
                 else:
