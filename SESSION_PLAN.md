@@ -232,7 +232,7 @@
 > **Цель:** зафиксировать и починить 2 бага из dogfooding.
 
 - [x] ✅ **B1 recalc→Recovery не предложился (RECOVERY_ENABLED=true):** `101617 → 7816 ₽/день (B=10000, 13 дн.)` `menu.py:1966` `free_money=101617` → `invalidate_recovery_offer_context` `recovery_service.py:203` `dismissed=false/last=None` при любом `recalc` (новая реальность), пассивно — следующий `_build_status` `menu.py:611` покажет `RECOVERY_DAILY_OFFER` `phrases.py:698` `Разрулим, бро` если `calculate_recovery_options` валиден. `cooldown 3д/0.5*B` `recovery_service.py:146` остаётся для `Не сейчас` без `recalc`.
-- [x] ✅ **B2 вечер 22:00 `Посмотреть отчёт` молчит, 23:30 работает:** `evening_flow.py:125` `@callback show_final_evening_report + EveningState.filling` требовал `state==filling` — при потере FSM (рестарт) игнор → спиннер. Починено: `evening_flow.py:125` фильтр снят, внутри `get_state()` + `is_filling` лог fallback, `try/except/finally always callback.answer()` + `ERR_REPORT_FAILED` `phrases.py:62`, защита от stale-кнопки не через FSM, а через `container_id`/`auto-close`.
+- [x] ✅ **B2 вечер 22:00 `Посмотреть отчёт` молчит, 23:30 работает:** `evening_flow.py:125` `@callback show_final_evening_report + EveningState.filling` требовал `state==filling` — при потере FSM (рестарт) игнор → спиннер. Починено: `evening_flow.py:125` фильтр снят, внутри `get_state()` + `is_filling` лог fallback, `try/except/finally always callback.answer()` + `ERR_REPORT_FAILED` `phrases.py:62`, защита от stale — `msg_date != today` `get_msk_now()` → молча `edit_reply_markup(None)` + `state.clear()` без нового отчёта (лучше ничего не слать, чем не тот день).
 
 ---
 

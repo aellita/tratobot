@@ -127,6 +127,21 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
     try:
         current_state = await state.get_state()
         is_filling = current_state == EveningState.filling.state
+        # stale: кнопка старше текущего логического дня — молча убираем клавиатуру без нового отчёта
+        try:
+            msg_date = callback.message.date.date() if callback.message.date else None
+            today = get_msk_now().date()
+            if msg_date and msg_date != today:
+                logger.info(f"Evening stale button {msg_date} != {today}, silent close")
+                try:
+                    await callback.message.edit_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+                await state.clear()
+                await callback.answer()
+                return
+        except Exception:
+            pass
         if not is_filling:
             logger.info(f"Evening report callback without filling state {current_state}, fallback render")
         try:
