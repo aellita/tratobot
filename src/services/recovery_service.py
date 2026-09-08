@@ -200,6 +200,19 @@ async def dismiss_offer(telegram_id: int, deficit: float | Decimal) -> None:
         await session.commit()
 
 
+async def invalidate_recovery_offer_context(telegram_id: int) -> None:
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(RecoveryOfferState).where(RecoveryOfferState.telegram_id == telegram_id)
+        )
+        state = result.scalar_one_or_none()
+        if state:
+            state.dismissed = False
+            state.last_offer_at = None
+            state.last_offer_deficit = None
+            await session.commit()
+
+
 async def create_recovery(
     telegram_id: int,
     budget_id: int,

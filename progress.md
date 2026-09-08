@@ -436,3 +436,9 @@ parse_expr → parse_term → parse_factor
 **Нужно:** либо не дублировать описание, если оно совпадает с именем категории, либо убрать `cat_name` из префикса, если описание уже содержит его.
 
 **Связано:** эмодзи в итоговых отчётах (Monthly Summary) отображаются криво — в одних местах есть, в других нет. Единый формат отображения категории с эмодзи.
+
+### 🔴 B1: recalc→Recovery не предложился (2026-09-07) — ✅ Починено
+**Симптом:** `RECOVERY_ENABLED=true`, `101617 → 7816 ₽/день (B=10000, 13 дн.)` `reconcile` `menu.py:1966` → статус `🟢 В лимите ... Всё пучком` без Recovery, в `23:30` Recovery появился (`🧘 день 1 из 5`). **Корень:** `_handle_recovery_budget_change` `menu.py:98` не создаёт offer; `should_repeat_offer` `recovery_service.py:146` подавлен `dismissed=true`. **Решение (2026-09-07):** `recovery_service.py:203` `invalidate_recovery_offer_context` `dismissed=false/last=None` при любом `recalc` `menu.py:1966` (новая реальность), пассивно — следующий `_build_status` `menu.py:611` покажет `RECOVERY_DAILY_OFFER` `phrases.py:698`.
+
+### 🔴 B2: вечер 22:00 `Посмотреть отчёт` молчит (2026-09-07) — ✅ Починено
+**Симптом:** `22:00` `EveningState.filling` кнопка `show_report` молчит, `23:30` работает. **Корень:** `evening_flow.py:125` `@callback + EveningState.filling` требовал `state==filling`, при рестарте `state=None` → игнор. **Решение (2026-09-07):** `evening_flow.py:125` фильтр снят, внутри `get_state()` + `is_filling` fallback, `try/except/finally always callback.answer()` + `ERR_REPORT_FAILED` `phrases.py:62`, защита от stale через `container_id`/`auto-close`, не только FSM.

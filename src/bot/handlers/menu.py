@@ -1967,6 +1967,12 @@ async def save_recalc_balance(message: Message, state: FSMContext):
         message.from_user.id, total_balance
     )
     await apply_reconciliation(message.from_user.id, money_for_life)
+    from ...services.recovery_service import invalidate_recovery_offer_context
+
+    try:
+        await invalidate_recovery_offer_context(message.from_user.id)
+    except Exception:
+        pass
     await state.clear()
     await message.answer(
         text=phrases.RECALC_LIMIT_DONE.format(

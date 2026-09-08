@@ -122,58 +122,77 @@ async def handle_evening_expense(message: Message, state: FSMContext):
         pass
 
 
-@router.callback_query(F.data == "show_final_evening_report", EveningState.filling)
+@router.callback_query(F.data == "show_final_evening_report")
 async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-
     try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
+        current_state = await state.get_state()
+        is_filling = current_state == EveningState.filling.state
+        if not is_filling:
+            logger.info(f"Evening report callback without filling state {current_state}, fallback render")
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
 
-    user_id = callback.from_user.id
+        user_id = callback.from_user.id
 
-    spent = await get_today_expenses_sum(user_id)
-    budget = await get_active_budget(user_id)
+        spent = await get_today_expenses_sum(user_id)
+        budget = await get_active_budget(user_id)
 
-    if budget:
-        days_left = budget.days_remaining
-        if budget.free_money > 0:
-            total_available = budget.free_money
+        if budget:
+            days_left = budget.days_remaining
+            if budget.free_money > 0:
+                total_available = budget.free_money
+            else:
+                total_available = (
+                    budget.total_income - budget.mandatory_payments - budget.black_day_fund
+                )
+            period_spent = await get_current_period_expenses_sum(user_id)
+            available_cash = max(total_available - period_spent, 0)
+            limit = max(available_cash / max(days_left, 1), 0)
         else:
-            total_available = (
-                budget.total_income - budget.mandatory_payments - budget.black_day_fund
+            days_left = 1
+            available_cash = 0
+            limit = 0
+
+        if limit <= 0:
+            await callback.message.answer(
+                phrases.ERR_REPORT_FAILED,
+                reply_markup=await get_main_menu_keyboard(user_id),
             )
-        period_spent = await get_current_period_expenses_sum(user_id)
-        available_cash = max(total_available - period_spent, 0)
-        limit = max(available_cash / max(days_left, 1), 0)
-    else:
-        days_left = 1
-        available_cash = 0
-        limit = 0
+            await state.clear()
+            await callback.answer()
+            return
 
-    if limit <= 0:
-        await callback.message.answer(
-            phrases.ERR_REPORT_FAILED,
-            reply_markup=get_main_menu_keyboard(user_id),
+        text = get_evening_message(
+            limit=limit,
+            spent=spent,
+            available_cash=available_cash,
+            days_left=days_left,
         )
+
+        kb = None
+        if not settings.EXPENSE_SIMPLE_CHECK:
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
+                ]
+            )
+        await callback.message.answer(text, reply_markup=kb)
+
         await state.clear()
-        return
-
-    text = get_evening_message(
-        limit=limit,
-        spent=spent,
-        available_cash=available_cash,
-        days_left=days_left,
-    )
-
-    kb = None
-    if not settings.EXPENSE_SIMPLE_CHECK:
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=phrases.BTN_BACK_MAIN, callback_data="open_menu")],
-            ]
-        )
-    await callback.message.answer(text, reply_markup=kb)
-
-    await state.clear()
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Evening report finalize failed: {e}", exc_info=True)
+        try:
+            await callback.message.answer(
+                phrases.ERR_REPORT_FAILED,
+                reply_markup=await get_main_menu_keyboard(callback.from_user.id),
+            )
+            await state.clear()
+        except Exception:
+            pass
+        try:
+            await callback.answer()
+        except Exception:
+            pass
