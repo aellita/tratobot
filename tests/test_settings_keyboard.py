@@ -29,7 +29,7 @@ class TestAdvancedPlanningKeyboard:
         labels = _labels(get_advanced_planning_keyboard())
         assert "📌 Обязательные" in labels
         assert "🏦 Кубышка" not in labels
-        assert "🎯 Хотелка" in labels
+        assert "🎯 Хотелка" not in labels
 
     def test_has_no_rounding(self):
         labels = _labels(get_advanced_planning_keyboard())

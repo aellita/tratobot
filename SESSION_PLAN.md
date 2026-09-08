@@ -234,6 +234,15 @@
 - [x] ✅ **B1 recalc→Recovery не предложился (RECOVERY_ENABLED=true):** `101617 → 7816 ₽/день (B=10000, 13 дн.)` `menu.py:1966` `free_money=101617` → `invalidate_recovery_offer_context` `recovery_service.py:203` `dismissed=false/last=None` при любом `recalc` (новая реальность), пассивно — следующий `_build_status` `menu.py:611` покажет `RECOVERY_DAILY_OFFER` `phrases.py:698` `Разрулим, бро` если `calculate_recovery_options` валиден. `cooldown 3д/0.5*B` `recovery_service.py:146` остаётся для `Не сейчас` без `recalc`.
 - [x] ✅ **B2 вечер 22:00 `Посмотреть отчёт` молчит, 23:30 работает:** `evening_flow.py:125` `@callback show_final_evening_report + EveningState.filling` требовал `state==filling` — при потере FSM (рестарт) игнор → спиннер. Починено: `evening_flow.py:125` фильтр снят, внутри `get_state()` + `is_filling` лог fallback, `try/except/finally always callback.answer()` + `ERR_REPORT_FAILED` `phrases.py:62`, защита от stale — `msg_date != today` `get_msk_now()` → молча `edit_reply_markup(None)` + `state.clear()` без нового отчёта (лучше ничего не слать, чем не тот день).
 
+### День 5.8: Хотелка выпилена (2026-09-07) — ✅ Готово
+
+> **Цель:** выпилить Хотелку как сущность (1 юзер, 0 пользы за 2 мес, не в онбординге). Баг: `0` оставлял `Wishlist.current_amount 8023` `goal_service.py:20` → `Статус` `Хотелка 8,023` и `Хотелка не уходит` при `0`.
+
+- [x] ✅ `phrases.py` — удалён `BTN_WISHLIST`, `WISHLIST_EDIT_PROMPT`, `WISHLIST_SAVED`, `ROLLOVER_CARRIED_WISHLIST`, `STATUS_RESERVE_WISHLIST`; `ADVANCED_PLANNING_TITLE` без `🎯 {wishlist}`, `SAVINGS_UPDATED` оставлен для `save_black_day` совместимости
+- [x] ✅ `keyboards.py:85` `get_advanced_planning_keyboard` 1 кнопка `Обязательные` + `Назад` (без Хотелки)
+- [x] ✅ `menu.py:557,2015,2228` — `_build_status` без `wishlist_amount`/`STATUS_RESERVE_WISHLIST`, `_render_advanced_planning` без `wishlist`, `adv_wishlist/edit_wishlist` заглушки, `save_wishlist` `invalidate` `Wishlist` `is_active=false/current=0` + `Budget.wishlist_*`, `tests/test_settings_keyboard.py:32` `Хотелка not in labels`
+- [x] ✅ `ruff --select F,I passed`, `pytest 357 passed`, `Хотелка 0` → скрыта из `Резервов`
+
 ---
 
 ## Неделя 2 — AI Insight

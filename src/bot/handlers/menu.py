@@ -44,7 +44,6 @@ from ...services.expense_service import (
     get_today_expenses_sum,
     parse_multi_expense_text,
 )
-from ...services.goal_service import get_goal_current_amount
 from ...services.user_service import get_or_create_user
 from ...utils import phrases
 from ...utils.helpers import build_category_name, get_msk_now, get_user_now, parse_amount, safe
@@ -554,8 +553,6 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         zone_emoji = "🔴"
         zone_label = phrases.STATUS_ZONE_CRITICAL
 
-    wishlist_amount = await get_goal_current_amount(tg_id)
-
     if remaining_today > 0:
         today_line = phrases.STATUS_REMAINING_FREE.format(amount=f"{int(remaining_today):,}")
     else:
@@ -574,10 +571,6 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if budget.mandatory_payments:
         reserve_parts.append(
             phrases.STATUS_RESERVE_MANDATORY.format(amount=f"{int(budget.mandatory_payments):,}")
-        )
-    if wishlist_amount:
-        reserve_parts.append(
-            phrases.STATUS_RESERVE_WISHLIST.format(amount=f"{int(wishlist_amount):,}")
         )
 
     reserves_block = ""
@@ -2012,11 +2005,8 @@ async def _render_advanced_planning(telegram_id: int) -> tuple[str, InlineKeyboa
     if not budget:
         return phrases.NO_BUDGET_SETTINGS, await get_main_menu_keyboard(telegram_id)
 
-    wishlist_name = safe(budget.wishlist_name or phrases.DEFAULT_WISHLIST_NAME)
     text = phrases.ADVANCED_PLANNING_TITLE.format(
         mandatory=f"{budget.mandatory_payments:,.0f}",
-        wishlist=wishlist_name,
-        target=f"{budget.wishlist_target:,.0f}",
     )
     return text, get_advanced_planning_keyboard()
 
@@ -2061,8 +2051,9 @@ async def adv_black_day(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "adv_wishlist")
 async def adv_wishlist(callback: CallbackQuery, state: FSMContext):
-    _from_advanced_planning.add(callback.from_user.id)
-    await edit_wishlist(callback, state)
+    await callback.answer()
+    text, kb = await _render_advanced_planning(callback.from_user.id)
+    await callback.message.edit_text(text=text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "edit_mandatory")
@@ -2086,10 +2077,8 @@ async def edit_black_day(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "edit_wishlist")
 async def edit_wishlist(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    await state.set_state(EditBudget.waiting_for_wishlist)
-    await callback.message.edit_text(
-        text=phrases.WISHLIST_EDIT_PROMPT, reply_markup=get_cancel_keyboard()
-    )
+    text, kb = await _render_advanced_planning(callback.from_user.id)
+    await callback.message.edit_text(text=text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "edit_period_start")
@@ -2228,8 +2217,25 @@ async def save_wishlist(message: Message, state: FSMContext):
 
     await update_budget_field(message.from_user.id, "wishlist_name", name)
     await update_budget_field(message.from_user.id, "wishlist_target", price)
+    # full removal: also clear Wishlist table so status hides
+    try:
+        async with async_session_maker() as session:
+            from sqlalchemy import select as _select
 
-    user_name = safe(message.from_user.first_name or "")
+            from ...db.models.models import Wishlist as _Wishlist
+
+            result = await session.execute(
+                _select(_Wishlist).where(
+                    _Wishlist.telegram_id == message.from_user.id, _Wishlist.is_active == True
+                )
+            )
+            for w in result.scalars().all():
+                w.current_amount = 0
+                w.target_amount = 0
+                w.is_active = False
+            await session.commit()
+    except Exception:
+        pass
 
     if message.from_user.id in _from_advanced_planning:
         _from_advanced_planning.discard(message.from_user.id)
@@ -2237,13 +2243,9 @@ async def save_wishlist(message: Message, state: FSMContext):
         text, kb = await _render_advanced_planning(message.from_user.id)
         await message.answer(text=text, reply_markup=kb)
     else:
-        await message.answer(
-            text=phrases.WISHLIST_SAVED.format(
-                name=user_name, wishlist=safe(name), price=f"{price:,.0f}"
-            ),
-            reply_markup=await get_main_menu_keyboard(message.from_user.id),
-        )
         await state.clear()
+        text, kb = await _render_advanced_planning(message.from_user.id)
+        await message.answer(text=text, reply_markup=kb)
 
 
 # ============ ROUNDING MODE SETTINGS ============

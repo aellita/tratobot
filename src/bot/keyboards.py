@@ -85,7 +85,6 @@ def get_settings_keyboard():
 def get_advanced_planning_keyboard():
     buttons = [
         [InlineKeyboardButton(text=phrases.BTN_MANDATORY, callback_data="adv_mandatory")],
-        [InlineKeyboardButton(text=phrases.BTN_WISHLIST, callback_data="adv_wishlist")],
         [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_settings")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
