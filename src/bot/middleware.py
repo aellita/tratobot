@@ -12,11 +12,22 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 
 logger = logging.getLogger(__name__)
 
-# ── Global keyboard tracking cache (chat_id → message_id) ──────────────
+# ── Global keyboard tracking cache (chat_id → set[message_id]) ──────────
+# Stores up to 5 recent inline keyboards per chat so that concurrent
+# sends (e.g. morning 08:00 + status) don't overwrite each other.
 # Entries are removed on pop() when the user's next action triggers
 # KeyboardCleanupMiddleware, so no TTL is needed.
 
-_last_keyboard: dict[int, int] = {}
+_last_keyboard: dict[int, set[int]] = {}
+_locks: dict[int, asyncio.Lock] = {}
+
+
+def _get_lock(chat_id: int) -> asyncio.Lock:
+    lock = _locks.get(chat_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _locks[chat_id] = lock
+    return lock
 
 
 class KeyboardCleanupMiddleware(BaseMiddleware):
@@ -40,8 +51,10 @@ class KeyboardCleanupMiddleware(BaseMiddleware):
             chat_id = event.message.chat.id
 
         if chat_id is not None:
-            msg_id = _last_keyboard.pop(chat_id, None)
-            if msg_id is not None:
+            lock = _get_lock(chat_id)
+            async with lock:
+                mids = _last_keyboard.pop(chat_id, set())
+            for msg_id in mids:
                 try:
                     await bot.edit_message_reply_markup(
                         chat_id=chat_id, message_id=msg_id, reply_markup=None
@@ -79,7 +92,13 @@ class AutoTrackOutgoingMiddleware(BaseRequestMiddleware):
         if isinstance(msg, Message) and msg.reply_markup:
             inline_kb = getattr(msg.reply_markup, "inline_keyboard", None)
             if inline_kb:
-                _last_keyboard[msg.chat.id] = msg.message_id
+                lock = _get_lock(msg.chat.id)
+                async with lock:
+                    s = _last_keyboard.setdefault(msg.chat.id, set())
+                    s.add(msg.message_id)
+                    if len(s) > 5:
+                        # keep most recent 5, drop oldest arbitrary
+                        s.pop()
 
         return response
 

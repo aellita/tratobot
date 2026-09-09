@@ -10,7 +10,7 @@ from typing import Any
 
 import aiohttp
 
-from .middleware import _last_keyboard
+from .middleware import _get_lock, _last_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +32,28 @@ async def edit_rich_message(
         payload["reply_markup"] = reply_markup.model_dump(exclude_none=True)
     result = await _post(url, payload)
     if result is not None and _has_inline_keyboard(reply_markup):
-        old_msg_id = _last_keyboard.pop(chat_id, None)
-        if old_msg_id is not None and old_msg_id != message_id:
+        lock = _get_lock(chat_id)
+        old_mids: set[int] = set()
+        async with lock:
+            s = _last_keyboard.setdefault(chat_id, set())
+            old_mids = set(s)
+            s.add(message_id)
+            if len(s) > 5:
+                s.pop()
+            old_mids.discard(message_id)
+        for old_id in old_mids:
             try:
                 await bot.edit_message_reply_markup(
-                    chat_id=chat_id, message_id=old_msg_id, reply_markup=None
+                    chat_id=chat_id, message_id=old_id, reply_markup=None
                 )
             except Exception:
                 pass
-        _last_keyboard[chat_id] = message_id
+        async with lock:
+            # ensure old are removed after edit
+            s = _last_keyboard.get(chat_id)
+            if s is not None:
+                for oid in old_mids:
+                    s.discard(oid)
     return result
 
 
@@ -61,15 +74,27 @@ async def send_rich_message(
     if result is not None and _has_inline_keyboard(reply_markup):
         msg_id = result.get("message_id")
         if msg_id:
-            old_msg_id = _last_keyboard.pop(chat_id, None)
-            if old_msg_id is not None and old_msg_id != msg_id:
+            lock = _get_lock(chat_id)
+            old_mids: set[int] = set()
+            async with lock:
+                s = _last_keyboard.setdefault(chat_id, set())
+                old_mids = set(s)
+                s.add(msg_id)
+                if len(s) > 5:
+                    s.pop()
+                old_mids.discard(msg_id)
+            for old_id in old_mids:
                 try:
                     await bot.edit_message_reply_markup(
-                        chat_id=chat_id, message_id=old_msg_id, reply_markup=None
+                        chat_id=chat_id, message_id=old_id, reply_markup=None
                     )
                 except Exception:
                     pass
-            _last_keyboard[chat_id] = msg_id
+            async with lock:
+                s = _last_keyboard.get(chat_id)
+                if s is not None:
+                    for oid in old_mids:
+                        s.discard(oid)
     return result
 
 
