@@ -113,7 +113,7 @@ def should_offer_recovery(
 def check_success(
     dl_pred: float | Decimal,
     baseline: float | Decimal,
-    success_ratio: float | Decimal = Decimal("0.90"),
+    success_ratio: float | Decimal = Decimal("1.00"),
 ) -> bool:
     return _to_decimal(dl_pred) >= _to_decimal(baseline) * _to_decimal(success_ratio)
 

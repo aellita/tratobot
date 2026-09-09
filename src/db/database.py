@@ -29,6 +29,7 @@ ALLOWED_COLUMNS = {
     "period_start_day",
     "rounding_mode",
     "free_money",
+    "spent_at_recalc",
     "is_archived",
     "report_type",
     "sent_date",
@@ -211,6 +212,15 @@ async def migrate_schema():
                     text("ALTER TABLE budgets ADD COLUMN base_daily_limit REAL DEFAULT NULL")
                 )
             logger.info("Migrated budgets: added base_daily_limit")
+
+        if not await _has_column(conn, "budgets", "spent_at_recalc"):
+            if is_postgres:
+                await conn.execute(
+                    text("ALTER TABLE budgets ADD COLUMN spent_at_recalc FLOAT DEFAULT 0")
+                )
+            else:
+                await conn.execute(text("ALTER TABLE budgets ADD COLUMN spent_at_recalc REAL DEFAULT 0"))
+            logger.info("Migrated budgets: added spent_at_recalc")
 
         # Recovery tables (create if not exists via raw SQL for cross-DB compatibility)
         if is_postgres:

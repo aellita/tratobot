@@ -93,6 +93,7 @@ async def save_budget(
             budget.wishlist_target = wishlist_price
             budget.period_start_day = period_start_day
             budget.free_money = free_money
+            budget.spent_at_recalc = 0
             budget.base_daily_limit = base_limit
         else:
             budget = Budget(
@@ -105,6 +106,7 @@ async def save_budget(
                 wishlist_target=wishlist_price,
                 period_start_day=period_start_day,
                 free_money=free_money,
+                spent_at_recalc=0,
                 base_daily_limit=base_limit,
             )
             session.add(budget)
@@ -117,6 +119,7 @@ ALLOWED_FIELDS = {
     "mandatory_payments",
     "black_day_fund",
     "free_money",
+    "spent_at_recalc",
     "wishlist_name",
     "wishlist_target",
     "period_start_day",
@@ -186,12 +189,29 @@ async def reconcile_budget_with_reality(
     )
 
 
+def _current_money_for_life(budget: Budget, spent_period: float) -> float:
+    if budget.free_money > 0:
+        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
+        new_spent = max(spent_period - spent_at, 0)
+        return max(float(budget.free_money) - new_spent, 0)
+    return max(
+        float(budget.total_income)
+        - float(budget.mandatory_payments)
+        - float(spent_period),
+        0,
+    )
+
+
 async def apply_reconciliation(
     telegram_id: int,
     free_money: float,
     new_mandatory: float | None = None,
     new_black_day: float | None = None,
 ) -> None:
+    from sqlalchemy import func as _func
+
+    from ..services.monthly_report import get_period_dates as _get_period_dates
+
     today = get_msk_now()
     this_month = today.strftime("%Y-%m")
     last_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
@@ -216,7 +236,22 @@ async def apply_reconciliation(
                 break
         if not budget:
             return
+        # snapshot spent_at_recalc atomically with free_money
+        period_start, period_end = _get_period_dates(budget)
+        next_day = period_end + timedelta(days=1)
+        from ..db.models.models import Expense as _Expense
+
+        spent_res = await session.execute(
+            select(_func.sum(_Expense.amount)).where(
+                _Expense.telegram_id == telegram_id,
+                _Expense.is_deleted == False,
+                _Expense.date >= period_start,
+                _Expense.date < next_day,
+            )
+        )
+        spent_at = float(spent_res.scalar() or 0)
         budget.free_money = free_money
+        budget.spent_at_recalc = spent_at
         if new_mandatory is not None:
             budget.mandatory_payments = new_mandatory
         if new_black_day is not None:

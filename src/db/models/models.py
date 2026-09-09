@@ -55,6 +55,7 @@ class Budget(Base):
     wishlist_target: Mapped[float] = mapped_column(Float, default=0)
     period_start_day: Mapped[int] = mapped_column(Integer, default=1)
     free_money: Mapped[float] = mapped_column(Float, default=0)
+    spent_at_recalc: Mapped[float] = mapped_column(Float, default=0)
     base_daily_limit: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now)

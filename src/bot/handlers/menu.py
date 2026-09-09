@@ -520,9 +520,13 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     dl_base = budget.daily_limit
 
     if budget.free_money > 0:
-        money_for_life = budget.free_money
+        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
+        new_spent = max(spent_period - spent_at, 0)
+        money_for_life = max(float(budget.free_money) - new_spent, 0)
     else:
-        money_for_life = budget.total_income - budget.mandatory_payments - spent_period
+        money_for_life = max(
+            float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period), 0
+        )
 
     dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
     pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0
@@ -579,14 +583,73 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             reserve_parts
         )
 
-    text = (
-        f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_emoji} {zone_label}\n\n"
-        f"<b>{phrases.STATUS_TODAY_TITLE}</b>\n"
-        f"{today_line} · {spent_line}{expenses_block}\n\n"
-        f"<b>{phrases.STATUS_PERIOD_TITLE.format(end=period_end_str, days=days_left)}</b>\n"
-        f"{phrases.STATUS_REMAINING_PERIOD.format(amount=f'{int(remaining_period):,}', limit=f'{int(dl_pred):,}')}"
-        f"{reserves_block}"
-    )
+    # fetch recovery early for UI priority (Zone footer hidden when offer/active)
+    _recovery_active = None
+    _recovery_offer = False
+    if settings.RECOVERY_ENABLED and budget:
+        try:
+            from ...services.budget_service import resolve_frozen_baseline as _resolve
+            from ...services.recovery_service import (
+                calculate_recovery_options as _calc_opts,
+            )
+            from ...services.recovery_service import (
+                get_active_recovery as _gar,
+            )
+            from ...services.recovery_service import (
+                get_offer_state as _gos,
+            )
+            from ...services.recovery_service import (
+                should_repeat_offer as _sro,
+            )
+
+            _recovery_active = await _gar(tg_id)
+            if _recovery_active is None:
+                _b_val_tmp = await _resolve(budget)
+                _opts_tmp = _calc_opts(_b_val_tmp, money_for_life, days_left)
+                if _opts_tmp:
+                    _offer_state_tmp = await _gos(tg_id)
+                    _should = True
+                    if _offer_state_tmp and _offer_state_tmp.dismissed and _offer_state_tmp.last_offer_at:
+                        _days_since = (get_user_now().date() - _offer_state_tmp.last_offer_at.date()).days
+                        _cur_def = max(_b_val_tmp * days_left - money_for_life, 0)
+                        if not _sro(_offer_state_tmp.last_offer_deficit, _cur_def, _b_val_tmp, _days_since):
+                            _should = False
+                    if _should:
+                        _recovery_offer = True
+        except Exception:
+            pass
+
+    # today line: if active, use target
+    if _recovery_active is not None:
+        _target_int = int(_recovery_active.target)
+        _rem_target = max(_target_int - int(spent_today), 0)
+        if _rem_target > 0:
+            today_line = phrases.STATUS_REMAINING_FREE.format(amount=f"{_rem_target:,}")
+        else:
+            today_line = phrases.STATUS_REMAINING_ZERO
+        _cur_day_tmp = (get_user_now().date() - _recovery_active.started_at.date()).days + 1
+        _cur_day_tmp = max(_cur_day_tmp, 1)
+        _recovery_header = f"🧘 Восстановление · день {_cur_day_tmp} из {_recovery_active.total_days}\n<b>Лимит на сегодня: {_target_int} ₽</b>"
+        _after_restoration = f"\n\nПосле восстановления — обычный лимит {int(_recovery_active.baseline)} ₽/день."
+        text = (
+            f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_emoji} {zone_label}\n\n"
+            f"<b>{phrases.STATUS_TODAY_TITLE}</b>\n"
+            f"{_recovery_header}\n"
+            f"{today_line} · {spent_line}{expenses_block}"
+            f"{_after_restoration}\n\n"
+            f"<b>{phrases.STATUS_PERIOD_TITLE.format(end=period_end_str, days=days_left)}</b>\n"
+            f"{phrases.STATUS_REMAINING_PERIOD.format(amount=f'{int(remaining_period):,}', limit=f'{int(dl_pred):,}')} · Прогноз: {int(dl_pred):,}\n"
+            f"{reserves_block}"
+        )
+    else:
+        text = (
+            f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_emoji} {zone_label}\n\n"
+            f"<b>{phrases.STATUS_TODAY_TITLE}</b>\n"
+            f"{today_line} · {spent_line}{expenses_block}\n\n"
+            f"<b>{phrases.STATUS_PERIOD_TITLE.format(end=period_end_str, days=days_left)}</b>\n"
+            f"{phrases.STATUS_REMAINING_PERIOD.format(amount=f'{int(remaining_period):,}', limit=f'{int(dl_pred):,}')}"
+            f"{reserves_block}"
+        )
 
     recovery_block = ""
     recovery_kb_extra: InlineKeyboardMarkup | None = None
@@ -600,7 +663,9 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
                 should_repeat_offer,
             )
 
-            active = await get_active_recovery(tg_id)
+            active = _recovery_active
+            if active is None:
+                active = await get_active_recovery(tg_id)
             if active:
                 cur_day = (get_user_now().date() - active.started_at.date()).days + 1
                 cur_day = max(cur_day, 1)
@@ -636,8 +701,11 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if recovery_block:
         text += recovery_block
 
-    footer = ""
-    if end_of_period:
+    # Zone footer hidden when recovery offer/active (priority B)
+    if _recovery_active is not None or _recovery_offer:
+        footer = "Идём по плану 👍"
+        btns = "REGULAR"
+    elif end_of_period:
         if money_for_life <= 0:
             footer = random.choice(
                 [
@@ -757,9 +825,12 @@ async def recovery_show_options(callback: CallbackQuery):
         )
         spent_period = result.scalar() or 0
     if budget.free_money > 0:
-        money_for_life = budget.free_money
+        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
+        money_for_life = max(float(budget.free_money) - max(spent_period - spent_at, 0), 0)
     else:
-        money_for_life = budget.total_income - budget.mandatory_payments - spent_period
+        money_for_life = max(
+            float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period), 0
+        )
     opts = calculate_recovery_options(b_val, money_for_life, days_left)
     if not opts:
         await callback.answer(phrases.RECOVERY_PERIOD_END, show_alert=True)
@@ -848,9 +919,12 @@ async def recovery_choose(callback: CallbackQuery):
         )
         spent_period = result.scalar() or 0
     if budget.free_money > 0:
-        money_for_life = budget.free_money
+        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
+        money_for_life = max(float(budget.free_money) - max(spent_period - spent_at, 0), 0)
     else:
-        money_for_life = budget.total_income - budget.mandatory_payments - spent_period
+        money_for_life = max(
+            float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period), 0
+        )
     opts = calculate_recovery_options(b_val, money_for_life, days_left)
     chosen = next((o for o in opts if o.level == level), None)
     if not chosen:
@@ -943,9 +1017,12 @@ async def recovery_dismiss(callback: CallbackQuery):
         )
         spent_period = result.scalar() or 0
     if budget.free_money > 0:
-        money_for_life = budget.free_money
+        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
+        money_for_life = max(float(budget.free_money) - max(spent_period - spent_at, 0), 0)
     else:
-        money_for_life = budget.total_income - budget.mandatory_payments - spent_period
+        money_for_life = max(
+            float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period), 0
+        )
     deficit = max(b_val * days_left - money_for_life, 0)
     await dismiss_offer(tg_id, deficit)
     await callback.message.edit_text(

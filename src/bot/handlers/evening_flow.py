@@ -156,15 +156,25 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
 
         if budget:
             days_left = budget.days_remaining
-            if budget.free_money > 0:
-                total_available = budget.free_money
-            else:
-                total_available = (
-                    budget.total_income - budget.mandatory_payments - budget.black_day_fund
-                )
             period_spent = await get_current_period_expenses_sum(user_id)
-            available_cash = max(total_available - period_spent, 0)
-            limit = max(available_cash / max(days_left, 1), 0)
+            if budget.free_money > 0:
+                spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
+                total_available = max(float(budget.free_money) - max(period_spent - spent_at, 0), 0)
+            else:
+                total_available = max(
+                    float(budget.total_income)
+                    - float(budget.mandatory_payments)
+                    - float(budget.black_day_fund),
+                    0,
+                )
+                available_cash = max(total_available - period_spent, 0)
+                limit = max(available_cash / max(days_left, 1), 0)
+            if budget.free_money > 0:
+                available_cash = max(float(total_available), 0)
+                limit = max(available_cash / max(days_left, 1), 0)
+            else:
+                available_cash = max(total_available - period_spent, 0)
+                limit = max(available_cash / max(days_left, 1), 0)
         else:
             days_left = 1
             available_cash = 0

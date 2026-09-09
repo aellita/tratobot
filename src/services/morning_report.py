@@ -155,9 +155,15 @@ async def send_morning_reports(bot: Bot):
                 dl_base = budget.daily_limit
 
                 if budget.free_money > 0:
-                    money_for_life = budget.free_money
+                    spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
+                    money_for_life = max(float(budget.free_money) - max(spent_period - spent_at, 0), 0)
                 else:
-                    money_for_life = budget.total_income - budget.mandatory_payments - spent_period
+                    money_for_life = max(
+                        float(budget.total_income)
+                        - float(budget.mandatory_payments)
+                        - float(spent_period),
+                        0,
+                    )
 
                 dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
                 pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0

@@ -237,13 +237,17 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                 )
                                 spent_period = result.scalar() or 0
                             if budget.free_money > 0:
-                                money_for_life = budget.free_money
+                                spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
+                                money_for_life = max(
+                                    float(budget.free_money) - max(spent_period - spent_at, 0), 0
+                                )
                             else:
-                                money_for_life = (
-                                    budget.total_income
-                                    - budget.mandatory_payments
-                                    - budget.black_day_fund
-                                    - spent_period
+                                money_for_life = max(
+                                    float(budget.total_income)
+                                    - float(budget.mandatory_payments)
+                                    - float(budget.black_day_fund)
+                                    - float(spent_period),
+                                    0,
                                 )
                             days_left = budget.days_remaining
                             old_days = active.total_days

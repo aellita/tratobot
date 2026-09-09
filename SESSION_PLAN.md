@@ -244,6 +244,17 @@
 - [x] ✅ `menu.py:557,2015,2228` — `_build_status` без `wishlist_amount`/`STATUS_RESERVE_WISHLIST`, `_render_advanced_planning` без `wishlist`, `adv_wishlist/edit_wishlist` заглушки, `save_wishlist` `invalidate` `Wishlist` `is_active=false/current=0` + `Budget.wishlist_*`, `tests/test_settings_keyboard.py:32` `Хотелка not in labels`
 - [x] ✅ `ruff --select F,I passed`, `pytest 357 passed`, `Хотелка 0` → скрыта из `Резервов`
 
+### День 5.9: Остаток/Лимит snapshot + Recovery 100% + Дневной лимит Recovery — ✅ Готово (2026-09-07) — 1 коммит
+
+> **Цель:** починить `Остаток 101617/Лимит 9237` не меняется после `recalc` + `Recovery` `90%→100%` + `Дневной лимит` в `Recovery` с `Лимит на сегодня` `menu.py:530`.
+
+- [x] ✅ `models.py:57` `Budget.spent_at_recalc Float 0` + `database.py:13,184` `ALLOWED_COLUMNS` + миграция `spent_at_recalc REAL/FLOAT` — `free_money` snapshot + `c было`
+- [x] ✅ `budget_service.py:189` `apply_reconciliation` атомарно `free_money + spent_at_recalc = spent_period` `budget_service.py:167` `reconcile`, `save_budget` `spent_at_recalc=0`, `_current_money_for_life` `free - max(spent - spent_at,0)` — единая `max(...,0)`
+- [x] ✅ `menu.py:525,morning_report.py:145,evening_flow.py:142,evening_report.py:239,menu.py:763,854,949` — везде `if free>0: spent_at → money` иначе `income-mandatory-spent`, `evening_flow` `available_cash` уже `money`, `evening_report` `deficit` через новую `money`
+- [x] ✅ `recovery_service.py:114` `check_success 0.90→1.00` `Decimal("1.00")`, `morning_report.py:253` уже без кода
+- [x] ✅ `menu.py:580` `_build_status` `if active: dt=target 6000, free=max(target-spent_today,0) 950` порядок `БАЛАНС·🟢` / `Сегодня` / `🧘 день 1/5` + `Лимит на сегодня: 6000` / `Свободно 950·Потрачено 5050` / `После восстановления — 10000` / `Период Остаток·Прогноз 8468` `dl_pred`, `footer` скрывать когда `recovery_offer/active` → `Идём по плану 👍` reuse `RECOVERY_DAILY_ACTIVE` `phrases.py:690`
+- [x] ✅ `ruff --select F,I passed`, `pytest 357 passed`, `Остаток` теперь `101617-3700=97917` падает, `Лимит` `97917/12` движется, `evening_flow` без двойного минуса
+
 ---
 
 ## Неделя 2 — AI Insight
