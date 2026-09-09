@@ -253,7 +253,8 @@
 - [x] ✅ `evening_flow.py:157` `finalize_evening_report` — схлопнут дубль `if free>0` (две ветки `total_available`+`available_cash` → `money_for_life`+`get_daily_pred`), удалён `black_day`, `get_current_period_expenses_sum`→`get_period_spent`
 - [x] ✅ `morning_report.py:149` + `evening_report.py:228` — через канон, `else` без `black_day`, `evening_report.py:229` `__import__("datetime")`→`timedelta` import, `morning_report` убран `get_current_period_expenses_sum`
 - [x] ✅ `models.py:58`+`database.py:216` `spent_at_recalc REAL/FLOAT` уже были, инварианты закреплены: `reconcile`→preview, `apply_reconciliation`→commit `free+spent_at`; `recovery 1.00` без изменений
-- [x] ✅ `ruff --select F passed` (`E501` 28 оставлено), `pytest 357 passed`, сценарии: `101617-(1540-1240)=101317` после `+300`, `101617-(4940-1240)=97917` контекст, `free==0 → income-mandatory-spent`
+- [x] ✅ `budget_service.py:96` `save_budget UPDATE` больше не зануляет `spent_at_recalc` (только `INSERT 109` `default 0`) — `39efc3d` 1 удаление, сохраняет `free+spent_at=192546` после `Recalc B`, `rollover/mandatory` не ломают снапшот, `free==0 → income-mandatory-spent`
+- [x] ✅ `ruff --select F passed` (`E501` 28 оставлено), `pytest 357 passed`, сценарии: `101617-(1540-1240)=101317` после `+300`, `101617-(4940-1240)=97917` контекст, факт `X → X` после `Recalc B` (`X - (192546-192546)=X`)
 
 ---
 
