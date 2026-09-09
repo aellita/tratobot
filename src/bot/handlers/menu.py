@@ -520,9 +520,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     dl_base = budget.daily_limit
 
     if budget.free_money > 0:
-        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
-        new_spent = max(spent_period - spent_at, 0)
-        money_for_life = max(float(budget.free_money) - new_spent, 0)
+        money_for_life = float(budget.free_money)
     else:
         money_for_life = max(
             float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period), 0
@@ -825,12 +823,9 @@ async def recovery_show_options(callback: CallbackQuery):
         )
         spent_period = result.scalar() or 0
     if budget.free_money > 0:
-        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
-        money_for_life = max(float(budget.free_money) - max(spent_period - spent_at, 0), 0)
+        money_for_life = float(budget.free_money)
     else:
-        money_for_life = max(
-            float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period), 0
-        )
+        money_for_life = float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period)
     opts = calculate_recovery_options(b_val, money_for_life, days_left)
     if not opts:
         await callback.answer(phrases.RECOVERY_PERIOD_END, show_alert=True)
