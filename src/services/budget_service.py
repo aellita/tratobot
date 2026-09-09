@@ -93,7 +93,6 @@ async def save_budget(
             budget.wishlist_target = wishlist_price
             budget.period_start_day = period_start_day
             budget.free_money = free_money
-            budget.spent_at_recalc = 0
             budget.base_daily_limit = base_limit
         else:
             budget = Budget(
