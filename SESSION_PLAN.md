@@ -244,16 +244,16 @@
 - [x] ✅ `menu.py:557,2015,2228` — `_build_status` без `wishlist_amount`/`STATUS_RESERVE_WISHLIST`, `_render_advanced_planning` без `wishlist`, `adv_wishlist/edit_wishlist` заглушки, `save_wishlist` `invalidate` `Wishlist` `is_active=false/current=0` + `Budget.wishlist_*`, `tests/test_settings_keyboard.py:32` `Хотелка not in labels`
 - [x] ✅ `ruff --select F,I passed`, `pytest 357 passed`, `Хотелка 0` → скрыта из `Резервов`
 
-### День 5.9: Остаток/Лимит snapshot + Recovery 100% + Дневной лимит Recovery — ✅ Готово (2026-09-07) — 1 коммит
+### День 5.9: Остаток/Лимит snapshot-канон (основательный, без костыля) — ✅ Готово (2026-09-09) — 1 коммит
 
-> **Цель:** починить `Остаток 101617/Лимит 9237` не меняется после `recalc` + `Recovery` `90%→100%` + `Дневной лимит` в `Recovery` с `Лимит на сегодня` `menu.py:530`.
+> **Цель:** починить `Остаток 101617/Лимит 9237` застыл после `c5cb187` отката + ввести единый канон snapshot без `getattr`/`black_day`/дублей. `get_money_for_life`/`get_period_spent`/`get_daily_pred` + `get_period_dates` единственный источник границ `[period_start, next_day)`.
 
-- [x] ✅ `models.py:57` `Budget.spent_at_recalc Float 0` + `database.py:13,184` `ALLOWED_COLUMNS` + миграция `spent_at_recalc REAL/FLOAT` — `free_money` snapshot + `c было`
-- [x] ✅ `budget_service.py:189` `apply_reconciliation` атомарно `free_money + spent_at_recalc = spent_period` `budget_service.py:167` `reconcile`, `save_budget` `spent_at_recalc=0`, `_current_money_for_life` `free - max(spent - spent_at,0)` — единая `max(...,0)`
-- [x] ✅ `menu.py:525,morning_report.py:145,evening_flow.py:142,evening_report.py:239,menu.py:763,854,949` — везде `if free>0: spent_at → money` иначе `income-mandatory-spent`, `evening_flow` `available_cash` уже `money`, `evening_report` `deficit` через новую `money`
-- [x] ✅ `recovery_service.py:114` `check_success 0.90→1.00` `Decimal("1.00")`, `morning_report.py:253` уже без кода
-- [x] ✅ `menu.py:580` `_build_status` `if active: dt=target 6000, free=max(target-spent_today,0) 950` порядок `БАЛАНС·🟢` / `Сегодня` / `🧘 день 1/5` + `Лимит на сегодня: 6000` / `Свободно 950·Потрачено 5050` / `После восстановления — 10000` / `Период Остаток·Прогноз 8468` `dl_pred`, `footer` скрывать когда `recovery_offer/active` → `Идём по плану 👍` reuse `RECOVERY_DAILY_ACTIVE` `phrases.py:690`
-- [x] ✅ `ruff --select F,I passed`, `pytest 357 passed`, `Остаток` теперь `101617-3700=97917` падает, `Лимит` `97917/12` движется, `evening_flow` без двойного минуса
+- [x] ✅ `budget_service.py:192` `get_money_for_life(budget, spent_period)=free-max(spent-spent_at,0) if free>0 else income-mandatory-spent` (прямой `budget.spent_at_recalc`, без `getattr`, `black_day` исключён, сохраняет `_current_money_for_life` alias), `get_daily_pred(money,days)` чистая, `get_period_spent(telegram_id,budget)` через `monthly_report.get_period_dates` полуинтервал — единый источник `spent_period`
+- [x] ✅ `menu.py:97` `_handle_recovery_budget_change` + `486` `_build_status` + `765` `recovery_show_options` + `844` `recovery:chouse` + `930` `recovery:dismiss` — везде через канон, убран дубль `if free>0`/`getattr`/`black_day`, `_build_status` `584/652` дубль `get_active_recovery`/`resolve_frozen_baseline` схлопнут в один fetch с reuse `_recovery_active/_recovery_offer`
+- [x] ✅ `evening_flow.py:157` `finalize_evening_report` — схлопнут дубль `if free>0` (две ветки `total_available`+`available_cash` → `money_for_life`+`get_daily_pred`), удалён `black_day`, `get_current_period_expenses_sum`→`get_period_spent`
+- [x] ✅ `morning_report.py:149` + `evening_report.py:228` — через канон, `else` без `black_day`, `evening_report.py:229` `__import__("datetime")`→`timedelta` import, `morning_report` убран `get_current_period_expenses_sum`
+- [x] ✅ `models.py:58`+`database.py:216` `spent_at_recalc REAL/FLOAT` уже были, инварианты закреплены: `reconcile`→preview, `apply_reconciliation`→commit `free+spent_at`; `recovery 1.00` без изменений
+- [x] ✅ `ruff --select F passed` (`E501` 28 оставлено), `pytest 357 passed`, сценарии: `101617-(1540-1240)=101317` после `+300`, `101617-(4940-1240)=97917` контекст, `free==0 → income-mandatory-spent`
 
 ---
 

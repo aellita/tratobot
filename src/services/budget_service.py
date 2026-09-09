@@ -189,17 +189,45 @@ async def reconcile_budget_with_reality(
     )
 
 
-def _current_money_for_life(budget: Budget, spent_period: float) -> float:
+def get_money_for_life(budget: Budget, spent_period: float) -> float:
     if budget.free_money > 0:
-        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
+        spent_at = float(budget.spent_at_recalc or 0)
         new_spent = max(spent_period - spent_at, 0)
         return max(float(budget.free_money) - new_spent, 0)
     return max(
-        float(budget.total_income)
-        - float(budget.mandatory_payments)
-        - float(spent_period),
+        float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period),
         0,
     )
+
+
+def _current_money_for_life(budget: Budget, spent_period: float) -> float:
+    return get_money_for_life(budget, spent_period)
+
+
+def get_daily_pred(money_for_life: float, days_left: int) -> float:
+    if money_for_life <= 0 or days_left <= 0:
+        return 0
+    return max(money_for_life / max(days_left, 1), 0)
+
+
+async def get_period_spent(telegram_id: int, budget: Budget) -> float:
+    from sqlalchemy import func as _func
+
+    from ..db.models.models import Expense as _Expense
+    from ..services.monthly_report import get_period_dates as _get_period_dates
+
+    period_start, period_end = _get_period_dates(budget)
+    next_day = period_end + timedelta(days=1)
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(_func.sum(_Expense.amount)).where(
+                _Expense.telegram_id == telegram_id,
+                _Expense.is_deleted == False,
+                _Expense.date >= period_start,
+                _Expense.date < next_day,
+            )
+        )
+        return float(result.scalar() or 0)
 
 
 async def apply_reconciliation(

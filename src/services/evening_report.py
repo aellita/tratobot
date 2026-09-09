@@ -2,6 +2,8 @@ import asyncio
 import logging
 import random
 
+from datetime import timedelta
+
 from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -226,7 +228,7 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                 from ..services.monthly_report import get_period_dates
 
                                 period_start, period_end = get_period_dates(budget)
-                                next_day = period_end + __import__("datetime").timedelta(days=1)
+                                next_day = period_end + timedelta(days=1)  # noqa: E501
                                 result = await session.execute(
                                     sa_select(func.sum(_Expense.amount)).where(
                                         _Expense.telegram_id == tg_id,
@@ -236,26 +238,18 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                     )
                                 )
                                 spent_period = result.scalar() or 0
-                            if budget.free_money > 0:
-                                spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
-                                money_for_life = max(
-                                    float(budget.free_money) - max(spent_period - spent_at, 0), 0
-                                )
-                            else:
-                                money_for_life = max(
-                                    float(budget.total_income)
-                                    - float(budget.mandatory_payments)
-                                    - float(budget.black_day_fund)
-                                    - float(spent_period),
-                                    0,
-                                )
+                            from ..services.budget_service import get_money_for_life
+
+                            money_for_life = get_money_for_life(budget, spent_period)
                             days_left = budget.days_remaining
                             old_days = active.total_days
                             deficit = max(active.baseline * days_left - money_for_life, 0)
                             new_days = recalculate_days(deficit, active.baseline, active.target)
                             if new_days and new_days != old_days:
                                 await update_recovery_days(tg_id, new_days)
-                                cur_day = (get_user_now().date() - active.started_at.date()).days + 1
+                                cur_day = (
+                                    get_user_now().date() - active.started_at.date()
+                                ).days + 1
                                 cur_day = max(cur_day, 1)
                                 recovery_extra = (
                                     f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=old_days)}\n"
@@ -267,7 +261,9 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                     + f"\n{phrases.RECOVERY_EVENING_SHORTENED.format(old=old_days, new=new_days, word='дней' if new_days % 10 != 1 else 'день')}"
                                 )
                             else:
-                                cur_day = (get_user_now().date() - active.started_at.date()).days + 1
+                                cur_day = (
+                                    get_user_now().date() - active.started_at.date()
+                                ).days + 1
                                 cur_day = max(cur_day, 1)
                                 total = new_days or old_days
                                 if spent_today <= active.target:
@@ -292,15 +288,21 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                         # forecast only if positive
                                         if saved > 0:
                                             sim_deficit = max(
-                                                active.baseline * days_left - (money_for_life + saved), 0
+                                                active.baseline * days_left
+                                                - (money_for_life + saved),
+                                                0,
                                             )
                                             sim_days = recalculate_days(
                                                 sim_deficit, active.baseline, active.target
                                             )
                                             if sim_days and sim_days < total:
                                                 diff = total - sim_days
-                                                recovery_extra += "\n" + phrases.RECOVERY_EVENING_FORECAST.format(
-                                                    n=diff, word="дней" if diff % 10 != 1 else "день"
+                                                recovery_extra += (
+                                                    "\n"
+                                                    + phrases.RECOVERY_EVENING_FORECAST.format(
+                                                        n=diff,
+                                                        word="дней" if diff % 10 != 1 else "день",
+                                                    )
                                                 )
                                 else:
                                     if is_small_overspend(spent_today, active.target):

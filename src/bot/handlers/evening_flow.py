@@ -19,7 +19,6 @@ from ...services.evening_report import (
     get_evening_message,
 )
 from ...services.expense_service import (
-    get_current_period_expenses_sum,
     get_today_expenses_sum,
     parse_multi_expense_text,
 )
@@ -143,7 +142,9 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
         except Exception:
             pass
         if not is_filling:
-            logger.info(f"Evening report callback without filling state {current_state}, fallback render")
+            logger.info(
+                f"Evening report callback without filling state {current_state}, fallback render"
+            )
         try:
             await callback.message.edit_reply_markup(reply_markup=None)
         except Exception:
@@ -155,26 +156,17 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
         budget = await get_active_budget(user_id)
 
         if budget:
+            from ...services.budget_service import (
+                get_daily_pred,
+                get_money_for_life,
+                get_period_spent,
+            )
+
             days_left = budget.days_remaining
-            period_spent = await get_current_period_expenses_sum(user_id)
-            if budget.free_money > 0:
-                spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
-                total_available = max(float(budget.free_money) - max(period_spent - spent_at, 0), 0)
-            else:
-                total_available = max(
-                    float(budget.total_income)
-                    - float(budget.mandatory_payments)
-                    - float(budget.black_day_fund),
-                    0,
-                )
-                available_cash = max(total_available - period_spent, 0)
-                limit = max(available_cash / max(days_left, 1), 0)
-            if budget.free_money > 0:
-                available_cash = max(float(total_available), 0)
-                limit = max(available_cash / max(days_left, 1), 0)
-            else:
-                available_cash = max(total_available - period_spent, 0)
-                limit = max(available_cash / max(days_left, 1), 0)
+            period_spent = await get_period_spent(user_id, budget)
+            money_for_life = get_money_for_life(budget, period_spent)
+            available_cash = money_for_life
+            limit = get_daily_pred(money_for_life, days_left)
         else:
             days_left = 1
             available_cash = 0

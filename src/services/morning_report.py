@@ -12,7 +12,7 @@ from ..db.database import async_session_maker
 from ..db.models.models import DailyReportsLog, User, UserSettings
 from ..utils import phrases
 from ..utils.helpers import get_msk_now
-from .expense_service import get_current_period_expenses_sum, get_yesterday_expenses_sum
+from .expense_service import get_yesterday_expenses_sum
 
 logger = logging.getLogger(__name__)
 
@@ -149,23 +149,13 @@ async def send_morning_reports(bot: Bot):
                 period_start, period_end = get_period_dates(budget)
 
                 yesterday_spent = await get_yesterday_expenses_sum(tg_id)
-                spent_period = await get_current_period_expenses_sum(tg_id)
+                from .budget_service import get_daily_pred, get_money_for_life, get_period_spent
 
+                spent_period = await get_period_spent(tg_id, budget)
+                money_for_life = get_money_for_life(budget, spent_period)
                 days_left = budget.days_remaining
                 dl_base = budget.daily_limit
-
-                if budget.free_money > 0:
-                    spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
-                    money_for_life = max(float(budget.free_money) - max(spent_period - spent_at, 0), 0)
-                else:
-                    money_for_life = max(
-                        float(budget.total_income)
-                        - float(budget.mandatory_payments)
-                        - float(spent_period),
-                        0,
-                    )
-
-                dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
+                dl_pred = get_daily_pred(money_for_life, days_left)
                 pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0
 
                 end_of_period = days_left <= 3

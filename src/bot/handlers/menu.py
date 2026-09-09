@@ -98,11 +98,7 @@ async def _handle_recovery_budget_change(telegram_id: int, message: Message):
     if not settings.RECOVERY_ENABLED:
         return
     try:
-        from sqlalchemy import func
-        from sqlalchemy import select as sa_select
-
         from ...services.budget_service import get_active_budget as _get_budget
-        from ...services.monthly_report import get_period_dates
         from ...services.recovery_service import (
             check_success,
             complete_recovery,
@@ -117,29 +113,16 @@ async def _handle_recovery_budget_change(telegram_id: int, message: Message):
         active = await get_active_recovery(telegram_id)
         if not active:
             return
-        async with async_session_maker() as session:
-            period_start, period_end = get_period_dates(budget)
-            next_day = period_end + timedelta(days=1)
-            result = await session.execute(
-                sa_select(func.sum(Expense.amount)).where(
-                    Expense.telegram_id == telegram_id,
-                    Expense.is_deleted == False,
-                    Expense.date >= period_start,
-                    Expense.date < next_day,
-                )
-            )
-            spent_period = result.scalar() or 0
-        if budget.free_money > 0:
-            money_for_life = budget.free_money
-        else:
-            money_for_life = (
-                budget.total_income
-                - budget.mandatory_payments
-                - budget.black_day_fund
-                - spent_period
-            )
+        from ...services.budget_service import (
+            get_daily_pred,
+            get_money_for_life,
+            get_period_spent,
+        )
+
+        spent_period = await get_period_spent(telegram_id, budget)
+        money_for_life = get_money_for_life(budget, spent_period)
         days_left = budget.days_remaining
-        dl_pred = money_for_life / max(days_left, 1) if money_for_life else 0
+        dl_pred = get_daily_pred(money_for_life, days_left)
         if check_success(dl_pred, active.baseline):
             await complete_recovery(telegram_id, "budget_update")
             await message.answer(text=phrases.RECOVERY_BUDGET_DONE)
@@ -519,14 +502,10 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     days_left = budget.days_remaining
     dl_base = budget.daily_limit
 
-    if budget.free_money > 0:
-        money_for_life = float(budget.free_money)
-    else:
-        money_for_life = max(
-            float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period), 0
-        )
+    from ...services.budget_service import get_daily_pred, get_money_for_life
 
-    dl_pred = max(money_for_life / max(days_left, 1), 0) if money_for_life > 0 else 0
+    money_for_life = get_money_for_life(budget, spent_period)
+    dl_pred = get_daily_pred(money_for_life, days_left)
     pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0
 
     remaining_today = max(dl_pred - spent_today, 0)
@@ -607,10 +586,18 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
                 if _opts_tmp:
                     _offer_state_tmp = await _gos(tg_id)
                     _should = True
-                    if _offer_state_tmp and _offer_state_tmp.dismissed and _offer_state_tmp.last_offer_at:
-                        _days_since = (get_user_now().date() - _offer_state_tmp.last_offer_at.date()).days
+                    if (
+                        _offer_state_tmp
+                        and _offer_state_tmp.dismissed
+                        and _offer_state_tmp.last_offer_at
+                    ):
+                        _days_since = (
+                            get_user_now().date() - _offer_state_tmp.last_offer_at.date()
+                        ).days
                         _cur_def = max(_b_val_tmp * days_left - money_for_life, 0)
-                        if not _sro(_offer_state_tmp.last_offer_deficit, _cur_def, _b_val_tmp, _days_since):
+                        if not _sro(
+                            _offer_state_tmp.last_offer_deficit, _cur_def, _b_val_tmp, _days_since
+                        ):
                             _should = False
                     if _should:
                         _recovery_offer = True
@@ -628,7 +615,9 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         _cur_day_tmp = (get_user_now().date() - _recovery_active.started_at.date()).days + 1
         _cur_day_tmp = max(_cur_day_tmp, 1)
         _recovery_header = f"🧘 Восстановление · день {_cur_day_tmp} из {_recovery_active.total_days}\n<b>Лимит на сегодня: {_target_int} ₽</b>"
-        _after_restoration = f"\n\nПосле восстановления — обычный лимит {int(_recovery_active.baseline)} ₽/день."
+        _after_restoration = (
+            f"\n\nПосле восстановления — обычный лимит {int(_recovery_active.baseline)} ₽/день."
+        )
         text = (
             f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_emoji} {zone_label}\n\n"
             f"<b>{phrases.STATUS_TODAY_TITLE}</b>\n"
@@ -653,18 +642,8 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     recovery_kb_extra: InlineKeyboardMarkup | None = None
     if settings.RECOVERY_ENABLED and budget:
         try:
-            from ...services.budget_service import resolve_frozen_baseline
-            from ...services.recovery_service import (
-                calculate_recovery_options,
-                get_active_recovery,
-                get_offer_state,
-                should_repeat_offer,
-            )
-
-            active = _recovery_active
-            if active is None:
-                active = await get_active_recovery(tg_id)
-            if active:
+            if _recovery_active is not None:
+                active = _recovery_active
                 cur_day = (get_user_now().date() - active.started_at.date()).days + 1
                 cur_day = max(cur_day, 1)
                 tail = max(days_left - active.total_days, 0)
@@ -673,26 +652,11 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
                 from ..keyboards import get_recovery_active_keyboard
 
                 recovery_kb_extra = get_recovery_active_keyboard()
-            else:
-                b_val = await resolve_frozen_baseline(budget)
-                opts = calculate_recovery_options(b_val, money_for_life, days_left)
-                if opts:
-                    offer_state = await get_offer_state(tg_id)
-                    should_show = True
-                    if offer_state and offer_state.dismissed and offer_state.last_offer_at:
-                        days_since = (get_user_now().date() - offer_state.last_offer_at.date()).days
-                        cur_deficit = max(b_val * days_left - money_for_life, 0)
-                        if not should_repeat_offer(
-                            offer_state.last_offer_deficit, cur_deficit, b_val, days_since
-                        ):
-                            should_show = False
-                    if should_show:
-                        recovery_block = (
-                            f"\n\n{phrases.RECOVERY_DAILY_OFFER.format(dl_pred=int(dl_pred))}"
-                        )
-                        from ..keyboards import get_recovery_plan_keyboard
+            elif _recovery_offer:
+                recovery_block = f"\n\n{phrases.RECOVERY_DAILY_OFFER.format(dl_pred=int(dl_pred))}"
+                from ..keyboards import get_recovery_plan_keyboard
 
-                        recovery_kb_extra = get_recovery_plan_keyboard()
+                recovery_kb_extra = get_recovery_plan_keyboard()
         except Exception as e:
             logging.error("Recovery render failed", exc_info=e)
 
@@ -808,24 +772,10 @@ async def recovery_show_options(callback: CallbackQuery):
         return
     b_val = await resolve_frozen_baseline(budget)
     days_left = budget.days_remaining
-    async with async_session_maker() as session:
-        from ...services.monthly_report import get_period_dates
+    from ...services.budget_service import get_money_for_life, get_period_spent
 
-        period_start, period_end = get_period_dates(budget)
-        next_day = period_end + timedelta(days=1)
-        result = await session.execute(
-            select(func.sum(Expense.amount)).where(
-                Expense.telegram_id == tg_id,
-                Expense.is_deleted == False,
-                Expense.date >= period_start,
-                Expense.date < next_day,
-            )
-        )
-        spent_period = result.scalar() or 0
-    if budget.free_money > 0:
-        money_for_life = float(budget.free_money)
-    else:
-        money_for_life = float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period)
+    spent_period = await get_period_spent(tg_id, budget)
+    money_for_life = get_money_for_life(budget, spent_period)
     opts = calculate_recovery_options(b_val, money_for_life, days_left)
     if not opts:
         await callback.answer(phrases.RECOVERY_PERIOD_END, show_alert=True)
@@ -899,27 +849,10 @@ async def recovery_choose(callback: CallbackQuery):
         return
     b_val = await resolve_frozen_baseline(budget)
     days_left = budget.days_remaining
-    async with async_session_maker() as session:
-        from ...services.monthly_report import get_period_dates
+    from ...services.budget_service import get_money_for_life, get_period_spent
 
-        period_start, period_end = get_period_dates(budget)
-        next_day = period_end + timedelta(days=1)
-        result = await session.execute(
-            select(func.sum(Expense.amount)).where(
-                Expense.telegram_id == tg_id,
-                Expense.is_deleted == False,
-                Expense.date >= period_start,
-                Expense.date < next_day,
-            )
-        )
-        spent_period = result.scalar() or 0
-    if budget.free_money > 0:
-        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
-        money_for_life = max(float(budget.free_money) - max(spent_period - spent_at, 0), 0)
-    else:
-        money_for_life = max(
-            float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period), 0
-        )
+    spent_period = await get_period_spent(tg_id, budget)
+    money_for_life = get_money_for_life(budget, spent_period)
     opts = calculate_recovery_options(b_val, money_for_life, days_left)
     chosen = next((o for o in opts if o.level == level), None)
     if not chosen:
@@ -997,27 +930,10 @@ async def recovery_dismiss(callback: CallbackQuery):
 
     b_val = await resolve_frozen_baseline(budget)
     days_left = budget.days_remaining
-    async with async_session_maker() as session:
-        from ...services.monthly_report import get_period_dates
+    from ...services.budget_service import get_money_for_life, get_period_spent
 
-        period_start, period_end = get_period_dates(budget)
-        next_day = period_end + timedelta(days=1)
-        result = await session.execute(
-            select(func.sum(Expense.amount)).where(
-                Expense.telegram_id == tg_id,
-                Expense.is_deleted == False,
-                Expense.date >= period_start,
-                Expense.date < next_day,
-            )
-        )
-        spent_period = result.scalar() or 0
-    if budget.free_money > 0:
-        spent_at = float(getattr(budget, "spent_at_recalc", 0) or 0)
-        money_for_life = max(float(budget.free_money) - max(spent_period - spent_at, 0), 0)
-    else:
-        money_for_life = max(
-            float(budget.total_income) - float(budget.mandatory_payments) - float(spent_period), 0
-        )
+    spent_period = await get_period_spent(tg_id, budget)
+    money_for_life = get_money_for_life(budget, spent_period)
     deficit = max(b_val * days_left - money_for_life, 0)
     await dismiss_offer(tg_id, deficit)
     await callback.message.edit_text(
@@ -1968,7 +1884,8 @@ async def handle_fix_overdraft(callback: CallbackQuery):
 
     elif action == "cubyshka":
         await callback.message.edit_text(
-            text=phrases.ERR_GENERIC, reply_markup=await get_main_menu_keyboard(callback.from_user.id)
+            text=phrases.ERR_GENERIC,
+            reply_markup=await get_main_menu_keyboard(callback.from_user.id),
         )
 
 
