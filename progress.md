@@ -402,15 +402,17 @@ parse_expr → parse_term → parse_factor
 - **`duplicate_middleware`:** защита по `message_id` работает, но 15s окно — эвристика; долгая ручная отправка одной и той же траты через >15s пройдёт как новый дубликат
 - **`_fallback_first_number` в corrected path:** вызывается, только если `_parse_math_prefix(fixed)` вернул None (нет math-токенов в corrected). Если есть числа, но нет операторов — вытаскивает первое число, что может не совпадать с ожиданием
 
-### is_active=NULL на PostgreSQL: новый пользователь не создавался (2026-09-01)
-**Симптом:** новый пользователь нажимал `/start` — бот молчал. Railway-логи: `IntegrityError: null value in column "is_active" of relation "users" violates not-null constraint`.
+### is_active=NULL на PostgreSQL: новый пользователь не создавался (2026-09-01) — ⚠️ Устарело `06082b2`
+**Симптом (2026-09-01):** новый пользователь нажимал `/start` — бот молчал. Railway-логи: `IntegrityError: null value in column "is_active" of relation "users" violates not-null constraint`.
 
-**Корень:** `get_or_create_user()` создавал `User(...)` без поля `is_active`. На SQLite (dev) NOT NULL с дефолтом `True` работает, на PostgreSQL (prod) — жёсткое падение. Плюс в проекте не было `@dp.errors()` handler → исключение глоталось молча.
+**Корень (2026-09-01):** `get_or_create_user()` создавал `User(...)` без поля `is_active`. На SQLite (dev) NOT NULL с дефолтом `True` работает, на PostgreSQL (prod) — жёсткое падение. Плюс в проекте не было `@dp.errors()` handler → исключение глоталось молча.
 
-**Решение:**
+**Решение (2026-09-01):**
 1. `user_service.py`: `User(..., is_active=True)` — явно задаём значение.
 2. `main.py`: добавлен `@dp.errors()` handler — ловит все необработанные исключения, логирует traceback, отправляет пользователю `ERR_GENERIC`.
 3. Новая фраза `ERR_GENERIC` в phrases.py.
+
+**Update 06082b2 (2026-09-09) — B, dead field:** `User.is_active` удалён из `models.py:35` ещё `0a89bf9 2026-06-03` (мертвое поле, `Wishlist.is_active` не трогаем). `user_service.py:12` `is_active=True` давал `TypeError` на новых юзерах (`385325447 219ms`). Фикс `06082b2` `User(...)` без `is_active`, legacy-колонка в PG остаётся deprecated, `PRD User.is_active` — legacy. Snapshot/B2/Recovery не трогали.
 
 ### Вечерний FSM: мультилайн-парсинг (2026-08-25)
 **Проблема:** в вечерней сессии (22:00) использовался однострочный `parse_expense_text()` вместо мультистрокового `parse_multi_expense_text()`. При вводе «1700 аптека\n3500 кафе\n1256 лавка» первая сумма парсилась, остальное уходило в описание одной траты.
