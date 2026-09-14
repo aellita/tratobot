@@ -256,6 +256,12 @@
 - [x] ✅ `budget_service.py:96` `save_budget UPDATE` больше не зануляет `spent_at_recalc` (только `INSERT 109` `default 0`) — `39efc3d` 1 удаление, сохраняет `free+spent_at=192546` после `Recalc B`, `rollover/mandatory` не ломают снапшот, `free==0 → income-mandatory-spent`
 - [x] ✅ `ruff --select F passed` (`E501` 28 оставлено), `pytest 357 passed`, сценарии: `101617-(1540-1240)=101317` после `+300`, `101617-(4940-1240)=97917` контекст, факт `X → X` после `Recalc B` (`X - (192546-192546)=X`)
 
+### День 5.10: Вечер — редактура фраз (итоговая таблица) — ✅ Готово (2026-09-11) — 1 коммит
+> **Цель:** `Evening` канон по твоей таблице: `INITIAL/CONTAINER/LINE/SAVED/TIMEOUT` + `ZERO 3` + `GREEN 1 strong (<0.5×) + 3 ordinary (0.5×≤spent≤limit)` + `OVER 2 ordinary (limit<spent≤2×) + 1 strong (2×<spent≤3×) + 1 extreme (>3×) + AUTO_CLOSE 4` (5→4), без Кубышки/Хотелки, `get_evening_message` 6 веток `spent==0 / <0.5*limit / ≤limit / ≤2*limit / ≤3*limit / >3*limit` (сильные 1/1, обычные random).
+
+- [x] ✅ `phrases.py:293-314` `INITIAL/CONTAINER/TIMEOUT` упрощены `👁 День подошёл…` / `Вот что набралось…` / `⏱ Время вышло…`, `ZERO_1-3` без `frugal/финансовый отчёт`, `GREEN_1` strong `machine + {saved}`, `GREEN_2-4` ordinary, `OVER_1-3` без `гречка/аудит/супер-эконом`, `SPECIAL 🛌` `>3×`, `AUTO_CLOSE 5→4` `Полночь близко/День закрыт`
+- [x] ✅ `evening_report.py:49` `get_evening_message` разветвлён `spent==0 → ZERO random 3, <0.5*limit → GREEN_1 1/1, ≤limit → GREEN_2-4 random 3, >3*limit → SPECIAL, >2*limit → OVER_3, else OVER_1-2 random 2`, `saved=limit-spent`, `over=spent-limit`, `ruff --select F passed` `pytest 357 passed`
+
 ---
 
 ## Неделя 2 — AI Insight

@@ -47,35 +47,40 @@ def _build_container_text(session_expenses: list[str]) -> str:
 
 
 def get_evening_message(limit: float, spent: float, available_cash: float, days_left: int) -> str:
-    if spent <= limit:
-        saved = limit - spent
-        if int(spent) == 0:
-            green_phrases = [
+    if spent == 0:
+        return random.choice(
+            [
                 phrases.EVENING_ZERO_1.format(limit=int(limit)),
                 phrases.EVENING_ZERO_2,
                 phrases.EVENING_ZERO_3,
             ]
-        else:
-            green_phrases = [
-                phrases.EVENING_GREEN_1.format(
-                    limit=int(limit), spent=int(spent), saved=int(saved)
-                ),
+        )
+    if spent <= limit:
+        saved = limit - spent
+        if spent < 0.5 * limit:
+            return phrases.EVENING_GREEN_1.format(
+                limit=int(limit), spent=int(spent), saved=int(saved)
+            )
+        return random.choice(
+            [
                 phrases.EVENING_GREEN_2.format(limit=int(limit), spent=int(spent)),
                 phrases.EVENING_GREEN_3.format(limit=int(limit), spent=int(spent)),
                 phrases.EVENING_GREEN_4.format(spent=int(spent), saved=int(saved)),
             ]
-        return random.choice(green_phrases)
-
+        )
     overdraft = spent - limit
+    if spent > 3 * limit:
+        return phrases.EVENING_OVER_SPECIAL.format(over=int(overdraft))
+    if spent > 2 * limit:
+        return phrases.EVENING_OVER_3.format(over=int(overdraft), days=min(5, days_left))
     days_to_grease = int(available_cash / overdraft) if overdraft > 0 else days_left
     days_to_grease = max(1, min(days_to_grease, days_left))
-
-    evening_phrases = [
-        phrases.EVENING_OVER_1.format(over=int(overdraft), days=days_to_grease),
-        phrases.EVENING_OVER_2.format(over=int(overdraft), days_left=days_left),
-        phrases.EVENING_OVER_3.format(over=int(overdraft), days=min(5, days_left)),
-    ]
-    return random.choice(evening_phrases)
+    return random.choice(
+        [
+            phrases.EVENING_OVER_1.format(over=int(overdraft), days=days_to_grease),
+            phrases.EVENING_OVER_2.format(over=int(overdraft), days_left=days_left),
+        ]
+    )
 
 
 _MONTH_NAMES_RU = {
