@@ -1,8 +1,12 @@
 .env
+.env.*
 __pycache__/
 *.pyc
 *.db
 *.db.bak
+*.sqlite
+*.sqlite3
+*.bak
 bot.log
 .DS_Store
 .ruff_cache/

@@ -412,7 +412,7 @@ parse_expr → parse_term → parse_factor
 2. `main.py`: добавлен `@dp.errors()` handler — ловит все необработанные исключения, логирует traceback, отправляет пользователю `ERR_GENERIC`.
 3. Новая фраза `ERR_GENERIC` в phrases.py.
 
-**Update 06082b2 (2026-09-09) — B, dead field:** `User.is_active` удалён из `models.py:35` ещё `0a89bf9 2026-06-03` (мертвое поле, `Wishlist.is_active` не трогаем). `user_service.py:12` `is_active=True` давал `TypeError` на новых юзерах (`385325447 219ms`). Фикс `06082b2` `User(...)` без `is_active`, legacy-колонка в PG остаётся deprecated, `PRD User.is_active` — legacy. Snapshot/B2/Recovery не трогали.
+**Update 06082b2 (2026-09-09) — B, dead field:** `User.is_active` удалён из `models.py:35` ещё `0a89bf9 2026-06-03` (мертвое поле, `Wishlist.is_active` не трогаем). `user_service.py:12` `is_active=True` давал `TypeError` на новых юзерах (`TEST_ID`). Фикс `06082b2` `User(...)` без `is_active`, legacy-колонка в PG остаётся deprecated, `PRD User.is_active` — legacy. Snapshot/B2/Recovery не трогали.
 
 ### Вечерний FSM: мультилайн-парсинг (2026-08-25)
 **Проблема:** в вечерней сессии (22:00) использовался однострочный `parse_expense_text()` вместо мультистрокового `parse_multi_expense_text()`. При вводе «1700 аптека\n3500 кафе\n1256 лавка» первая сумма парсилась, остальное уходило в описание одной траты.
