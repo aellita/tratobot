@@ -132,6 +132,8 @@ tratobot/
 ├── pyproject.toml
 ├── requirements.txt
 ├── requirements-dev.txt
-├── agent/               # инструкции для агента: PRD, RULES, progress, SESSION_PLAN
+├── agent/               # инструкции для агента: PRD, RULES, progress, SESSION_PLAN, bugs_ux4
+├── AGENTS.md            # хаб для агента (что читать в начале сессии)
+├── opencode.json        # project config (instructions → AGENTS.md)
 └── README.md
 ```
