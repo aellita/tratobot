@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="380" viewBox="0 0 1200 380"
+     role="img" aria-labelledby="title desc">
+  <title id="title">TratoBot — Telegram finance bot</title>
+  <desc id="desc">TratoBot turns income minus obligations into a daily spending limit. Chat preview shows expense logging and morning plan.</desc>
+
+  <defs>
+    <clipPath id="card">
+      <rect x="740" y="40" width="404" height="300" rx="20"/>
+    </clipPath>
+  </defs>
+
+  <!-- background -->
+  <rect width="1200" height="380" rx="26" fill="#0E1621"/>
+
+  <!-- subtle zone dots, left edge -->
+  <circle cx="28" cy="70" r="5" fill="#4CAF50"/>
+  <circle cx="28" cy="100" r="5" fill="#FFC107"/>
+  <circle cx="28" cy="130" r="5" fill="#F44336"/>
+
+  <!-- title block -->
+  <g id="title-block" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="56" y="82" font-family="ui-monospace, Menlo, monospace" font-size="17" letter-spacing="3" fill="#7AA2C4">TELEGRAM FINANCE BOT · PYTHON</text>
+    <text x="52" y="158" font-size="68" font-weight="800" fill="#FFFFFF">TratoBot</text>
+    <text x="56" y="205" font-size="24" fill="#C9D6E0">Доход − обязательства = дневной лимит.</text>
+    <text x="56" y="240" font-size="24" fill="#C9D6E0">Бот не даёт потратить завтрашние деньги.</text>
+    <g font-family="ui-monospace, Menlo, monospace" font-size="16" fill="#8A9BA8">
+      <text x="56" y="292">aiogram 3 · SQLAlchemy 2 · PostgreSQL</text>
+      <text x="56" y="318">357 tests · CI · Railway</text>
+    </g>
+  </g>
+
+  <!-- chat mockup -->
+  <g id="project-proof">
+    <rect x="740" y="40" width="404" height="300" rx="20" fill="#182533"/>
+    <!-- chat header -->
+    <circle cx="770" cy="70" r="11" fill="#229ED9"/>
+    <text x="764" y="76" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">T</text>
+    <text x="790" y="75" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="19" font-weight="600" fill="#FFFFFF">TratoBot</text>
+    <circle cx="1118" cy="68" r="5" fill="#4CAF50"/>
+    <line x1="740" y1="92" x2="1144" y2="92" stroke="#0E1621" stroke-width="2"/>
+
+    <g clip-path="url(#card)" font-family="-apple-system, 'Segoe UI', sans-serif">
+      <!-- user bubble -->
+      <rect x="928" y="106" width="180" height="40" rx="14" fill="#2B5278"/>
+      <text x="946" y="132" font-size="20" fill="#FFFFFF">500 кофе</text>
+
+      <!-- bot bubble 1 -->
+      <rect x="756" y="156" width="330" height="72" rx="14" fill="#242F3D"/>
+      <text x="772" y="184" font-size="20" fill="#FFFFFF">✅ 500 ₽ — кофе ☕</text>
+      <text x="772" y="210" font-size="18" fill="#8A9BA8">Осталось сегодня: 4 500 ₽</text>
+
+      <!-- bot bubble 2, morning plan -->
+      <rect x="756" y="238" width="330" height="72" rx="14" fill="#242F3D"/>
+      <circle cx="776" cy="262" r="7" fill="#4CAF50"/>
+      <text x="792" y="269" font-size="20" fill="#FFFFFF">В лимите</text>
+      <text x="772" y="296" font-size="18" fill="#8A9BA8">☀️ План: 5 000 ₽/день</text>
+    </g>
+
+    <rect x="740" y="40" width="404" height="300" rx="20" fill="none" stroke="#2B5278" stroke-width="2"/>
+  </g>
+</svg>
