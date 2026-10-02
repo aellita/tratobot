@@ -605,6 +605,9 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             pass
 
     # today line: if active, use target
+    _remaining_period_line = phrases.STATUS_REMAINING_PERIOD.format(
+        amount=f"{int(remaining_period):,}", limit=f"{int(dl_pred):,}"
+    )
     if _recovery_active is not None:
         _target_int = int(_recovery_active.target)
         _rem_target = max(_target_int - int(spent_today), 0)
@@ -614,7 +617,11 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             today_line = phrases.STATUS_REMAINING_ZERO
         _cur_day_tmp = (get_user_now().date() - _recovery_active.started_at.date()).days + 1
         _cur_day_tmp = max(_cur_day_tmp, 1)
-        _recovery_header = f"🧘 Восстановление · день {_cur_day_tmp} из {_recovery_active.total_days}\n<b>Лимит на сегодня: {_target_int} ₽</b>"
+        _recovery_header = (
+            f"🧘 Восстановление · день {_cur_day_tmp} "
+            f"из {_recovery_active.total_days}\n"
+            f"<b>Лимит на сегодня: {_target_int} ₽</b>"
+        )
         _after_restoration = (
             f"\n\nПосле восстановления — обычный лимит {int(_recovery_active.baseline)} ₽/день."
         )
@@ -625,7 +632,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             f"{today_line} · {spent_line}{expenses_block}"
             f"{_after_restoration}\n\n"
             f"<b>{phrases.STATUS_PERIOD_TITLE.format(end=period_end_str, days=days_left)}</b>\n"
-            f"{phrases.STATUS_REMAINING_PERIOD.format(amount=f'{int(remaining_period):,}', limit=f'{int(dl_pred):,}')} · Прогноз: {int(dl_pred):,}\n"
+            f"{_remaining_period_line} · Прогноз: {int(dl_pred):,}\n"
             f"{reserves_block}"
         )
     else:
@@ -634,7 +641,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             f"<b>{phrases.STATUS_TODAY_TITLE}</b>\n"
             f"{today_line} · {spent_line}{expenses_block}\n\n"
             f"<b>{phrases.STATUS_PERIOD_TITLE.format(end=period_end_str, days=days_left)}</b>\n"
-            f"{phrases.STATUS_REMAINING_PERIOD.format(amount=f'{int(remaining_period):,}', limit=f'{int(dl_pred):,}')}"
+            f"{_remaining_period_line}"
             f"{reserves_block}"
         )
 
@@ -785,12 +792,23 @@ async def recovery_show_options(callback: CallbackQuery):
     if len(opts) == 1:
         opt = opts[0]
         tail = opt.tail_days
+        icon = "⚡" if opt.level == "fast" else "⚖️" if opt.level == "balanced" else "🌿"
+        option_line = phrases.RECOVERY_OPTION_LINE.format(
+            icon=icon,
+            label=opt.level,
+            target=int(opt.target),
+            days=opt.days,
+            days_word=_plural_days(opt.days),
+        )
+        tail_line = phrases.RECOVERY_TAIL_LINE_OFFER.format(
+            baseline=int(b_val), tail=tail, tail_word=_plural_days(tail)
+        )
         text = (
             f"{phrases.RECOVERY_OFFER_TITLE}\n"
             f"{phrases.RECOVERY_BASELINE.format(amount=int(b_val))}\n"
             f"{phrases.RECOVERY_OFFER_SINGLE}\n"
-            f"{phrases.RECOVERY_OPTION_LINE.format(icon='⚡' if opt.level == 'fast' else '⚖️' if opt.level == 'balanced' else '🌿', label=opt.level, target=int(opt.target), days=opt.days, days_word=_plural_days(opt.days))}\n"
-            f"{phrases.RECOVERY_TAIL_LINE_OFFER.format(baseline=int(b_val), tail=tail, tail_word=_plural_days(tail))}"
+            f"{option_line}\n"
+            f"{tail_line}"
         )
         kb = get_recovery_single_keyboard(opt.level)
     else:
@@ -866,12 +884,24 @@ async def recovery_choose(callback: CallbackQuery):
 
         if len(opts) == 1:
             opt = opts[0]
+            option_line = phrases.RECOVERY_OPTION_LINE.format(
+                icon="⚡",
+                label=opt.level,
+                target=int(opt.target),
+                days=opt.days,
+                days_word=_plural_days(opt.days),
+            )
+            tail_line = phrases.RECOVERY_TAIL_LINE_OFFER.format(
+                baseline=int(b_val),
+                tail=opt.tail_days,
+                tail_word=_plural_days(opt.tail_days),
+            )
             text = (
                 f"{phrases.RECOVERY_OFFER_TITLE}\n"
                 f"{phrases.RECOVERY_BASELINE.format(amount=int(b_val))}\n"
                 f"{phrases.RECOVERY_OFFER_SINGLE}\n"
-                f"{phrases.RECOVERY_OPTION_LINE.format(icon='⚡', label=opt.level, target=int(opt.target), days=opt.days, days_word=_plural_days(opt.days))}\n"
-                f"{phrases.RECOVERY_TAIL_LINE_OFFER.format(baseline=int(b_val), tail=opt.tail_days, tail_word=_plural_days(opt.tail_days))}"
+                f"{option_line}\n"
+                f"{tail_line}"
             )
             kb = get_recovery_single_keyboard(opt.level)
         else:
@@ -1694,7 +1724,7 @@ async def set_category(callback: CallbackQuery):
         result = await session.execute(
             select(Category).where(
                 Category.id == category_id,
-                (Category.telegram_id == callback.from_user.id) | (Category.telegram_id == None),
+                (Category.telegram_id == callback.from_user.id) | (Category.telegram_id == None),  # noqa: E711 — SQLAlchemy IS NULL
             )
         )
         cat = result.scalar_one_or_none()

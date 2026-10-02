@@ -7,10 +7,13 @@ from src.services.expense_service import (
 
 class TestParseExpenseText:
     def _check(self, result, expected_amount, expected_desc_substr):
-        assert result.is_valid, f"Expected valid, got error_type={result.error_type}, text={result.raw_text!r}"
+        assert result.is_valid, (
+            f"Expected valid, got error_type={result.error_type}, text={result.raw_text!r}"
+        )
         assert result.amount == expected_amount
-        assert expected_desc_substr in result.description, \
+        assert expected_desc_substr in result.description, (
             f"Expected {expected_desc_substr!r} in {result.description!r}"
+        )
 
     def test_simple_amount_and_description(self):
         self._check(parse_expense_text("300 кофе"), 300.0, "кофе")

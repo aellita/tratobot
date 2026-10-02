@@ -219,7 +219,9 @@ async def migrate_schema():
                     text("ALTER TABLE budgets ADD COLUMN spent_at_recalc FLOAT DEFAULT 0")
                 )
             else:
-                await conn.execute(text("ALTER TABLE budgets ADD COLUMN spent_at_recalc REAL DEFAULT 0"))
+                await conn.execute(
+                    text("ALTER TABLE budgets ADD COLUMN spent_at_recalc REAL DEFAULT 0")
+                )
             logger.info("Migrated budgets: added spent_at_recalc")
 
         # Recovery tables (create if not exists via raw SQL for cross-DB compatibility)

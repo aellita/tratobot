@@ -308,8 +308,7 @@ EVENING_LINE_DESC = "  💰 {amount}₽ — {desc}"
 EVENING_LINE = "  💰 {amount}₽"
 EVENING_SAVED = "✅ {emoji}{amount}₽ — {desc} записано!"
 EVENING_TIMEOUT = (
-    "⏱ Время вышло.\n\n"
-    "Всё, что успел записать, я сохранил. Вот что набралось за сегодня:"
+    "⏱ Время вышло.\n\nВсё, что успел записать, я сохранил. Вот что набралось за сегодня:"
 )
 
 # ── Morning report ─────────────────────────────────────────
@@ -331,7 +330,9 @@ ZONE_YELLOW_LIGHT_2 = "📉 Бро, притормаживаем. Прогноз
 MORNING_YELLOW_SIM_NONE_1 = "Прогноз — {limit} ₽/день. Бро, держимся."
 MORNING_YELLOW_SIM_NONE_2 = "{limit} ₽/день. Сегодня чуть бережнее с кошельком."
 MORNING_YELLOW_BUDGET_NERVOUS = "Бюджет уже нервничает. Прогноз — {limit} ₽/день."
-MORNING_RED_DEAD_1 = "Брооооо, откуда траты?! Денег на текущий лимит уже нет. Пересчитаем и едем дальше."
+MORNING_RED_DEAD_1 = (
+    "Брооооо, откуда траты?! Денег на текущий лимит уже нет. Пересчитаем и едем дальше."
+)
 MORNING_RED_DEAD_2 = "Денег на текущий лимит уже нет, бро. Пора пересчитать и двигаться дальше."
 
 # ── Evening report ─────────────────────────────────────────
@@ -688,7 +689,9 @@ RECOVERY_DAILY_ACTIVE = (
     "{target} ₽ · {days} {days_word}\n"
     "После этого — {baseline} ₽/день ещё {tail} {tail_word}."
 )
-RECOVERY_DAILY_OFFER = "💡 Есть варианты восстановить лимит.\nСейчас: {dl_pred} ₽/день. Разрулим, бро.\n"
+RECOVERY_DAILY_OFFER = (
+    "💡 Есть варианты восстановить лимит.\nСейчас: {dl_pred} ₽/день. Разрулим, бро.\n"
+)
 RECOVERY_EVENING_SAVED = "Потрачено {spent} ₽ из {target} ₽ · сэкономлено {saved} ₽"
 RECOVERY_EVENING_EXACT = "Потрачено {spent} ₽ из {target} ₽."
 RECOVERY_EVENING_GOOD = "Так держать 👍"
@@ -718,7 +721,10 @@ RECOVERY_OPTION_STALE = "Вариант больше не доступен, по
 RECOVERY_EVENING_HEADER = "🧘 Восстановление · день {cur} из {total}"
 ERR_ROLLOVER_NOT_FOUND = "⚠️ Исходный бюджет не найден."
 ROLLOVER_ASK_INCOME = "💰 В прошлом периоде твой доход был {amount} ₽. Сколько залетает сейчас?"
-ROLLOVER_WITH_DETAILS = "✅ План продлён.\n\n📋 Перенесено из прошлого периода:\n{parts}\n\n💰 Дневной лимит: {limit}₽. Поехали. 🚀"
+ROLLOVER_WITH_DETAILS = (
+    "✅ План продлён.\n\n📋 Перенесено из прошлого периода:\n{parts}\n\n"
+    "💰 Дневной лимит: {limit}₽. Поехали. 🚀"
+)
 
 STATUS_ZONE_ATAS = "Атас"
 STATUS_ZONE_FINISH = "Финиш"
@@ -767,7 +773,10 @@ ONBOARDING_INCOME_ACCEPTED = "✅ Принял!"
 ROLLOVER_KEEP_DATE_PROMPT = "🗓️ Обычно мы стартуем {date}-го числа. Меняем дату начала периода?"
 ROLLOVER_CARRIED_MANDATORY = "• Обязательные: {amount}₽"
 STATUS_RESERVE_MANDATORY = "Обязательные {amount}"
-STATUS_BUDGET_COMPLETE = "🎉 <b>Готово!</b>\n\n📊 Бюджет на {month}:\n• Доход: {income}₽\n💰 <b>Дневной лимит: {limit}₽</b>\n\n{hint}"
+STATUS_BUDGET_COMPLETE = (
+    "🎉 <b>Готово!</b>\n\n📊 Бюджет на {month}:\n• Доход: {income}₽\n"
+    "💰 <b>Дневной лимит: {limit}₽</b>\n\n{hint}"
+)
 BALANCE_UNKNOWN = "неизвестно"
 PERIOD_DAY_SUFFIX = "-го"
 

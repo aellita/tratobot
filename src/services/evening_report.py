@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import random
-
 from datetime import timedelta
 
 from aiogram import Bot
@@ -256,14 +255,21 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                     get_user_now().date() - active.started_at.date()
                                 ).days + 1
                                 cur_day = max(cur_day, 1)
+                                header = phrases.RECOVERY_EVENING_HEADER.format(
+                                    cur=cur_day, total=old_days
+                                )
+                                day_word = "дней" if new_days % 10 != 1 else "день"
                                 recovery_extra = (
-                                    f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=old_days)}\n"
+                                    f"\n\n{header}\n"
                                     + phrases.RECOVERY_EVENING_SAVED.format(
                                         spent=int(spent_today),
                                         target=int(active.target),
                                         saved=int(max(active.target - spent_today, 0)),
                                     )
-                                    + f"\n{phrases.RECOVERY_EVENING_SHORTENED.format(old=old_days, new=new_days, word='дней' if new_days % 10 != 1 else 'день')}"
+                                    + "\n"
+                                    + phrases.RECOVERY_EVENING_SHORTENED.format(
+                                        old=old_days, new=new_days, word=day_word
+                                    )
                                 )
                             else:
                                 cur_day = (
@@ -271,10 +277,13 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                 ).days + 1
                                 cur_day = max(cur_day, 1)
                                 total = new_days or old_days
+                                header = phrases.RECOVERY_EVENING_HEADER.format(
+                                    cur=cur_day, total=total
+                                )
                                 if spent_today <= active.target:
                                     if spent_today == active.target:
                                         recovery_extra = (
-                                            f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=total)}\n"
+                                            f"\n\n{header}\n"
                                             + phrases.RECOVERY_EVENING_EXACT.format(
                                                 spent=int(spent_today), target=int(active.target)
                                             )
@@ -283,7 +292,7 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                     else:
                                         saved = int(active.target - spent_today)
                                         recovery_extra = (
-                                            f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=total)}\n"
+                                            f"\n\n{header}\n"
                                             + phrases.RECOVERY_EVENING_SAVED.format(
                                                 spent=int(spent_today),
                                                 target=int(active.target),
@@ -312,7 +321,7 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                 else:
                                     if is_small_overspend(spent_today, active.target):
                                         recovery_extra = (
-                                            f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=total)}\n"
+                                            f"\n\n{header}\n"
                                             + phrases.RECOVERY_EVENING_EXACT.format(
                                                 spent=int(spent_today), target=int(active.target)
                                             )
@@ -320,7 +329,7 @@ async def send_auto_close_reports(bot: Bot, storage: BaseStorage):
                                         )
                                     else:
                                         recovery_extra = (
-                                            f"\n\n{phrases.RECOVERY_EVENING_HEADER.format(cur=cur_day, total=total)}\n"
+                                            f"\n\n{header}\n"
                                             + phrases.RECOVERY_EVENING_EXACT.format(
                                                 spent=int(spent_today), target=int(active.target)
                                             )

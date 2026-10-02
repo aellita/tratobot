@@ -140,7 +140,7 @@ async def _get_uncategorized_sum(
             .where(Expense.date >= period_start)
             .where(Expense.date <= period_end)
             .where(Expense.is_deleted == False)
-            .where(Expense.category_id == None)
+            .where(Expense.category_id == None)  # noqa: E711 — SQLAlchemy IS NULL
         )
         row = result.one()
         count = row[0] or 0
@@ -189,7 +189,7 @@ async def _get_rounding_total(
             .where(Expense.date >= period_start)
             .where(Expense.date <= period_end)
             .where(Expense.is_deleted == False)
-            .where(Expense.category_id != None)
+            .where(Expense.category_id != None)  # noqa: E711 — SQLAlchemy IS NOT NULL
         )
         raw = float(result.scalar() or 0.0)
 
@@ -379,5 +379,7 @@ async def build_summary_data(telegram_id: int, budget: Budget) -> dict:
         "bdf_amount": bdf_amount,
         "bdf_used": bdf_used,
         "rounding_total": rounding_total,
-        "period_label": f"{period_start.strftime('%d %b').lower()} – {period_end.strftime('%d %b %Y').lower()}",
+        "period_label": (
+            f"{period_start.strftime('%d %b').lower()} – {period_end.strftime('%d %b %Y').lower()}"
+        ),
     }
