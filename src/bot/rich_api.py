@@ -2,7 +2,7 @@
 
 Every outgoing inline keyboard must be tracked in ``_last_keyboard``
 so that ``KeyboardCleanupMiddleware`` can clean it up on the next
-user action — see RULES.md § 12.2.4.
+user action — see agent/RULES.md § 12.2.4.
 """
 
 import logging
