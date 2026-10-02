@@ -125,10 +125,15 @@ tratobot/
 │       └── config.py
 ├── assets/readme/       # hero.svg
 ├── tests/               # 357 тестов
-├── agent/               # PRD, RULES, progress, SESSION_PLAN (инструкции для агента)
+├── .github/workflows/   # CI (GitHub Actions)
+├── .pre-commit-config.yaml
+├── Dockerfile
+├── railway.json
+├── pyproject.toml
+├── requirements.txt
+├── requirements-dev.txt
+├── agent/               # инструкции для агента: PRD, RULES, progress, SESSION_PLAN, bugs_ux4
 ├── AGENTS.md            # хаб для агента (что читать в начале сессии)
 ├── opencode.json        # project config (instructions → AGENTS.md)
-├── README.md
-└── deploy & config: Dockerfile, railway.json, .github/workflows (CI),
-    pyproject.toml (ruff/mypy), requirements*.txt, .pre-commit-config.yaml
+└── README.md
 ```
