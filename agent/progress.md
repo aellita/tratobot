@@ -440,6 +440,18 @@ parse_expr → parse_term → parse_factor
 **Перед деплоем:** прописать `ADMIN_IDS=<твой telegram_id>` в Railway, иначе `/test_*` перестанут работать (молча; отказ пишется в `DEBUG`).
 **Файлы:** `config.py:15,52`, `test_commands.py:12`, `tests/test_test_commands.py`
 
+### 🛡 B8: Schema audit — сверка моделей с реальной БД (2026-11-04) — ✅ Готово
+**Проблема:** B6 показал класс багов, который тесты не ловят: ORM ушёл вперёд, прод-схема осталась с legacy-колонкой `NOT NULL` без дефолта. Свежий staging это тоже не поймает — там база создаётся из текущих моделей.
+
+**Решение:** `src/db/schema_audit.py` — read-only сверка `Base.metadata` vs `information_schema` / `PRAGMA table_info`:
+- **critical:** нет таблицы, нет колонки из модели, legacy-колонка `NOT NULL` без server default (ровно B6);
+- **warning:** legacy-колонка, `NULL` в базе при `nullable=False` в модели;
+- **info:** лишняя таблица.
+`compare_schemas()` — чистая функция (тестируется без БД), `main()` печатает отчёт и возвращает exit code 1 при critical. Запуск: `python -m src.db.schema_audit` (DATABASE_URL можно направить на прод, только чтение).
+
+**Проверено вживую:** legacy-SQLite с `users.is_active NOT NULL` → `[CRITICAL] users.is_active — legacy NOT NULL без server default — ORM INSERT упадёт`, exit 1; чистая база из `create_all` → `0 critical`, exit 0. `pytest 394 passed`.
+**Файлы:** `src/db/schema_audit.py`, `tests/test_schema_audit.py`
+
 ### Вечерний FSM: мультилайн-парсинг (2026-08-25)
 **Проблема:** в вечерней сессии (22:00) использовался однострочный `parse_expense_text()` вместо мультистрокового `parse_multi_expense_text()`. При вводе «1700 аптека\n3500 кафе\n1256 лавка» первая сумма парсилась, остальное уходило в описание одной траты.
 

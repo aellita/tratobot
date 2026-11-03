@@ -8,7 +8,7 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 45 |
+| ✅ Готово | 46 |
 | 🔧 В работе | 0 |
 | ⏳ Ожидает | 2 |
 
@@ -290,6 +290,19 @@
 - [x] ✅ `tests/test_test_commands.py` — 19 тестов (парсинг/мусор/Settings/4 команды/3 middleware/админ-путь)
 - [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 385 passed`
 - [ ] ⏳ Прод: прописать `ADMIN_IDS=<telegram_id>` в Railway перед деплоем
+
+---
+
+### B8: Schema audit — ✅ Готово (2026-11-04)
+
+> **Цель:** ловить дрейф «ORM vs реальная БД» до деплоя, а не по жалобе нового юзера.
+
+- [x] ✅ `src/db/schema_audit.py` — `model_schema()` / `compare_schemas()` / `read_actual_schema()` (PG `information_schema`, SQLite `PRAGMA`)
+- [x] ✅ critical: нет таблицы, нет колонки, legacy `NOT NULL` без default; warning: legacy-колонка, nullable-дрейф; info: лишняя таблица
+- [x] ✅ exit 1 при critical, 0 при чистоте; только чтение
+- [x] ✅ Живая проверка: legacy-SQLite → critical + exit 1; чистая база → exit 0
+- [x] ✅ `tests/test_schema_audit.py` — 9 тестов на `compare_schemas` + `model_schema`
+- [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 394 passed`
 
 ---
 
