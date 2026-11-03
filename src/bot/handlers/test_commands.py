@@ -1,24 +1,49 @@
-from aiogram import Bot, Router
+import logging
+
+from aiogram import BaseMiddleware, Bot, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from ...core.config import settings
 from ...services.evening_report import EVENING_KB, INITIAL_TEXT, EveningState, send_evening_teaser
 from ...services.morning_report import send_morning_reports
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
 
+class AdminOnlyMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        user = data.get("event_from_user")
+        if user is None or user.id not in settings.admin_ids:
+            logger.debug("Denied test command from %s", user.id if user else None)
+            return None
+        return await handler(event, data)
+
+
+router.message.middleware(AdminOnlyMiddleware())
+
+
+def _is_admin(message: Message) -> bool:
+    user = message.from_user
+    return user is not None and user.id in settings.admin_ids
+
+
 @router.message(Command("test_evening"))
 async def cmd_test_evening(message: Message, state: FSMContext):
+    if not _is_admin(message):
+        return
     msg = await message.answer(INITIAL_TEXT, reply_markup=EVENING_KB)
     await state.set_state(EveningState.filling)
     await state.update_data(container_id=msg.message_id, session_expenses=[])
-    await message.delete()
 
 
 @router.message(Command("test_teaser"))
 async def cmd_test_teaser(message: Message, bot: Bot, state: FSMContext):
+    if not _is_admin(message):
+        return
     await message.answer("🚀 Запускаю принудительный тизер...")
     await send_evening_teaser(bot, state.storage)
     await message.answer("🏁 Тизер отправлен всем пользователям!")
@@ -26,11 +51,15 @@ async def cmd_test_teaser(message: Message, bot: Bot, state: FSMContext):
 
 @router.message(Command("test_morning"))
 async def cmd_test_morning(message: Message, bot: Bot):
+    if not _is_admin(message):
+        return
     await send_morning_reports(bot)
 
 
 @router.message(Command("test_monthly_summary"))
 async def cmd_test_monthly_summary(message: Message, bot: Bot):
+    if not _is_admin(message):
+        return
     from datetime import timedelta
 
     from sqlalchemy import select

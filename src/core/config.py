@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     BOT_TOKEN: str = ""
     DATABASE_URL: str = "sqlite+aiosqlite:///tratobot.db"
+    ADMIN_IDS: str = ""
     EXPENSE_SIMPLE_CHECK: bool = True
     RECOVERY_ENABLED: bool = True
 
@@ -28,6 +29,18 @@ class Settings(BaseSettings):
     RECOVERY_COOLDOWN_DAYS: int = 3
     RECOVERY_MIN_BASE_LIMIT: float = 1000.0
     RECOVERY_REPEAT_DEFICIT_MULT: float = 0.50
+
+    @property
+    def admin_ids(self) -> set[int]:
+        ids: set[int] = set()
+        for part in self.ADMIN_IDS.split(","):
+            try:
+                value = int(part.strip())
+            except ValueError:
+                continue
+            if value > 0:
+                ids.add(value)
+        return ids
 
     @property
     def db_url(self) -> str:

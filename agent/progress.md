@@ -276,6 +276,7 @@ history.py 1, evening_flow.py 2) теперь вызывают её одной �
 | `RECOVERY_ENABLED` | `True` | Kill-switch Recovery (`19755f0`, 2026-09-05). `False` → инфра дормантна (миграция есть, UI скрыт). `True` → активны Daily Limit блок, утреннее предложение, вечерний пересчёт `total_days`, бюджет-хуки. |
 | `BOT_TOKEN` | — | Telegram Bot API токен |
 | `DATABASE_URL` | `sqlite+aiosqlite:///tratobot.db` | Строка подключения к БД (SQLite dev / PostgreSQL prod) |
+| `ADMIN_IDS` | `""` | Через запятую: кому доступны `/test_*` команды. Пусто → никому (fail closed) |
 
 ---
 
@@ -430,6 +431,14 @@ parse_expr → parse_term → parse_factor
 
 **Осталось:** `DROP COLUMN is_active` — отдельным коммитом после стабилизации (поле мёртвое, ссылок в коде нет).
 **Файлы:** `database.py:34,105,151`, `tests/test_database.py`
+
+### 🔴 B7: `/test_*` команды открыты всем (2026-11-04) — ✅ Починено
+**Проблема:** `test_commands.py` регистрирует `/test_morning`, `/test_teaser`, `/test_evening`, `/test_monthly_summary` без проверки отправителя. `send_morning_reports` / `send_evening_teaser` шлют **всем** пользователям → любой новый юзер мог разослать всем утренний отчёт или ролловер.
+
+**Решение:** `config.py` `ADMIN_IDS: str = ""` + `settings.admin_ids` (запятая-разделитель, `int()` в try/except, только положительные), `test_commands.py:AdminOnlyMiddleware` — router-level гейт, новые `/test_*` закрыты автоматически + `_is_admin()` в каждом хендлере (defense in depth). Пустой `ADMIN_IDS` = **deny** (fail closed). Убран `message.delete()` из `/test_evening` (RULES 12.3). `.env.example` + README Variables.
+
+**Перед деплоем:** прописать `ADMIN_IDS=<твой telegram_id>` в Railway, иначе `/test_*` перестанут работать (молча; отказ пишется в `DEBUG`).
+**Файлы:** `config.py:15,52`, `test_commands.py:12`, `tests/test_test_commands.py`
 
 ### Вечерний FSM: мультилайн-парсинг (2026-08-25)
 **Проблема:** в вечерней сессии (22:00) использовался однострочный `parse_expense_text()` вместо мультистрокового `parse_multi_expense_text()`. При вводе «1700 аптека\n3500 кафе\n1256 лавка» первая сумма парсилась, остальное уходило в описание одной траты.

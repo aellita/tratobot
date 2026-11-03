@@ -78,17 +78,25 @@ src/utils/          math-парсер без eval, safe() для HTML, phrases.p
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # BOT_TOKEN, DATABASE_URL
+cp .env.example .env   # BOT_TOKEN, DATABASE_URL, ADMIN_IDS
 python -m src.bot.main
 ```
 
 Docker: `python:3.12-slim`, `CMD ["python", "-m", "src.bot.main"]`. Деплой — Railway (Dockerfile builder, 1 реплика).
 
+| Переменная | По умолчанию | Что делает |
+|---|---|---|
+| `BOT_TOKEN` | — | Токен бота от `@BotFather` |
+| `DATABASE_URL` | `sqlite+aiosqlite:///tratobot.db` | SQLite (dev) / PostgreSQL (prod) |
+| `ADMIN_IDS` | `""` | Через запятую: кому доступны `/test_*`. Пусто → никому (fail closed) |
+| `EXPENSE_SIMPLE_CHECK` | `True` | Reply-меню внизу чата вместо inline-меню |
+| `RECOVERY_ENABLED` | `True` | Kill-switch режима восстановления лимита |
+
 ---
 
 ## Тесты и качество
 
-**366 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite): unit (парсер — 76, helpers — 52, категоризация — 51), интеграционные с БД (74), handler/FSM с моками (90).
+**385 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite): unit (парсер — 76, helpers — 52, категоризация — 51), интеграционные с БД (74), handler/FSM с моками (90).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -124,7 +132,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 366 тестов
+├── tests/               # 385 тестов
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile

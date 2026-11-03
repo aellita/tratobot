@@ -11,7 +11,7 @@ Python 3.12 · aiogram 3.x · SQLAlchemy 2.0 async · PostgreSQL (prod) / SQLite
 ## Команды
 
 ```bash
-pytest -q                       # 366 тестов, in-memory SQLite
+pytest -q                       # 385 тестов, in-memory SQLite
 ruff check --select F .         # линтер
 ```
 

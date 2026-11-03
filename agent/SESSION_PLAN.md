@@ -8,7 +8,7 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 44 |
+| ✅ Готово | 45 |
 | 🔧 В работе | 0 |
 | ⏳ Ожидает | 2 |
 
@@ -275,6 +275,21 @@
 - [x] ✅ `tests/test_database.py` — 9 тестов (legacy NOT NULL / `false` / `true` / колонки нет / нет метаданных / SQLite / wiring PG+SQLite / whitelist)
 - [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 366 passed`
 - [ ] ⏳ `DROP COLUMN is_active` — отдельным коммитом после стабилизации
+
+---
+
+### B7: Гейт `ADMIN_IDS` на `/test_*` — ✅ Готово (2026-11-04)
+
+> **Цель:** `/test_morning` и `/test_teaser` рассылают всем пользователям, но были доступны любому.
+
+- [x] ✅ `config.py` — `ADMIN_IDS: str = ""` + `settings.admin_ids` (запятые, `try/except int`, только > 0)
+- [x] ✅ `test_commands.py` — `AdminOnlyMiddleware` на роутере + `_is_admin()` в 4 хендлерах
+- [x] ✅ Fail closed: пустой `ADMIN_IDS` → команды недоступны никому
+- [x] ✅ `/test_evening` без `message.delete()` (RULES 12.3)
+- [x] ✅ `.env.example` + README Variables (таблица)
+- [x] ✅ `tests/test_test_commands.py` — 19 тестов (парсинг/мусор/Settings/4 команды/3 middleware/админ-путь)
+- [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 385 passed`
+- [ ] ⏳ Прод: прописать `ADMIN_IDS=<telegram_id>` в Railway перед деплоем
 
 ---
 
