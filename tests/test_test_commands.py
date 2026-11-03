@@ -18,6 +18,11 @@ class _FakeMessage:
         self.answers.append(text)
 
 
+class _FakeEvent:
+    def __init__(self, user):
+        self.from_user = user
+
+
 class _NoUserMessage:
     from_user = None
 
@@ -126,9 +131,7 @@ async def test_middleware_blocks_non_admin(admins):
     async def _handler(event, data):
         calls.append(event)
 
-    result = await test_commands.AdminOnlyMiddleware()(
-        _handler, "event", {"event_from_user": _FakeUser(999)}
-    )
+    result = await test_commands.AdminOnlyMiddleware()(_handler, _FakeEvent(_FakeUser(999)), {})
 
     assert result is None
     assert calls == []
@@ -140,7 +143,7 @@ async def test_middleware_blocks_missing_user(admins):
     async def _handler(event, data):
         calls.append(event)
 
-    result = await test_commands.AdminOnlyMiddleware()(_handler, "event", {})
+    result = await test_commands.AdminOnlyMiddleware()(_handler, _FakeEvent(None), {})
 
     assert result is None
     assert calls == []
@@ -148,14 +151,19 @@ async def test_middleware_blocks_missing_user(admins):
 
 async def test_middleware_allows_admin(admins):
     calls = []
+    event = _FakeEvent(_FakeUser(111))
 
     async def _handler(event, data):
         calls.append(event)
         return "handled"
 
-    result = await test_commands.AdminOnlyMiddleware()(
-        _handler, "event", {"event_from_user": _FakeUser(111)}
-    )
+    result = await test_commands.AdminOnlyMiddleware()(_handler, event, {})
 
     assert result == "handled"
-    assert calls == ["event"]
+    assert calls == [event]
+
+
+def test_middleware_registered_on_router():
+    registered = test_commands.router.message.middleware._middlewares
+
+    assert any(isinstance(m, test_commands.AdminOnlyMiddleware) for m in registered)

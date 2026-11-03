@@ -269,10 +269,10 @@
 > **Цель:** новый пользователь не регистрировался на проде: `null value in column "is_active" violates not-null constraint` (3 попытки `405687370`, 02–03.11).
 
 - [x] ✅ Прод hotfix: `ALTER TABLE users ALTER COLUMN is_active SET DEFAULT TRUE` (metadata-only)
-- [x] ✅ `database.py:105` `_ensure_user_is_active_default(conn)` — идемпотентная PG-миграция: dialect-guard, `table_schema = current_schema()`, skip при дефолте `true`
-- [x] ✅ `database.py:151` вызов в `migrate_schema()` после миграции PK
+- [x] ✅ `database.py:106` `_ensure_user_is_active_default(conn)` — идемпотентная PG-миграция: dialect-guard, `table_schema = current_schema()`, skip при дефолте `true`
+- [x] ✅ `database.py:170` вызов в `migrate_schema()` после миграции PK
 - [x] ✅ `ALLOWED_COLUMNS += "is_active"` — иначе `_has_column` → `Unauthorized SQL identifier`
-- [x] ✅ `tests/test_database.py` — 9 тестов (legacy NOT NULL / `false` / `true` / колонки нет / нет метаданных / SQLite / wiring PG+SQLite / whitelist)
+- [x] ✅ `tests/test_database.py` — 13 тестов (legacy / `false` / `true` / нет колонки / нет метаданных / SQLite / wiring / whitelist / ALTER-fail / WARNING / search_path)
 - [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 366 passed`
 - [ ] ⏳ `DROP COLUMN is_active` — отдельным коммитом после стабилизации
 
@@ -287,7 +287,7 @@
 - [x] ✅ Fail closed: пустой `ADMIN_IDS` → команды недоступны никому
 - [x] ✅ `/test_evening` без `message.delete()` (RULES 12.3)
 - [x] ✅ `.env.example` + README Variables (таблица)
-- [x] ✅ `tests/test_test_commands.py` — 19 тестов (парсинг/мусор/Settings/4 команды/3 middleware/админ-путь)
+- [x] ✅ `tests/test_test_commands.py` — 20 тестов (парсинг/мусор/Settings/4 команды/3 middleware/регистрация/админ-путь)
 - [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 385 passed`
 - [ ] ⏳ Прод: прописать `ADMIN_IDS=<telegram_id>` в Railway перед деплоем
 
@@ -297,12 +297,12 @@
 
 > **Цель:** ловить дрейф «ORM vs реальная БД» до деплоя, а не по жалобе нового юзера.
 
-- [x] ✅ `src/db/schema_audit.py` — `model_schema()` / `compare_schemas()` / `read_actual_schema()` (PG `information_schema`, SQLite `PRAGMA`)
-- [x] ✅ critical: нет таблицы, нет колонки, legacy `NOT NULL` без default; warning: legacy-колонка, nullable-дрейф; info: лишняя таблица
-- [x] ✅ exit 1 при critical, 0 при чистоте; только чтение
+- [x] ✅ `src/db/schema_audit.py` — `model_schema()` / `compare_schemas()` / `read_actual_schema()` (PG `information_schema` + `current_schemas`, SQLite `PRAGMA table_xinfo`)
+- [x] ✅ critical: нет таблицы/колонки, legacy `NOT NULL` без default, `nullable`-модель при `NOT NULL` без default; warning: legacy-колонка, оба направления nullable-дрейфа; info: лишняя таблица
+- [x] ✅ exit 1 при critical, 0 при чистоте, 2 при ошибке чтения; только чтение
 - [x] ✅ Живая проверка: legacy-SQLite → critical + exit 1; чистая база → exit 0
-- [x] ✅ `tests/test_schema_audit.py` — 9 тестов на `compare_schemas` + `model_schema`
-- [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 394 passed`
+- [x] ✅ `tests/test_schema_audit.py` — 17 тестов: `compare_schemas`, `model_schema`, чтение PG/SQLite, exit codes, ошибка чтения
+- [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 407 passed`
 
 ---
 

@@ -15,12 +15,18 @@ class _FakeResult:
 
 
 class _FakeConn:
-    def __init__(self, row=None):
+    def __init__(self, row=None, alter_raises=False):
         self.row = row
+        self.alter_raises = alter_raises
         self.statements: list[str] = []
+
+    def begin_nested(self):
+        return _FakeTransaction(self)
 
     async def execute(self, statement, *args, **kwargs):
         self.statements.append(str(statement))
+        if "ALTER TABLE users" in str(statement) and self.alter_raises:
+            raise RuntimeError("lock timeout")
         if "information_schema.columns" in str(statement):
             return _FakeResult(self.row)
         return _FakeResult(None)
@@ -153,3 +159,34 @@ async def test_migrate_schema_skips_fix_on_sqlite(monkeypatch, column_missing):
 def test_is_active_is_allowed_identifier():
     assert "is_active" in database.ALLOWED_COLUMNS
     database._validate_identifier("is_active", database.ALLOWED_COLUMNS)
+
+
+async def test_alter_failure_does_not_break_startup(postgres_mode, column_exists, caplog):
+    conn = _FakeConn(row=[None], alter_raises=True)
+
+    await database._ensure_user_is_active_default(conn)
+
+    assert "Failed to set users.is_active default" in caplog.text
+
+
+async def test_warns_when_metadata_row_missing(postgres_mode, column_exists, caplog):
+    conn = _FakeConn(row=None)
+
+    await database._ensure_user_is_active_default(conn)
+
+    assert "default not applied" in caplog.text
+
+
+async def test_metadata_query_scoped_to_search_path(postgres_mode, column_exists):
+    conn = _FakeConn(row=["true"])
+
+    await database._ensure_user_is_active_default(conn)
+
+    assert any("current_schemas" in stmt for stmt in conn.statements)
+
+
+async def test_has_column_scoped_to_search_path(postgres_mode):
+    conn = _FakeConn(row=None)
+
+    assert await database._has_column(conn, "users", "is_active") is False
+    assert any("current_schemas" in stmt for stmt in conn.statements)

@@ -91,7 +91,8 @@ async def _has_column(conn, table: str, column: str) -> bool:
         result = await conn.execute(
             text(
                 "SELECT column_name FROM information_schema.columns "
-                "WHERE table_name = :table AND column_name = :col"
+                "WHERE table_name = :table AND column_name = :col "
+                "AND table_schema = ANY (current_schemas(false))"
             ),
             {"table": table, "col": column},
         )
@@ -113,18 +114,27 @@ async def _ensure_user_is_active_default(conn):
         await conn.execute(
             text(
                 "SELECT column_default FROM information_schema.columns "
-                "WHERE table_schema = current_schema() AND table_name = :table "
+                "WHERE table_schema = ANY (current_schemas(false)) AND table_name = :table "
                 "AND column_name = :col"
             ),
             {"table": "users", "col": "is_active"},
         )
     ).fetchone()
     if not row:
+        logger.warning(
+            "users.is_active detected but missing from information_schema search_path; "
+            "default not applied, new user INSERTs may fail"
+        )
         return
     current_default = (row[0] or "").lower()
     if current_default.startswith("true") or current_default.startswith("'t'"):
         return
-    await conn.execute(text("ALTER TABLE users ALTER COLUMN is_active SET DEFAULT TRUE"))
+    try:
+        async with conn.begin_nested():
+            await conn.execute(text("ALTER TABLE users ALTER COLUMN is_active SET DEFAULT TRUE"))
+    except Exception:
+        logger.exception("Failed to set users.is_active default; new user INSERTs will fail")
+        return
     logger.info("Migrated users: legacy is_active got DEFAULT TRUE")
 
 

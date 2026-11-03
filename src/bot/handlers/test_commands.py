@@ -16,9 +16,9 @@ router = Router()
 
 class AdminOnlyMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
-        user = data.get("event_from_user")
+        user = getattr(event, "from_user", None)
         if user is None or user.id not in settings.admin_ids:
-            logger.debug("Denied test command from %s", user.id if user else None)
+            logger.warning("Denied test command from %s", user.id if user else None)
             return None
         return await handler(event, data)
 

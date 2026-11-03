@@ -94,11 +94,11 @@ Docker: `python:3.12-slim`, `CMD ["python", "-m", "src.bot.main"]`. Деплой
 
 ### Аудит схемы перед деплоем
 
-Проверяет, что реальная БД совпадает с ORM-моделями: ищет пропавшие таблицы/колонки и legacy-колонки, на которых упадёт `INSERT`. Только чтение, ничего не меняет.
+Проверяет, что реальная БД совпадает с ORM-моделями: ищет пропавшие таблицы/колонки и legacy-колонки, на которых упадёт `INSERT`. Только чтение, ничего не меняет. Типы и длины колонок не сверяются.
 
 ```bash
 DATABASE_URL="postgresql://..." python -m src.db.schema_audit
-echo $?   # 0 — чисто, 1 — есть critical
+echo $?   # 0 — чисто, 1 — есть critical, 2 — не удалось прочитать схему
 ```
 
 Ловит ровно класс бага B6: поле убрали из модели, а в проде колонка осталась `NOT NULL` без дефолта — новый пользователь не регистрируется, и в обычных логах это видно только в момент его `/start`.
@@ -107,7 +107,7 @@ echo $?   # 0 — чисто, 1 — есть critical
 
 ## Тесты и качество
 
-**394 теста** (pytest + pytest-asyncio, hermetic in-memory SQLite): unit (парсер — 76, helpers — 52, категоризация — 51), интеграционные с БД (74), handler/FSM с моками (90).
+**407 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite): unit (парсер — 76, helpers — 52, категоризация — 51), интеграционные с БД (74), handler/FSM с моками (90).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -143,7 +143,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 394 теста
+├── tests/               # 407 тестов
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile

@@ -424,32 +424,32 @@ parse_expr → parse_term → parse_factor
 
 **Решение:**
 1. Hotfix прод-SQL: `ALTER TABLE users ALTER COLUMN is_active SET DEFAULT TRUE` (metadata-only, без rewrite).
-2. `database.py:105` `_ensure_user_is_active_default(conn)` — идемпотентная PG-миграция в `migrate_schema()` (`151`): dialect-guard → `_has_column` → `information_schema` с `table_schema = current_schema()` → пропуск, если дефолт уже `true` → `SET DEFAULT TRUE`, лог только при изменении.
+2. `database.py:106` `_ensure_user_is_active_default(conn)` — идемпотентная PG-миграция в `migrate_schema()` (`170`): dialect-guard → `_has_column` → `information_schema` с `table_schema = ANY (current_schemas(false))` → пропуск, если дефолт уже `true` → `SET DEFAULT TRUE` в `begin_nested()` (ошибка ALTER логируется через `logger.exception`, но старт бота не роняет), лог только при изменении; пустая метадата → `WARNING`.
 3. `ALLOWED_COLUMNS += "is_active"` (`database.py:34`) — иначе `_has_column` → `Unauthorized SQL identifier`.
 4. SQLite-ветка не нужна: `ALTER COLUMN` не поддержан, новые dev-базы колонку не создают; helper выходит по `if not is_postgres`.
-5. `tests/test_database.py` — 9 тестов: legacy NOT NULL, `false` → override, `true` → skip, колонки нет, нет метаданных, SQLite skip, wiring `migrate_schema()` PG/SQLite, whitelist.
+5. `tests/test_database.py` — 13 тестов: legacy NOT NULL, `false` → override, `true` → skip, колонки нет, нет метаданных, SQLite skip, wiring `migrate_schema()` PG/SQLite, whitelist, `begin_nested` failure не роняет старт, WARNING при пустой метадате, `current_schemas` в обоих запросах.
 
 **Осталось:** `DROP COLUMN is_active` — отдельным коммитом после стабилизации (поле мёртвое, ссылок в коде нет).
-**Файлы:** `database.py:34,105,151`, `tests/test_database.py`
+**Файлы:** `database.py:34,106,170`, `tests/test_database.py`
 
 ### 🔴 B7: `/test_*` команды открыты всем (2026-11-04) — ✅ Починено
 **Проблема:** `test_commands.py` регистрирует `/test_morning`, `/test_teaser`, `/test_evening`, `/test_monthly_summary` без проверки отправителя. `send_morning_reports` / `send_evening_teaser` шлют **всем** пользователям → любой новый юзер мог разослать всем утренний отчёт или ролловер.
 
 **Решение:** `config.py` `ADMIN_IDS: str = ""` + `settings.admin_ids` (запятая-разделитель, `int()` в try/except, только положительные), `test_commands.py:AdminOnlyMiddleware` — router-level гейт, новые `/test_*` закрыты автоматически + `_is_admin()` в каждом хендлере (defense in depth). Пустой `ADMIN_IDS` = **deny** (fail closed). Убран `message.delete()` из `/test_evening` (RULES 12.3). `.env.example` + README Variables.
 
-**Перед деплоем:** прописать `ADMIN_IDS=<твой telegram_id>` в Railway, иначе `/test_*` перестанут работать (молча; отказ пишется в `DEBUG`).
-**Файлы:** `config.py:15,52`, `test_commands.py:12`, `tests/test_test_commands.py`
+**Перед деплоем:** прописать `ADMIN_IDS=<твой telegram_id>` в Railway, иначе `/test_*` перестанут работать (молча для юзера; отказ пишется в `WARNING`).
+**Файлы:** `config.py:17,34`, `test_commands.py:17,29`, `tests/test_test_commands.py`
 
 ### 🛡 B8: Schema audit — сверка моделей с реальной БД (2026-11-04) — ✅ Готово
 **Проблема:** B6 показал класс багов, который тесты не ловят: ORM ушёл вперёд, прод-схема осталась с legacy-колонкой `NOT NULL` без дефолта. Свежий staging это тоже не поймает — там база создаётся из текущих моделей.
 
-**Решение:** `src/db/schema_audit.py` — read-only сверка `Base.metadata` vs `information_schema` / `PRAGMA table_info`:
-- **critical:** нет таблицы, нет колонки из модели, legacy-колонка `NOT NULL` без server default (ровно B6);
-- **warning:** legacy-колонка, `NULL` в базе при `nullable=False` в модели;
+**Решение:** `src/db/schema_audit.py` — read-only сверка `Base.metadata` vs `information_schema` (`table_schema = ANY (current_schemas(false))`, только `BASE TABLE`) / `PRAGMA table_xinfo`:
+- **critical:** нет таблицы, нет колонки из модели, legacy-колонка `NOT NULL` без server default (ровно B6), `nullable` в модели при `NOT NULL` в базе без default (ORM вставит `None` и упадёт);
+- **warning:** legacy-колонка, `NULL` в базе при `nullable=False` в модели, `nullable`-модель при `NOT NULL` в базе **с** default;
 - **info:** лишняя таблица.
-`compare_schemas()` — чистая функция (тестируется без БД), `main()` печатает отчёт и возвращает exit code 1 при critical. Запуск: `python -m src.db.schema_audit` (DATABASE_URL можно направить на прод, только чтение).
+`compare_schemas()` — чистая функция (тестируется без БД), пустая модель → critical (иначе аудит молча зелёный). `main()` печатает отчёт и возвращает exit code 1 при critical, 2 — если схему не удалось прочитать. Типы/длины не сверяются (ограничение в docstring). Запуск: `python -m src.db.schema_audit` (DATABASE_URL можно направить на прод, только чтение).
 
-**Проверено вживую:** legacy-SQLite с `users.is_active NOT NULL` → `[CRITICAL] users.is_active — legacy NOT NULL без server default — ORM INSERT упадёт`, exit 1; чистая база из `create_all` → `0 critical`, exit 0. `pytest 394 passed`.
+**Проверено вживую:** legacy-SQLite с `users.is_active NOT NULL` → `[CRITICAL] users.is_active — legacy NOT NULL без server default — ORM INSERT упадёт`, exit 1; чистая база из `create_all` → `0 critical`, exit 0. `pytest 407 passed`.
 **Файлы:** `src/db/schema_audit.py`, `tests/test_schema_audit.py`
 
 ### Вечерний FSM: мультилайн-парсинг (2026-08-25)

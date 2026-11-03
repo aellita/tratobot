@@ -1,4 +1,13 @@
+"""Read-only аудит расхождений между ORM-моделями и реальной БД.
+
+Сверяет наличие таблиц/колонок, nullable и server default. **Типы и длины
+(VARCHAR(20) vs VARCHAR(255), BIGINT vs INTEGER) не сравниваются.**
+
+Exit codes: 0 — чисто, 1 — есть CRITICAL, 2 — не удалось прочитать схему.
+"""
+
 import asyncio
+import logging
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -7,6 +16,8 @@ from sqlalchemy import text
 
 from .database import engine, is_postgres
 from .models.models import Base
+
+logger = logging.getLogger(__name__)
 
 CRITICAL = "CRITICAL"
 WARNING = "WARNING"
@@ -52,6 +63,16 @@ def compare_schemas(
 ) -> list[Finding]:
     findings: list[Finding] = []
 
+    if not model:
+        return [
+            Finding(
+                CRITICAL,
+                "(models)",
+                None,
+                "модели не загружены — сверять нечего, аудит недостоверен",
+            )
+        ]
+
     for table_name, model_columns in model.items():
         actual_columns = actual.get(table_name)
         if actual_columns is None:
@@ -74,6 +95,16 @@ def compare_schemas(
                         table_name,
                         column_name,
                         "в базе допускает NULL, модель — нет",
+                    )
+                )
+            elif model_column.nullable and not actual_column.nullable:
+                level = WARNING if actual_column.has_default else CRITICAL
+                findings.append(
+                    Finding(
+                        level,
+                        table_name,
+                        column_name,
+                        "модель допускает NULL, база — нет — ORM INSERT с None упадёт",
                     )
                 )
 
@@ -106,10 +137,13 @@ def compare_schemas(
 async def _read_postgres(conn) -> dict[str, dict[str, ColumnInfo]]:
     result = await conn.execute(
         text(
-            "SELECT table_name, column_name, is_nullable, column_default "
-            "FROM information_schema.columns "
-            "WHERE table_schema = current_schema() "
-            "ORDER BY table_name, ordinal_position"
+            "SELECT c.table_name, c.column_name, c.is_nullable, c.column_default "
+            "FROM information_schema.columns c "
+            "JOIN information_schema.tables t "
+            "ON t.table_schema = c.table_schema AND t.table_name = c.table_name "
+            "WHERE c.table_schema = ANY (current_schemas(false)) "
+            "AND t.table_type = 'BASE TABLE' "
+            "ORDER BY c.table_name, c.ordinal_position"
         )
     )
     schema: dict[str, dict[str, ColumnInfo]] = {}
@@ -133,11 +167,12 @@ async def _read_sqlite(conn) -> dict[str, dict[str, ColumnInfo]]:
         if table.startswith("sqlite_"):
             continue
         escaped = table.replace("'", "''")
-        rows = (await conn.execute(text(f"PRAGMA table_info('{escaped}')"))).fetchall()
+        rows = (await conn.execute(text(f"PRAGMA table_xinfo('{escaped}')"))).fetchall()
         schema[table] = {
             row[1]: ColumnInfo(
                 name=row[1],
-                nullable=not bool(row[3]),
+                # INTEGER PRIMARY KEY — rowid alias, PRAGMA notnull=0, но NULL невозможен.
+                nullable=not bool(row[3]) and not bool(row[5]),
                 has_default=row[4] is not None,
             )
             for row in rows
@@ -171,7 +206,12 @@ def report(findings: list[Finding]) -> int:
 
 
 async def run_audit() -> int:
-    actual = await read_actual_schema()
+    try:
+        actual = await read_actual_schema()
+    except Exception:
+        logger.exception("Не удалось прочитать схему БД")
+        print("ВЕРДИКТ: не удалось прочитать схему — проверь DATABASE_URL и доступность БД.")
+        return 2
     findings = compare_schemas(model_schema(), actual)
     return report(findings)
 
