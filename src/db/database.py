@@ -8,7 +8,7 @@ from ..db.models.models import Base
 
 logger = logging.getLogger(__name__)
 
-is_postgres = settings.DATABASE_URL.startswith("postgresql://")
+is_postgres = settings.db_url.startswith("postgresql")
 
 ALLOWED_TABLES = {
     "budgets",
@@ -31,6 +31,7 @@ ALLOWED_COLUMNS = {
     "free_money",
     "spent_at_recalc",
     "is_archived",
+    "is_active",
     "report_type",
     "sent_date",
     "base_daily_limit",
@@ -101,6 +102,32 @@ async def _has_column(conn, table: str, column: str) -> bool:
         return any(row[1] == column for row in rows)
 
 
+async def _ensure_user_is_active_default(conn):
+    if not is_postgres:
+        return
+    _validate_identifier("users", ALLOWED_TABLES)
+    _validate_identifier("is_active", ALLOWED_COLUMNS)
+    if not await _has_column(conn, "users", "is_active"):
+        return
+    row = (
+        await conn.execute(
+            text(
+                "SELECT column_default FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND table_name = :table "
+                "AND column_name = :col"
+            ),
+            {"table": "users", "col": "is_active"},
+        )
+    ).fetchone()
+    if not row:
+        return
+    current_default = (row[0] or "").lower()
+    if current_default.startswith("true") or current_default.startswith("'t'"):
+        return
+    await conn.execute(text("ALTER TABLE users ALTER COLUMN is_active SET DEFAULT TRUE"))
+    logger.info("Migrated users: legacy is_active got DEFAULT TRUE")
+
+
 async def migrate_schema():
     """Migrate old schema (user_id FK → telegram_id FK) to new schema."""
     async with engine.begin() as conn:
@@ -129,6 +156,8 @@ async def migrate_schema():
                     text("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_telegram_id_key")
                 )
                 logger.info("Migrated users: telegram_id is now primary key")
+
+            await _ensure_user_is_active_default(conn)
 
             # Categories: make telegram_id and type nullable
             row = (

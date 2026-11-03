@@ -8,7 +8,7 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 43 |
+| ✅ Готово | 44 |
 | 🔧 В работе | 0 |
 | ⏳ Ожидает | 2 |
 
@@ -264,8 +264,21 @@
 
 ---
 
-## Неделя 2 — AI Insight
+### B6: `is_active` NOT NULL без DEFAULT — ✅ Готово (2026-11-04) — 1 коммит
 
+> **Цель:** новый пользователь не регистрировался на проде: `null value in column "is_active" violates not-null constraint` (3 попытки `405687370`, 02–03.11).
+
+- [x] ✅ Прод hotfix: `ALTER TABLE users ALTER COLUMN is_active SET DEFAULT TRUE` (metadata-only)
+- [x] ✅ `database.py:105` `_ensure_user_is_active_default(conn)` — идемпотентная PG-миграция: dialect-guard, `table_schema = current_schema()`, skip при дефолте `true`
+- [x] ✅ `database.py:151` вызов в `migrate_schema()` после миграции PK
+- [x] ✅ `ALLOWED_COLUMNS += "is_active"` — иначе `_has_column` → `Unauthorized SQL identifier`
+- [x] ✅ `tests/test_database.py` — 9 тестов (legacy NOT NULL / `false` / `true` / колонки нет / нет метаданных / SQLite / wiring PG+SQLite / whitelist)
+- [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 366 passed`
+- [ ] ⏳ `DROP COLUMN is_active` — отдельным коммитом после стабилизации
+
+---
+
+## Неделя 2 — AI Insight
 ### День 6: WeeklyStats + агрегация
 
 > **Цель:** новый сервис для сбора недельной статистики.

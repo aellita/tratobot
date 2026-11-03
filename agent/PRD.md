@@ -116,7 +116,7 @@ src/
 | `username` | str (nullable) | Username |
 | `first_name` | str (nullable) | Имя |
 | `created_at` | datetime | Дата регистрации |
-| `is_active` | bool | Активен ли пользователь |
+| `is_active` | bool | Legacy: удалено из ORM-модели, колонка в PG не используется (progress B6) |
 
 ### 5.2 Budget
 | Поле | Тип | Описание |

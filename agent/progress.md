@@ -273,7 +273,7 @@ history.py 1, evening_flow.py 2) теперь вызывают её одной �
 | Флаг | По умолчанию | Что контролирует |
 |------|-------------|------------------|
 | `EXPENSE_SIMPLE_CHECK` | `True` | `True` → ReplyKeyboard (persistent menu внизу чата), inline-меню скрыто, чеки трат без лишних кнопок. `False` → inline-клавиатуры, кнопка «В главное меню» в отчётах. |
-| `RECOVERY_ENABLED` | `False` | Kill-switch Recovery. `False` → инфра дормантна (миграция есть, UI скрыт). `True` → активны Daily Limit блок, утреннее предложение, вечерний пересчёт `total_days`, бюджет-хуки. |
+| `RECOVERY_ENABLED` | `True` | Kill-switch Recovery (`19755f0`, 2026-09-05). `False` → инфра дормантна (миграция есть, UI скрыт). `True` → активны Daily Limit блок, утреннее предложение, вечерний пересчёт `total_days`, бюджет-хуки. |
 | `BOT_TOKEN` | — | Telegram Bot API токен |
 | `DATABASE_URL` | `sqlite+aiosqlite:///tratobot.db` | Строка подключения к БД (SQLite dev / PostgreSQL prod) |
 
@@ -413,6 +413,23 @@ parse_expr → parse_term → parse_factor
 3. Новая фраза `ERR_GENERIC` в phrases.py.
 
 **Update 06082b2 (2026-09-09) — B, dead field:** `User.is_active` удалён из `models.py:35` ещё `0a89bf9 2026-06-03` (мертвое поле, `Wishlist.is_active` не трогаем). `user_service.py:12` `is_active=True` давал `TypeError` на новых юзерах (`TEST_ID`). Фикс `06082b2` `User(...)` без `is_active`, legacy-колонка в PG остаётся deprecated, `PRD User.is_active` — legacy. Snapshot/B2/Recovery не трогали.
+
+**Регресс (2026-11-04):** колонка в PG осталась `NOT NULL` без server-side DEFAULT → новый юзер не создавался. См. B6 ниже.
+
+### 🔴 B6: `is_active` NOT NULL без DEFAULT → новый юзер не регистрируется (2026-11-04) — ✅ Починено
+**Симптом:** прод-PG, 3 попытки `/start` от `405687370` (02.11 21:04/21:07, 03.11 14:02 MSK): `ERROR: null value in column "is_active" of relation "users" violates not-null constraint`, `INSERT INTO users (telegram_id, username, first_name, created_at)`. Юзер видел только `ERR_GENERIC` (`@dp.errors`), регистрация не проходила ~2 месяца.
+
+**Корень:** `da0f738` убрал `is_active=True` из `User(...)`, но в прод-таблице колонка осталась `BOOLEAN NOT NULL` **без DDL-дефолта** — старый `default=True` был клиентским (Python), не server-side. Изменение модели без миграции → регресс после `171dede`. `migrate_schema()` про `users.is_active` не знал.
+
+**Решение:**
+1. Hotfix прод-SQL: `ALTER TABLE users ALTER COLUMN is_active SET DEFAULT TRUE` (metadata-only, без rewrite).
+2. `database.py:105` `_ensure_user_is_active_default(conn)` — идемпотентная PG-миграция в `migrate_schema()` (`151`): dialect-guard → `_has_column` → `information_schema` с `table_schema = current_schema()` → пропуск, если дефолт уже `true` → `SET DEFAULT TRUE`, лог только при изменении.
+3. `ALLOWED_COLUMNS += "is_active"` (`database.py:34`) — иначе `_has_column` → `Unauthorized SQL identifier`.
+4. SQLite-ветка не нужна: `ALTER COLUMN` не поддержан, новые dev-базы колонку не создают; helper выходит по `if not is_postgres`.
+5. `tests/test_database.py` — 9 тестов: legacy NOT NULL, `false` → override, `true` → skip, колонки нет, нет метаданных, SQLite skip, wiring `migrate_schema()` PG/SQLite, whitelist.
+
+**Осталось:** `DROP COLUMN is_active` — отдельным коммитом после стабилизации (поле мёртвое, ссылок в коде нет).
+**Файлы:** `database.py:34,105,151`, `tests/test_database.py`
 
 ### Вечерний FSM: мультилайн-парсинг (2026-08-25)
 **Проблема:** в вечерней сессии (22:00) использовался однострочный `parse_expense_text()` вместо мультистрокового `parse_multi_expense_text()`. При вводе «1700 аптека\n3500 кафе\n1256 лавка» первая сумма парсилась, остальное уходило в описание одной траты.
