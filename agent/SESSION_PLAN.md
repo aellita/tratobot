@@ -8,9 +8,9 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 46 |
+| ✅ Готово | 47 |
 | 🔧 В работе | 0 |
-| ⏳ Ожидает | 2 |
+| ⏳ Ожидает | 1 |
 
 **Следующая задача:** Редактура Утра 1-26 без Кубышки (твоя таблица `Бро, ты машина / Красиво / Брооооо`) → Вечер → Статус
 
@@ -289,7 +289,7 @@
 - [x] ✅ `.env.example` + README Variables (таблица)
 - [x] ✅ `tests/test_test_commands.py` — 20 тестов (парсинг/мусор/Settings/4 команды/3 middleware/регистрация/админ-путь)
 - [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 385 passed`
-- [ ] ⏳ Прод: прописать `ADMIN_IDS=<telegram_id>` в Railway перед деплоем
+- [x] ✅ Прод: `ADMIN_IDS=412762673` прописан в сервисе бота в Railway
 
 ---
 
@@ -303,6 +303,21 @@
 - [x] ✅ Живая проверка: legacy-SQLite → critical + exit 1; чистая база → exit 0
 - [x] ✅ `tests/test_schema_audit.py` — 17 тестов: `compare_schemas`, `model_schema`, чтение PG/SQLite, exit codes, ошибка чтения
 - [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 407 passed`
+
+---
+
+### B9: `/test_*` бьют только по админу — ✅ Готово (2026-11-04)
+
+> **Цель:** тестовые команды не должны трогать реальных пользователей.
+
+- [x] ✅ `send_morning_reports(bot, user_ids=None, *, force=False) -> list[int]` — без аргументов все, с `user_ids` только они; `force=True` пропускает дневной дедуп и не пишет `daily_reports_log`
+- [x] ✅ `send_evening_teaser(bot, storage, user_ids=None) -> list[int]` — тот же фильтр получателей
+- [x] ✅ `/test_morning` и `/test_teaser` передают `[message.from_user.id]`; `/test_evening` и `/test_monthly_summary` уже были админскими
+- [x] ✅ Обе команды отвечают по факту: «отправлено тебе» / «не отправлено» (нет бюджета, уведомления off, занят в вечерней сессии); тексты в `phrases.py`
+- [x] ✅ Планировщик и утренний запуск в `main.py` без аргументов → шлют всем, как раньше
+- [x] ✅ `tests/test_report_recipients.py` — 9 тестов: фильтр получателей, `force` без дедупа и без лога, возврат получателей, отсутствие лога при ошибке отправки
+- [x] ✅ `tests/test_test_commands.py` — 23 теста (аргументы админа + отчёт о результате)
+- [x] ✅ `ruff check .` + `ruff format --check .` + `pytest 419 passed`
 
 ---
 

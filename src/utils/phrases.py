@@ -784,3 +784,19 @@ PERIOD_DAY_SUFFIX = "-го"
 FALLBACK_DESC = "трата"
 DEFAULT_WISHLIST_NAME = "Хотелка"
 DEFAULT_CATEGORY = ("📦", "Прочее")
+
+# ── Test commands (admin only) ─────────────────────────────
+TEST_TEASER_START = "🚀 Запускаю принудительный тизер..."
+TEST_TEASER_SENT = "🏁 Тизер отправлен тебе!"
+TEST_TEASER_SKIPPED = (
+    "⚠️ Тизер не отправлен: ты занят в вечерней сессии, "
+    "нет активного бюджета, выключены уведомления или ошибка отправки."
+)
+TEST_MORNING_START = "🚀 Запускаю утренний отчёт..."
+TEST_MORNING_SENT = "🏁 Утренний отчёт отправлен тебе!"
+TEST_MORNING_SKIPPED = (
+    "⚠️ Утренний отчёт не отправлен: нет активного бюджета, "
+    "выключены уведомления или ошибка отправки."
+)
+TEST_MONTHLY_START = "📊 Генерирую Monthly Summary..."
+TEST_NO_BUDGET = "❌ У тебя нет ни одного бюджета."

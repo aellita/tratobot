@@ -98,13 +98,19 @@ _MONTH_NAMES_RU = {
 }
 
 
-async def send_evening_teaser(bot: Bot, storage: BaseStorage):
+async def send_evening_teaser(
+    bot: Bot,
+    storage: BaseStorage,
+    user_ids: list[int] | None = None,
+) -> list[int]:
     logger.info("Запуск вечернего тизера в 22:00...")
 
-    async with async_session_maker() as session:
-        result = await session.execute(select(User.telegram_id))
-        user_ids = result.scalars().all()
+    if user_ids is None:
+        async with async_session_maker() as session:
+            result = await session.execute(select(User.telegram_id))
+            user_ids = list(result.scalars().all())
 
+    sent: list[int] = []
     for tg_id in user_ids:
         try:
             async with async_session_maker() as session:
@@ -145,11 +151,13 @@ async def send_evening_teaser(bot: Bot, storage: BaseStorage):
             await state.update_data(container_id=msg.message_id, session_expenses=[])
 
             logger.info(f"Вечерняя сессия открыта {tg_id}")
+            sent.append(tg_id)
             await asyncio.sleep(0.05)
         except Exception as e:
             logger.error(f"Не удалось открыть вечернюю сессию для {tg_id}: {e}")
 
     logger.info("Рассылка вечерних сессий завершена.")
+    return sent
 
 
 async def send_auto_close_reports(bot: Bot, storage: BaseStorage):

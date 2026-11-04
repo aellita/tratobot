@@ -1,7 +1,7 @@
 # Карта фраз Тратобота — техническая карта системы сообщений
 
-> Источник: `tratobot/src/utils/phrases.py` (839 строк, 365 Assign, 364 уникальных константы, 1 дубль `NEW_CATEGORY_PROMPT` ×2) + 19 точек импорта `phrases.` в `src/bot/handlers/*.py` и `src/services/*.py`. Не меняет код и тексты — только фиксирует, когда и как каждая фраза показывается.
-> Полная таблица: `docs/PHRASE_TABLE.csv` (фильтр по `scenario`, `status`, `user_facing`).
+> Источник: `tratobot/src/utils/phrases.py` (802 строки, 350 Assign, 349 уникальных констант, 1 дубль `NEW_CATEGORY_PROMPT` на 148 и 173) + 19 точек импорта `phrases.` в `src/bot/handlers/*.py` и `src/services/*.py`. Не меняет код и тексты — только фиксирует, когда и как каждая фраза показывается.
+> Таблица-снимок: `docs/PHRASE_TABLE.csv` (фильтр по `scenario`, `status`, `user_facing`); источник истины — `phrases.py`.
 
 ---
 
@@ -67,17 +67,21 @@
 - **Фразы:** `CATEGORY_MANAGEMENT_TITLE/LIST_ACTIVE/ARCHIVED/EMPTY/DETAIL_HEADER/ARCHIVED_NOTE`, `CATEGORY_RENAME_PROMPT/RENAMED/ARCHIVED/UNARCHIVED`, `CATEGORY_DELETE_WARNING/MOVE_PROMPT/DELETED_MOVED/HARD/CONFIRM_PROMPT`, `CATEGORY_NOT_FOUND`, `CATEGORY_PICKER/CHANGED/CREATED`, `BTN_CATEGORY_RENAME/ARCHIVE/UNARCHIVE/DELETE/*`, `BTN_MANAGE_CATEGORIES`, `DEFAULT_CATEGORY`, `ERR_CATEGORY_*`, `NEW_CATEGORY_PROMPT`.
 - **Ветки:** `list → active/archived + is_archived suffix`, `detail → archived note if is_archived`, `rename → build_category_name + duplicate/len check`, `archive toggle`, `delete → 0 count → hard? else warning → move/hard/confirm`.
 
+### 12. Тестовые команды (admin only, `test_commands.py`)
+- **Фразы:** `TEST_TEASER_START/SENT/SKIPPED`, `TEST_MORNING_START/SENT/SKIPPED`, `TEST_MONTHLY_START`, `TEST_NO_BUDGET`.
+- **Ветки:** `/test_teaser` и `/test_morning` бьют только по `message.from_user.id`; `send_*` возвращает список получателей → «отправлено тебе» или «не отправлено». Утренний пропуск: нет активного бюджета или уведомления off. Тизер: те же причины плюс занят в вечерней сессии. `/test_morning` идёт с `force=True`: без дневного дедупа и без записи `daily_reports_log`.
+
 ---
 
 ## Подробные деревья ветвлений (реальные условия из кода)
 
-### MORNING REPORT (`morning_report.py:173-357`, `491` строк)
+### MORNING REPORT (`morning_report.py`, `391` строк)
 ```
-send_morning_reports (cron 08:00 MSK)
-├── for tg_id in users
-│   ├── if _has_morning_report_today → continue
+send_morning_reports (cron 08:00 MSK; user_ids=None → все, force=False)
+├── for tg_id in user_ids
+│   ├── if not force and _has_morning_report_today → continue
 │   ├── if UserSettings.notifications_enabled == False → continue
-│   ├── if today == period_end+1 (get_period_dates) → Monthly Summary + ROLLOVER_OFFER + expire recovery + _log_morning_report → continue
+│   ├── if today == period_end+1 (get_period_dates) → Monthly Summary + ROLLOVER_OFFER + expire recovery + _maybe_log_morning_report(force) → continue
 │   ├── budget = get_active_budget (this_month vs last_month by period_start_day)
 │   │   └── if not budget or daily_limit<=0 → continue
 │   ├── compute: days_left, dl_pred, dl_simulated, pct_pred/sim, money_for_life, end_of_period (days<=3), yesterday_spent, overdraft
@@ -186,18 +190,17 @@ check(amount,desc, message_id):
 
 ---
 
-## Итоговая статистика (из `PHRASE_TABLE.csv`)
+## Статистика (снимок; источник истины — `phrases.py`)
 
-- **Всего констант:** 365 Assign (364 уникальных, 1 дубль `NEW_CATEGORY_PROMPT` ×2 строки 158 и 182)
-- **Реально используется (`USED`):** 339 (93%)
-- **Не используется (`UNUSED`):** 24 (7%) — преимущественно `STATUS_PERIOD_*` старые (`STATUS_PERIOD_NEGATIVE/POSITIVE/ZERO`, `STATUS_REMAINING_OK/STOP`), `ROUND_UP`, `REDUCE_LIMIT_ACCEPTED`, `HINT_*` внутренние, `PERIOD_SET_PERIOD`, часть `BTN_*` без handler (`BTN_RESTART_BUDGET` в start_choice но используется — помечен USED)
-- **Дубли:** 1 (`NEW_CATEGORY_PROMPT` идентичный текст, статус `DUPLICATE` ×2 строки, фактически 1 фраза)
+- **Всего констант:** 350 Assign, 349 уникальных; 1 дубль `NEW_CATEGORY_PROMPT` (148 и 173)
+- **Используется в коде:** 317 (91%), не используется 32 (9%) — по grep по `src/` вне `phrases.py`
+- **CSV-снимок:** 373 строки; часть строк — исторические (удалённые константы), часть новых может отсутствовать. Сверяйся с `phrases.py`
+- **Дубли:** 1 (`NEW_CATEGORY_PROMPT`, одинаковый текст, фактически 1 фраза)
 - **Неоднозначных (`UNCLEAR`):** 0 после выноса (`TODO` в morning закрыты), ранее 7 `MORNING_YELLOW/RED` были `UNCLEAR` до P0
 - **Много вариантов (≥2):** 12 групп: `GREETINGS` 3, `AUTO_CLOSE` 5, `ZONE_END_*` 2, `ZONE_GREEN_*` 2, `MORNING_YELLOW/RED_*` 2 каждая (7 групп ×2 =14), `EVENING_ZERO_*` 3, `EVENING_GREEN_*` 4, `EVENING_OVER_*` 3, `STATUS_FOOTER_*` 3 каждая (10 групп ×3 =30), `MONTHLY_TOTEM_*` 7 totems
 - **Практически без вариативности:** `RECOVERY` (1 строка на ветку, выбор условный, не random), `HISTORY_EMPTY` (1), `CATEGORY_*` (1), `ROLLOVER_*` (1)
 
-**Каналы (`user_facing`):**
-- `message` 260, `button` 75, `error` 29, `internal` 5 (`DEFAULT_CATEGORIES`, `MENU_KEYWORDS`, `HINT_*`, `FALLBACK_DESC`)
+**Каналы:** см. столбец `channel` в `PHRASE_TABLE.csv` (`message` / `button` / `error` / `internal`).
 
 ---
 

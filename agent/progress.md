@@ -452,6 +452,21 @@ parse_expr → parse_term → parse_factor
 **Проверено вживую:** legacy-SQLite с `users.is_active NOT NULL` → `[CRITICAL] users.is_active — legacy NOT NULL без server default — ORM INSERT упадёт`, exit 1; чистая база из `create_all` → `0 critical`, exit 0. `pytest 407 passed`.
 **Файлы:** `src/db/schema_audit.py`, `tests/test_schema_audit.py`
 
+### 🎯 B9: `/test_*` бьют только по админу (2026-11-04) — ✅ Готово
+**Проблема:** после B7 запускать `/test_*` мог только админ, но `/test_morning` и `/test_teaser` всё равно рассылали **всем** пользователям. Тест был небезопасен: мог отправить реальный утренний отчёт или открыть вечернюю сессию чужим людям.
+
+**Решение:**
+- `send_morning_reports(bot, user_ids=None, *, force=False) -> list[int]` — `None` → все (планировщик/`main.py` не менялись); `user_ids=[id]` → только они; `force=True` пропускает `_has_morning_report_today`, а `_maybe_log_morning_report` при нём не пишет `daily_reports_log`, поэтому тест приходит всегда и не блокирует реальную рассылку в 08:00; возвращает список получателей, которым реально ушло сообщение;
+- `send_evening_teaser(bot, storage, user_ids=None) -> list[int]` — тот же фильтр и тот же возврат;
+- `/test_morning` → `user_ids=[message.from_user.id], force=True`; `/test_teaser` → `user_ids=[message.from_user.id]`;
+- обе команды отвечают по факту: «отправлено тебе» или «не отправлено» (нет бюджета / уведомления off / занят в вечерней сессии), а не врут об успехе;
+- тексты вынесены в `phrases.py` (`TEST_*`);
+- `/test_evening` и `/test_monthly_summary` уже работали только с админом;
+- recovery-логика в тесте остаётся как в проде (осознанно).
+
+`tests/test_report_recipients.py` — 9 тестов (фильтр получателей, `force` без дедупа, `_maybe_log_morning_report` без записи при force, возврат получателей и отсутствие лога при ошибке отправки). `tests/test_test_commands.py` — 23 теста. `pytest 419 passed`.
+**Файлы:** `src/services/morning_report.py`, `src/services/evening_report.py`, `src/bot/handlers/test_commands.py`, `tests/test_report_recipients.py`, `tests/test_test_commands.py`
+
 ### Вечерний FSM: мультилайн-парсинг (2026-08-25)
 **Проблема:** в вечерней сессии (22:00) использовался однострочный `parse_expense_text()` вместо мультистрокового `parse_multi_expense_text()`. При вводе «1700 аптека\n3500 кафе\n1256 лавка» первая сумма парсилась, остальное уходило в описание одной траты.
 

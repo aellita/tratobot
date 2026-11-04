@@ -8,6 +8,7 @@ from aiogram.types import Message
 from ...core.config import settings
 from ...services.evening_report import EVENING_KB, INITIAL_TEXT, EveningState, send_evening_teaser
 from ...services.morning_report import send_morning_reports
+from ...utils import phrases
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +45,18 @@ async def cmd_test_evening(message: Message, state: FSMContext):
 async def cmd_test_teaser(message: Message, bot: Bot, state: FSMContext):
     if not _is_admin(message):
         return
-    await message.answer("🚀 Запускаю принудительный тизер...")
-    await send_evening_teaser(bot, state.storage)
-    await message.answer("🏁 Тизер отправлен всем пользователям!")
+    await message.answer(phrases.TEST_TEASER_START)
+    sent = await send_evening_teaser(bot, state.storage, user_ids=[message.from_user.id])
+    await message.answer(phrases.TEST_TEASER_SENT if sent else phrases.TEST_TEASER_SKIPPED)
 
 
 @router.message(Command("test_morning"))
 async def cmd_test_morning(message: Message, bot: Bot):
     if not _is_admin(message):
         return
-    await send_morning_reports(bot)
+    await message.answer(phrases.TEST_MORNING_START)
+    sent = await send_morning_reports(bot, user_ids=[message.from_user.id], force=True)
+    await message.answer(phrases.TEST_MORNING_SENT if sent else phrases.TEST_MORNING_SKIPPED)
 
 
 @router.message(Command("test_monthly_summary"))
@@ -72,7 +75,6 @@ async def cmd_test_monthly_summary(message: Message, bot: Bot):
         get_average_expenses,
         get_period_dates,
     )
-    from ...utils import phrases
     from ...utils.helpers import get_msk_now
     from ..keyboards import get_rollover_keyboard
     from ..rich_api import send_rich_message
@@ -87,7 +89,7 @@ async def cmd_test_monthly_summary(message: Message, bot: Bot):
         budgets = list(result.scalars().all())
 
     if not budgets:
-        await message.answer("❌ У тебя нет ни одного бюджета.")
+        await message.answer(phrases.TEST_NO_BUDGET)
         return
 
     budget = None
@@ -105,7 +107,7 @@ async def cmd_test_monthly_summary(message: Message, bot: Bot):
     if not budget:
         budget = budgets[0]
 
-    await message.answer("📊 Генерирую Monthly Summary...")
+    await message.answer(phrases.TEST_MONTHLY_START)
 
     data = await build_summary_data(tg_id, budget)
     msg = format_summary_text(data)

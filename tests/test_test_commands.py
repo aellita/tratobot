@@ -2,6 +2,7 @@ import pytest
 
 from src.bot.handlers import test_commands
 from src.core.config import Settings, settings
+from src.utils import phrases
 
 
 class _FakeUser:
@@ -70,8 +71,8 @@ def test_is_admin_rejects_missing_user():
 async def test_morning_ignored_for_non_admin(monkeypatch, admins):
     calls = []
 
-    async def _fake_send(bot):
-        calls.append(bot)
+    async def _fake_send(*args, **kwargs):
+        calls.append((args, kwargs))
 
     monkeypatch.setattr(test_commands, "send_morning_reports", _fake_send)
 
@@ -83,22 +84,43 @@ async def test_morning_ignored_for_non_admin(monkeypatch, admins):
 async def test_morning_runs_for_admin(monkeypatch, admins):
     calls = []
 
-    async def _fake_send(bot):
-        calls.append(bot)
+    async def _fake_send(bot, user_ids, *, force):
+        calls.append((bot, user_ids, force))
+        return list(user_ids)
 
     monkeypatch.setattr(test_commands, "send_morning_reports", _fake_send)
     bot = object()
+    message = _FakeMessage(111)
 
-    await test_commands.cmd_test_morning(_FakeMessage(111), bot=bot)
+    await test_commands.cmd_test_morning(message, bot=bot)
 
-    assert calls == [bot]
+    assert calls == [(bot, [111], True)]
+    assert message.answers == [
+        phrases.TEST_MORNING_START,
+        phrases.TEST_MORNING_SENT,
+    ]
+
+
+async def test_morning_reports_skip(monkeypatch, admins):
+    async def _fake_send(bot, user_ids, *, force):
+        return []
+
+    monkeypatch.setattr(test_commands, "send_morning_reports", _fake_send)
+    message = _FakeMessage(111)
+
+    await test_commands.cmd_test_morning(message, bot=object())
+
+    assert message.answers == [
+        phrases.TEST_MORNING_START,
+        phrases.TEST_MORNING_SKIPPED,
+    ]
 
 
 async def test_teaser_ignored_for_non_admin(monkeypatch, admins):
     calls = []
 
-    async def _fake_teaser(bot, storage):
-        calls.append(bot)
+    async def _fake_teaser(*args, **kwargs):
+        calls.append((args, kwargs))
 
     monkeypatch.setattr(test_commands, "send_evening_teaser", _fake_teaser)
     message = _FakeMessage(999)
@@ -107,6 +129,38 @@ async def test_teaser_ignored_for_non_admin(monkeypatch, admins):
 
     assert calls == []
     assert message.answers == []
+
+
+async def test_teaser_runs_for_admin(monkeypatch, admins):
+    calls = []
+    storage = object()
+
+    async def _fake_teaser(bot, teaser_storage, user_ids):
+        calls.append((bot, teaser_storage, user_ids))
+        return list(user_ids)
+
+    monkeypatch.setattr(test_commands, "send_evening_teaser", _fake_teaser)
+    message = _FakeMessage(111)
+    bot = object()
+    state = type("_State", (), {"storage": storage})()
+
+    await test_commands.cmd_test_teaser(message, bot=bot, state=state)
+
+    assert calls == [(bot, storage, [111])]
+    assert message.answers == [phrases.TEST_TEASER_START, phrases.TEST_TEASER_SENT]
+
+
+async def test_teaser_reports_skip(monkeypatch, admins):
+    async def _fake_teaser(bot, teaser_storage, user_ids):
+        return []
+
+    monkeypatch.setattr(test_commands, "send_evening_teaser", _fake_teaser)
+    message = _FakeMessage(111)
+    state = type("_State", (), {"storage": object()})()
+
+    await test_commands.cmd_test_teaser(message, bot=object(), state=state)
+
+    assert message.answers == [phrases.TEST_TEASER_START, phrases.TEST_TEASER_SKIPPED]
 
 
 async def test_evening_ignored_for_non_admin(admins):

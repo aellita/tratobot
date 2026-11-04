@@ -65,17 +65,31 @@ async def _log_morning_report(tg_id: int, session):
     await session.commit()
 
 
-async def send_morning_reports(bot: Bot):
+async def _maybe_log_morning_report(tg_id: int, *, force: bool) -> None:
+    if force:
+        return
+    async with async_session_maker() as session:
+        await _log_morning_report(tg_id, session)
+
+
+async def send_morning_reports(
+    bot: Bot,
+    user_ids: list[int] | None = None,
+    *,
+    force: bool = False,
+) -> list[int]:
     logger.info("Запуск утренней рассылки в 08:00...")
+    sent: list[int] = []
     try:
-        async with async_session_maker() as session:
-            result = await session.execute(select(User.telegram_id))
-            user_ids = result.scalars().all()
+        if user_ids is None:
+            async with async_session_maker() as session:
+                result = await session.execute(select(User.telegram_id))
+                user_ids = list(result.scalars().all())
 
         for tg_id in user_ids:
             try:
                 async with async_session_maker() as session:
-                    if await _has_morning_report_today(tg_id, session):
+                    if not force and await _has_morning_report_today(tg_id, session):
                         continue
 
                     settings_result = await session.execute(
@@ -98,6 +112,7 @@ async def send_morning_reports(bot: Bot):
 
                 today = get_msk_now().date()
                 sent_summary = False
+                budget_id_to_expire = None
                 async with async_session_maker() as session:
                     result = await session.execute(
                         select(BudgetModel).where(BudgetModel.telegram_id == tg_id)
@@ -120,23 +135,24 @@ async def send_morning_reports(bot: Bot):
                                 offer,
                                 reply_markup=get_rollover_keyboard(b.id),
                             )
-                            if settings.RECOVERY_ENABLED:
-                                try:
-                                    from .recovery_service import (
-                                        expire_active_recoveries_for_budget,
-                                    )
-
-                                    await expire_active_recoveries_for_budget(b.id)
-                                except Exception:
-                                    pass
-
-                            async with async_session_maker() as log_session:
-                                await _log_morning_report(tg_id, log_session)
+                            budget_id_to_expire = b.id
                             logger.info(f"Ежемесячный отчёт и rollover отправлены {tg_id}")
                             sent_summary = True
                             break
 
                 if sent_summary:
+                    if settings.RECOVERY_ENABLED and budget_id_to_expire is not None:
+                        try:
+                            from .recovery_service import (
+                                expire_active_recoveries_for_budget,
+                            )
+
+                            await expire_active_recoveries_for_budget(budget_id_to_expire)
+                        except Exception:
+                            pass
+                    await _maybe_log_morning_report(tg_id, force=force)
+                    sent.append(tg_id)
+                    await asyncio.sleep(0.05)
                     continue
 
                 from .budget_service import get_active_budget
@@ -360,8 +376,8 @@ async def send_morning_reports(bot: Bot):
 
                 await bot.send_message(tg_id, full_text, reply_markup=kb)
 
-                async with async_session_maker() as session:
-                    await _log_morning_report(tg_id, session)
+                await _maybe_log_morning_report(tg_id, force=force)
+                sent.append(tg_id)
 
                 logger.info(f"Утренний отчёт отправлен {tg_id} (зона {zone})")
 
@@ -372,3 +388,4 @@ async def send_morning_reports(bot: Bot):
         logger.info("Утренняя рассылка завершена.")
     except Exception as e:
         logger.error(f"Критическая ошибка утренней рассылки: {e}", exc_info=True)
+    return sent
