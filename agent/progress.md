@@ -276,7 +276,6 @@ history.py 1, evening_flow.py 2) теперь вызывают её одной �
 | `RECOVERY_ENABLED` | `True` | Kill-switch Recovery (`19755f0`, 2026-09-05). `False` → инфра дормантна (миграция есть, UI скрыт). `True` → активны Daily Limit блок, утреннее предложение, вечерний пересчёт `total_days`, бюджет-хуки. |
 | `BOT_TOKEN` | — | Telegram Bot API токен |
 | `DATABASE_URL` | `sqlite+aiosqlite:///tratobot.db` | Строка подключения к БД (SQLite dev / PostgreSQL prod) |
-| `ADMIN_IDS` | `""` | Через запятую: кому доступны `/test_*` команды. Пусто → никому (fail closed) |
 
 ---
 
@@ -432,12 +431,13 @@ parse_expr → parse_term → parse_factor
 **Осталось:** `DROP COLUMN is_active` — отдельным коммитом после стабилизации (поле мёртвое, ссылок в коде нет).
 **Файлы:** `database.py:34,106,170`, `tests/test_database.py`
 
-### 🔴 B7: `/test_*` команды открыты всем (2026-11-04) — ✅ Починено
+### 🔴 B7: `/test_*` команды открыты всем (2026-11-04) — ↩️ Отменено в B10
+> ⚠️ 2026-11-05: все четыре `/test_*` команды и `ADMIN_IDS` удалены (B10). Запись оставлена как история.
 **Проблема:** `test_commands.py` регистрирует `/test_morning`, `/test_teaser`, `/test_evening`, `/test_monthly_summary` без проверки отправителя. `send_morning_reports` / `send_evening_teaser` шлют **всем** пользователям → любой новый юзер мог разослать всем утренний отчёт или ролловер.
 
 **Решение:** `config.py` `ADMIN_IDS: str = ""` + `settings.admin_ids` (запятая-разделитель, `int()` в try/except, только положительные), `test_commands.py:AdminOnlyMiddleware` — router-level гейт, новые `/test_*` закрыты автоматически + `_is_admin()` в каждом хендлере (defense in depth). Пустой `ADMIN_IDS` = **deny** (fail closed). Убран `message.delete()` из `/test_evening` (RULES 12.3). `.env.example` + README Variables.
 
-**Перед деплоем:** прописать `ADMIN_IDS=<твой telegram_id>` в Railway, иначе `/test_*` перестанут работать (молча для юзера; отказ пишется в `WARNING`).
+**Исторически (до B10):** прописать `ADMIN_IDS=<твой telegram_id>` в Railway, иначе `/test_*` перестанут работать (молча для юзера; отказ пишется в `WARNING`).
 **Файлы:** `config.py:17,34`, `test_commands.py:17,29`, `tests/test_test_commands.py`
 
 ### 🛡 B8: Schema audit — сверка моделей с реальной БД (2026-11-04) — ✅ Готово
@@ -452,7 +452,8 @@ parse_expr → parse_term → parse_factor
 **Проверено вживую:** legacy-SQLite с `users.is_active NOT NULL` → `[CRITICAL] users.is_active — legacy NOT NULL без server default — ORM INSERT упадёт`, exit 1; чистая база из `create_all` → `0 critical`, exit 0. `pytest 407 passed`.
 **Файлы:** `src/db/schema_audit.py`, `tests/test_schema_audit.py`
 
-### 🎯 B9: `/test_*` бьют только по админу (2026-11-04) — ✅ Готово
+### 🎯 B9: `/test_*` бьют только по админу (2026-11-04) — ↩️ Отменено в B10
+> ⚠️ 2026-11-05: команды удалены целиком (B10); `user_ids`/`force`/возврат получателей убраны из сервисов. Запись оставлена как история.
 **Проблема:** после B7 запускать `/test_*` мог только админ, но `/test_morning` и `/test_teaser` всё равно рассылали **всем** пользователям. Тест был небезопасен: мог отправить реальный утренний отчёт или открыть вечернюю сессию чужим людям.
 
 **Решение:**
@@ -512,3 +513,15 @@ parse_expr → parse_term → parse_factor
 
 ### 📝 B5.1: Вечер — итоговая таблица (2026-09-11) — ✅ `Evening` канон
 **Симптом:** 10 фраз `ZERO 3/GREEN 4/OVER 3` + `AUTO_CLOSE 5` без градаций `0.5×/2×/3×`, `Хотелка/Кубышка` `GREEN_1/3`, `frugal/аудит/гречка` пафос. **Решение:** `phrases.py:293-420` `INITIAL/CONTAINER/TIMEOUT` упрощены `👁 День подошёл…`/`Вот что набралось…`/`⏱ Время вышло…`, `ZERO_1-3` `Бро сегодня ни одной траты…`, `GREEN_1` strong `<0.5×` `machine {saved}`, `GREEN_2-4` ordinary `0.5×≤spent≤limit`, `OVER_1-2` ordinary `limit<spent≤2×`, `OVER_3` strong `2×<spent≤3×`, `SPECIAL 🛌` `>3×`, `AUTO_CLOSE 5→4` `Полночь близко/День закрыт`. `evening_report.py:49` 6 веток `spent==0 / <0.5*limit / ≤limit / ≤2*limit / ≤3*limit / >3*limit` (сильные 1/1, обычные random). `ruff F passed`, `pytest 357 passed`.
+
+### 🧹 B10: Удалены тестовые команды `/test_*` (2026-11-05) — ✅ Готово
+**Проблема:** `/test_morning` — не предпросмотр, а боевая рассылка с записью `daily_reports_log`. 2026-11-04 в 02:40 МСК старый `/test_morning` отправил отчёт и записал строку за 4 ноября — после этого плановые 08:00 и все повторные тесты молча пропускали админа по дедупу. B9 (`force`) задеплоен в 04:27, уже после записи. Команды редко нужны и создают такие побочные эффекты.
+
+**Решение:** удалить все четыре команды (`/test_morning`, `/test_teaser`, `/test_evening`, `/test_monthly_summary`) и весь админ-гейт:
+- удалён `src/bot/handlers/test_commands.py` и его подключение в `main.py`;
+- `send_morning_reports(bot)` и `send_evening_teaser(bot, storage)` снова без `user_ids`/`force`/возврата списка; запись лога осталась вне сессии бюджета, пауза 50 мс сохранена;
+- удалены `ADMIN_IDS` / `settings.admin_ids`, `TEST_*` из `phrases.py`;
+- удалены `tests/test_test_commands.py` и `tests/test_report_recipients.py`; добавлен `tests/test_morning_report.py` (лог ровно один раз, дедуп не пишет); `pytest 389 passed`;
+- обновлены README, `.env.example`, `PHRASE_MAP.md`, `PHRASE_TABLE.csv`.
+
+**Файлы:** `src/bot/main.py`, `src/core/config.py`, `src/services/morning_report.py`, `src/services/evening_report.py`, `src/utils/phrases.py`, `tests/test_morning_report.py`, `README.md`, `.env.example`, `docs/PHRASE_MAP.md`, `docs/PHRASE_TABLE.csv`.

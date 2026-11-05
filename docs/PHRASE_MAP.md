@@ -1,7 +1,7 @@
 # Карта фраз Тратобота — техническая карта системы сообщений
 
-> Источник: `tratobot/src/utils/phrases.py` (802 строки, 350 Assign, 349 уникальных констант, 1 дубль `NEW_CATEGORY_PROMPT` на 148 и 173) + 19 точек импорта `phrases.` в `src/bot/handlers/*.py` и `src/services/*.py`. Не меняет код и тексты — только фиксирует, когда и как каждая фраза показывается.
-> Таблица-снимок: `docs/PHRASE_TABLE.csv` (фильтр по `scenario`, `status`, `user_facing`); источник истины — `phrases.py`.
+> Источник: `tratobot/src/utils/phrases.py` (786 строк, 342 Assign, 341 уникальная константа, 1 дубль `NEW_CATEGORY_PROMPT` на 148 и 173) + 15 точек импорта `phrases.` в `src/bot/handlers/*.py` и `src/services/*.py`. Не меняет код и тексты — только фиксирует, когда и как каждая фраза показывается.
+> Таблица-снимок: `docs/PHRASE_TABLE.csv` (фильтр по `scenario`, `status`, `user_facing`); источник истины — `phrases.py`. Колонка `line` историческая и может отставать.
 
 ---
 
@@ -67,24 +67,20 @@
 - **Фразы:** `CATEGORY_MANAGEMENT_TITLE/LIST_ACTIVE/ARCHIVED/EMPTY/DETAIL_HEADER/ARCHIVED_NOTE`, `CATEGORY_RENAME_PROMPT/RENAMED/ARCHIVED/UNARCHIVED`, `CATEGORY_DELETE_WARNING/MOVE_PROMPT/DELETED_MOVED/HARD/CONFIRM_PROMPT`, `CATEGORY_NOT_FOUND`, `CATEGORY_PICKER/CHANGED/CREATED`, `BTN_CATEGORY_RENAME/ARCHIVE/UNARCHIVE/DELETE/*`, `BTN_MANAGE_CATEGORIES`, `DEFAULT_CATEGORY`, `ERR_CATEGORY_*`, `NEW_CATEGORY_PROMPT`.
 - **Ветки:** `list → active/archived + is_archived suffix`, `detail → archived note if is_archived`, `rename → build_category_name + duplicate/len check`, `archive toggle`, `delete → 0 count → hard? else warning → move/hard/confirm`.
 
-### 12. Тестовые команды (admin only, `test_commands.py`)
-- **Фразы:** `TEST_TEASER_START/SENT/SKIPPED`, `TEST_MORNING_START/SENT/SKIPPED`, `TEST_MONTHLY_START`, `TEST_NO_BUDGET`.
-- **Ветки:** `/test_teaser` и `/test_morning` бьют только по `message.from_user.id`; `send_*` возвращает список получателей → «отправлено тебе» или «не отправлено». Утренний пропуск: нет активного бюджета или уведомления off. Тизер: те же причины плюс занят в вечерней сессии. `/test_morning` идёт с `force=True`: без дневного дедупа и без записи `daily_reports_log`.
-
 ---
 
 ## Подробные деревья ветвлений (реальные условия из кода)
 
-### MORNING REPORT (`morning_report.py`, `391` строк)
+### MORNING REPORT (`morning_report.py`, `375` строк)
 ```
-send_morning_reports (cron 08:00 MSK; user_ids=None → все, force=False)
+send_morning_reports (cron 08:00 MSK)
 ├── for tg_id in user_ids
-│   ├── if not force and _has_morning_report_today → continue
+│   ├── if _has_morning_report_today → continue
 │   ├── if UserSettings.notifications_enabled == False → continue
-│   ├── if today == period_end+1 (get_period_dates) → Monthly Summary + ROLLOVER_OFFER + expire recovery + _maybe_log_morning_report(force) → continue
+│   ├── if today == period_end+1 (get_period_dates) → Monthly Summary + ROLLOVER_OFFER + expire recovery + _log_morning_report → continue
 │   ├── budget = get_active_budget (this_month vs last_month by period_start_day)
 │   │   └── if not budget or daily_limit<=0 → continue
-│   ├── compute: days_left, dl_pred, dl_simulated, pct_pred/sim, money_for_life, end_of_period (days<=3), yesterday_spent, overdraft
+│   ├── compute: days_left, dl_pred, pct_pred, money_for_life, end_of_period (days<=3), yesterday_spent, overdraft
 │   ├── yesterday_line:
 │   │   ├── if yesterday_spent <= dl_pred → YESTERDAY_OK {spent,limit}
 │   │   └── else → YESTERDAY_OVER {spent,limit,over}
@@ -93,15 +89,8 @@ send_morning_reports (cron 08:00 MSK; user_ids=None → все, force=False)
 │   │   ├── elif end_of_period → END_OK (ZONE_END_OK_1/2) → REGULAR
 │   │   ├── elif pct_pred >80 → GREEN (ZONE_GREEN_1/2) → REGULAR
 │   │   ├── elif pct_pred >=51 → YELLOW_LIGHT (ZONE_YELLOW_LIGHT_1/2) → REGULAR
-│   │   ├── elif pct_pred >=26:
-│   │   │   ├── if pct_sim >80 → YELLOW_SIM_GREEN (MORNING_YELLOW_SIM_GREEN_1/2) → FROM_YELLOW_TO_GREEN
-│   │   │   ├── elif pct_sim >=51 → YELLOW_SIM_BLUE (MORNING_YELLOW_SIM_BLUE_1/2) → FROM_YELLOW_TO_BLUE
-│   │   │   └── else → YELLOW_SIM_NONE (MORNING_YELLOW_SIM_NONE_1/2) → REGULAR
-│   │   └── else: # pct<26 RED
-│   │       ├── if pct_sim >80 → RED_SIM_GREEN (MORNING_RED_SIM_GREEN_1/2) → FROM_RED_TO_GREEN
-│   │       ├── elif pct_sim >=51 → RED_SIM_BLUE (1/2) → FROM_RED_TO_BLUE
-│   │       ├── elif pct_sim >=26 → RED_SIM_YELLOW (1/2) → FROM_RED_TO_YELLOW
-│   │       └── else → RED_DEAD (1/2) → FRESH_START
+│   │   ├── elif pct_pred >=26 → YELLOW_SIM_NONE (MORNING_YELLOW_SIM_NONE_1/2 + MORNING_YELLOW_BUDGET_NERVOUS) → REGULAR
+│   │   └── else (pct<26) → RED_DEAD (MORNING_RED_DEAD_1/2) → FRESH_START
 │   ├── full_text = MORNING_GREETING + MORNING_TODAY_PLAN{limit} + yesterday_line + zone_text
 │   └── Recovery (if RECOVERY_ENABLED):
 │       ├── if active:
@@ -192,9 +181,9 @@ check(amount,desc, message_id):
 
 ## Статистика (снимок; источник истины — `phrases.py`)
 
-- **Всего констант:** 350 Assign, 349 уникальных; 1 дубль `NEW_CATEGORY_PROMPT` (148 и 173)
-- **Используется в коде:** 317 (91%), не используется 32 (9%) — по grep по `src/` вне `phrases.py`
-- **CSV-снимок:** 373 строки; часть строк — исторические (удалённые константы), часть новых может отсутствовать. Сверяйся с `phrases.py`
+- **Всего констант:** 342 Assign, 341 уникальная; 1 дубль `NEW_CATEGORY_PROMPT` (148 и 173)
+- **Используется в коде:** 309 (91%), не используется 32 (9%) — по grep по `src/` вне `phrases.py`
+- **CSV-снимок:** 365 строк; часть строк — исторические (удалённые константы), часть новых может отсутствовать. Сверяйся с `phrases.py`
 - **Дубли:** 1 (`NEW_CATEGORY_PROMPT`, одинаковый текст, фактически 1 фраза)
 - **Неоднозначных (`UNCLEAR`):** 0 после выноса (`TODO` в morning закрыты), ранее 7 `MORNING_YELLOW/RED` были `UNCLEAR` до P0
 - **Много вариантов (≥2):** 12 групп: `GREETINGS` 3, `AUTO_CLOSE` 5, `ZONE_END_*` 2, `ZONE_GREEN_*` 2, `MORNING_YELLOW/RED_*` 2 каждая (7 групп ×2 =14), `EVENING_ZERO_*` 3, `EVENING_GREEN_*` 4, `EVENING_OVER_*` 3, `STATUS_FOOTER_*` 3 каждая (10 групп ×3 =30), `MONTHLY_TOTEM_*` 7 totems
@@ -206,9 +195,9 @@ check(amount,desc, message_id):
 
 ## Что обнаружено (проблемы/аномалии)
 
-- **Дубли:** `NEW_CATEGORY_PROMPT` 2 определения (строки 158 и 182) — одинаковый текст, мёртвая строка 182 (перезаписывает 158, без эффекта).
-- **Почти одинаковые тексты:** `STATUS_FOOTER_YELLOW_CUBBY_GREEN` vs `MORNING_YELLOW_SIM_GREEN_1` (оба `Кубышка ... вернёт в зелень`), `EVENING_GREEN_1` vs `EVENING_GREEN_3` (оба `лимит {limit}, факт {spent}`) — разные сценарии, один смысл, стоит унифицировать тон.
-- **Мёртвые фразы (UNUSED 24):** `STATUS_PERIOD_NEGATIVE/POSITIVE/ZERO`, `STATUS_REMAINING_OK/STOP` (заменены на `REMAINING_FREE/ZERO + SPENT`), `ROUND_UP` (legacy округление, флаг off), `HINT_JUNK_CHARS` (не используется — только 4 других HINT), `BTN_ROUNDING_*` (UI скрыт), `PERIOD_SET_PERIOD` (не вызывается).
+- **Дубли:** `NEW_CATEGORY_PROMPT` 2 определения (строки 148 и 173) — одинаковый текст, мёртвая строка 173 (перезаписывает 148, без эффекта).
+- **Почти одинаковые тексты:** `EVENING_GREEN_1` vs `EVENING_GREEN_3` (оба `лимит {limit}, факт {spent}`) — разные сценарии, один смысл, стоит унифицировать тон.
+- **Мёртвые фразы (UNUSED 32):** `STATUS_PERIOD_NEGATIVE/POSITIVE/ZERO`, `STATUS_REMAINING_OK/STOP` (заменены на `REMAINING_FREE/ZERO + SPENT`), `ROUND_UP` (legacy округление, флаг off), `HINT_JUNK_CHARS` (не используется — только 4 других HINT), `BTN_ROUNDING_*` (UI скрыт), `PERIOD_SET_PERIOD` (не вызывается).
 - **Одна фраза — много сценариев:** `BTN_BACK_MAIN` используется в 8 местах (morning, evening, status, categories), `ERR_INVALID_DATA` в 6, `NO_BUDGET` в 3 — нормально, но усложняет A/B тест.
 - **Выбор альтернативы:** везде `random.choice(list)` без весов, не `по условию` — равновероятно, не зависит от `pct` внутри зоны.
 

@@ -78,7 +78,7 @@ src/utils/          math-парсер без eval, safe() для HTML, phrases.p
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # BOT_TOKEN, DATABASE_URL, ADMIN_IDS
+cp .env.example .env   # BOT_TOKEN, DATABASE_URL
 python -m src.bot.main
 ```
 
@@ -88,7 +88,6 @@ Docker: `python:3.12-slim`, `CMD ["python", "-m", "src.bot.main"]`. Деплой
 |---|---|---|
 | `BOT_TOKEN` | — | Токен бота от `@BotFather` |
 | `DATABASE_URL` | `sqlite+aiosqlite:///tratobot.db` | SQLite (dev) / PostgreSQL (prod) |
-| `ADMIN_IDS` | `""` | Через запятую: кому доступны `/test_*`. Пусто → никому (fail closed) |
 | `EXPENSE_SIMPLE_CHECK` | `True` | Reply-меню внизу чата вместо inline-меню |
 | `RECOVERY_ENABLED` | `True` | Kill-switch режима восстановления лимита |
 
@@ -107,7 +106,7 @@ echo $?   # 0 — чисто, 1 — есть critical, 2 — не удалось
 
 ## Тесты и качество
 
-**419 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite): unit (парсер — 76, helpers — 52, категоризация — 51), интеграционные с БД (74), handler/FSM с моками (92).
+**389 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -129,7 +128,7 @@ CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `my
 tratobot/
 ├── src/
 │   ├── bot/
-│   │   ├── handlers/   # menu.py, history.py, categories.py, evening_flow.py, test_commands.py
+│   │   ├── handlers/   # menu.py, history.py, categories.py, evening_flow.py
 │   │   ├── keyboards.py
 │   │   ├── middleware.py
 │   │   ├── scheduler.py
@@ -143,7 +142,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 419 тестов
+├── tests/               # 389 тестов
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile

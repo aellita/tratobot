@@ -59,37 +59,24 @@ async def _has_morning_report_today(tg_id: int, session) -> bool:
     return result.scalar_one_or_none() is not None
 
 
-async def _log_morning_report(tg_id: int, session):
-    today = get_msk_now().date()
-    session.add(DailyReportsLog(telegram_id=tg_id, report_type="morning", sent_date=today))
-    await session.commit()
-
-
-async def _maybe_log_morning_report(tg_id: int, *, force: bool) -> None:
-    if force:
-        return
+async def _log_morning_report(tg_id: int) -> None:
     async with async_session_maker() as session:
-        await _log_morning_report(tg_id, session)
+        today = get_msk_now().date()
+        session.add(DailyReportsLog(telegram_id=tg_id, report_type="morning", sent_date=today))
+        await session.commit()
 
 
-async def send_morning_reports(
-    bot: Bot,
-    user_ids: list[int] | None = None,
-    *,
-    force: bool = False,
-) -> list[int]:
+async def send_morning_reports(bot: Bot):
     logger.info("Запуск утренней рассылки в 08:00...")
-    sent: list[int] = []
     try:
-        if user_ids is None:
-            async with async_session_maker() as session:
-                result = await session.execute(select(User.telegram_id))
-                user_ids = list(result.scalars().all())
+        async with async_session_maker() as session:
+            result = await session.execute(select(User.telegram_id))
+            user_ids = result.scalars().all()
 
         for tg_id in user_ids:
             try:
                 async with async_session_maker() as session:
-                    if not force and await _has_morning_report_today(tg_id, session):
+                    if await _has_morning_report_today(tg_id, session):
                         continue
 
                     settings_result = await session.execute(
@@ -150,8 +137,7 @@ async def send_morning_reports(
                             await expire_active_recoveries_for_budget(budget_id_to_expire)
                         except Exception:
                             pass
-                    await _maybe_log_morning_report(tg_id, force=force)
-                    sent.append(tg_id)
+                    await _log_morning_report(tg_id)
                     await asyncio.sleep(0.05)
                     continue
 
@@ -376,8 +362,7 @@ async def send_morning_reports(
 
                 await bot.send_message(tg_id, full_text, reply_markup=kb)
 
-                await _maybe_log_morning_report(tg_id, force=force)
-                sent.append(tg_id)
+                await _log_morning_report(tg_id)
 
                 logger.info(f"Утренний отчёт отправлен {tg_id} (зона {zone})")
 
@@ -388,4 +373,3 @@ async def send_morning_reports(
         logger.info("Утренняя рассылка завершена.")
     except Exception as e:
         logger.error(f"Критическая ошибка утренней рассылки: {e}", exc_info=True)
-    return sent

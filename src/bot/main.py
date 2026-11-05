@@ -16,7 +16,6 @@ from .handlers.evening_flow import router as evening_router
 from .handlers.history import router as history_router
 from .handlers.menu import router as menu_router
 from .handlers.monthly_summary import router as monthly_summary_router
-from .handlers.test_commands import router as test_router
 from .middleware import (
     AutoTrackOutgoingMiddleware,
     KeyboardCleanupMiddleware,
@@ -41,7 +40,6 @@ dp.callback_query.middleware(KeyboardCleanupMiddleware())
 dp.callback_query.middleware(RateLimitMiddleware())
 
 dp.include_router(categories_router)
-dp.include_router(test_router)
 dp.include_router(evening_router)
 dp.include_router(history_router)
 dp.include_router(monthly_summary_router)

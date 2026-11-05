@@ -199,7 +199,7 @@ src/
 | FSM классы | `PascalCase` | `BudgetSetup` |
 | FSM states | `snake_case` | `BudgetSetup.waiting_for_income` |
 | Telegram callback data | `action:scope:value` | `set_cat:123:5` |
-| Команды бота | `/snake_case` | `/test_evening` |
+| Команды бота | `/snake_case` | `/start` |
 | Тесты | имя + `_test.py` | `test_budget_service.py` |
 
 ---

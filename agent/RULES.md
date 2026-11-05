@@ -66,7 +66,7 @@
 | FSM классы (StatesGroup) | `PascalCase` | `BudgetSetup` |
 | FSM states | `snake_case` | `waiting_for_income` |
 | Callback data | `action:scope:value` | `set_cat:123:5` |
-| Команды бота | `/snake_case` | `/test_evening` |
+| Команды бота | `/snake_case` | `/start` |
 | Хендлеры aiogram | `handle_<action>()` | `handle_fix_overdraft()` |
 | Тесты | `test_<module>.py` | `test_budget_service.py` |
 
