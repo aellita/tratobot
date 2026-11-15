@@ -96,10 +96,12 @@ def get_change_budget_choice_keyboard():
             [
                 InlineKeyboardButton(
                     text=phrases.BTN_CHANGE_BUDGET_ADD, callback_data="change_budget_add"
-                ),
+                )
+            ],
+            [
                 InlineKeyboardButton(
                     text=phrases.BTN_CHANGE_BUDGET_RECALC, callback_data="change_budget_recalc"
-                ),
+                )
             ],
             [InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_back")],
         ]
