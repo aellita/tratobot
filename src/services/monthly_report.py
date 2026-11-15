@@ -185,19 +185,19 @@ async def get_period_label(budget: Budget) -> str:
 
 def _zone_for_period(
     total_spent: float, total_income: float, mandatory: float, black_day: float
-) -> tuple[str, str]:
+) -> str:
     available = total_income - mandatory - black_day
     if available <= 0:
-        return "⚪", phrases.MONTHLY_NO_DATA
+        return phrases.MONTHLY_NO_DATA
     pct = total_spent / available * 100
     if pct <= 70:
-        return "🟢", phrases.MONTHLY_ZONE_GREEN
+        return phrases.MONTHLY_ZONE_GREEN
     elif pct <= 90:
-        return "🔵", phrases.MONTHLY_ZONE_BLUE
+        return phrases.MONTHLY_ZONE_BLUE
     elif pct <= 100:
-        return "🟡", phrases.MONTHLY_ZONE_YELLOW
+        return phrases.MONTHLY_ZONE_YELLOW
     else:
-        return "🔴", phrases.MONTHLY_ZONE_RED
+        return phrases.MONTHLY_ZONE_RED
 
 
 def _esc(text: str) -> str:
@@ -236,9 +236,7 @@ def format_summary_text(data: dict, label: str = "") -> str:
 
     parts.append("<hr>")
 
-    zone_str = phrases.MONTHLY_ZONE_TAG.format(
-        zone_emoji=data["zone_emoji"], zone_label=data["zone_label"]
-    )
+    zone_str = phrases.MONTHLY_ZONE_TAG.format(zone_label=data["zone_label"])
     _total = f"{data['total_spent']:,.0f}"
     parts.append(
         f"<p><b>💰 {phrases.MONTHLY_TOTAL_SPENT.format(amount=_total)}</b> ({zone_str})</p>"
@@ -319,7 +317,7 @@ async def build_summary_data(telegram_id: int, budget: Budget) -> dict:
     total_spent = sum(amount for _, _, amount in breakdown) if breakdown else 0.0
     avg_day = total_spent / 30 if total_spent > 0 else 0.0
 
-    zone_emoji, zone_label = _zone_for_period(
+    zone_label = _zone_for_period(
         total_spent, budget.total_income, budget.mandatory_payments, budget.black_day_fund
     )
 
@@ -344,7 +342,6 @@ async def build_summary_data(telegram_id: int, budget: Budget) -> dict:
         "breakdown": breakdown,
         "total_spent": total_spent,
         "avg_day": avg_day,
-        "zone_emoji": zone_emoji,
         "zone_label": zone_label,
         "top_cat_name": top_cat_name or "—",
         "totem_name": totem_name,

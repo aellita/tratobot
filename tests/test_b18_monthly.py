@@ -18,7 +18,6 @@ def _data(*, total_spent: float, active: bool = False) -> dict:
         "breakdown": [],
         "total_spent": total_spent,
         "avg_day": 0.0,
-        "zone_emoji": "🟢",
         "zone_label": phrases.MONTHLY_ZONE_GREEN,
         "top_cat_name": "—",
         "totem_name": "Чебурашка",

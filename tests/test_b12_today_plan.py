@@ -127,7 +127,7 @@ class TestStatusPlan:
             income=159137,
             spent_today=18343,
         )
-        assert "Свободно 0 ₽ ⛔" in text
+        assert "Свободно 0 ₽" in text
         assert "Потрачено 18,343 ₽ ⚠️" in text
         assert "Перерасход 8,982 ₽" not in text
         assert "План на сегодня" not in text

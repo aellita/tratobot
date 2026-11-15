@@ -560,24 +560,14 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         days_left=days_left,
     )
 
-    if zone == ZONE_ATAS:
-        zone_emoji = "🔴"
-        zone_label = phrases.STATUS_ZONE_ATAS
-    elif zone == ZONE_FINISH:
-        zone_emoji = "🟢"
-        zone_label = phrases.STATUS_ZONE_FINISH
-    elif zone == ZONE_GREEN:
-        zone_emoji = "🟢"
-        zone_label = phrases.STATUS_ZONE_NORM
-    elif zone == ZONE_BLUE:
-        zone_emoji = "🔵"
-        zone_label = phrases.STATUS_ZONE_SLIGHTLY_LOW
-    elif zone == ZONE_YELLOW:
-        zone_emoji = "🟡"
-        zone_label = phrases.STATUS_ZONE_LOW
-    else:
-        zone_emoji = "🔴"
-        zone_label = phrases.STATUS_ZONE_ZERO
+    zone_labels = {
+        ZONE_ATAS: phrases.STATUS_ZONE_ATAS,
+        ZONE_FINISH: phrases.STATUS_ZONE_FINISH,
+        ZONE_GREEN: phrases.STATUS_ZONE_NORM,
+        ZONE_BLUE: phrases.STATUS_ZONE_SLIGHTLY_LOW,
+        ZONE_YELLOW: phrases.STATUS_ZONE_LOW,
+    }
+    zone_label = zone_labels.get(zone, phrases.STATUS_ZONE_ZERO)
 
     if free_today > 0:
         today_line = phrases.STATUS_REMAINING_FREE.format(amount=f"{int(free_today):,}")
@@ -697,7 +687,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             f"\n\nПосле восстановления — обычный лимит {int(_recovery_active.baseline)} ₽/день."
         )
         text = (
-            f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_emoji} {zone_label}\n\n"
+            f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_label}\n\n"
             f"<b>{phrases.STATUS_TODAY_TITLE}</b>\n"
             f"{_recovery_header}\n"
             f"{today_line} · {spent_line}{expenses_block}"
@@ -708,7 +698,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         )
     else:
         text = (
-            f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_emoji} {zone_label}\n\n"
+            f"<b>{phrases.STATUS_BALANCE_TITLE}</b> · {zone_label}\n\n"
             f"<b>{phrases.STATUS_TODAY_TITLE}</b>\n"
             f"{today_line} · {spent_line}{expenses_block}\n\n"
             f"<b>{phrases.STATUS_PERIOD_TITLE.format(end=period_end_str, days=days_left)}</b>\n"
