@@ -123,6 +123,7 @@ async def _handle_recovery_budget_change(telegram_id: int, message: Message):
             check_success,
             complete_recovery,
             get_active_recovery,
+            is_early_completion,
             recalculate_days,
             update_recovery_days,
         )
@@ -143,15 +144,24 @@ async def _handle_recovery_budget_change(telegram_id: int, message: Message):
         money_for_life = get_money_for_life(budget, spent_period)
         days_left = budget.days_remaining
         dl_pred = get_daily_pred(money_for_life, days_left)
+
+        async def _complete() -> None:
+            if is_early_completion(active):
+                await complete_recovery(telegram_id, "early_success")
+                await message.answer(
+                    text=phrases.RECOVERY_SUCCESS_EARLY.format(baseline=int(active.baseline))
+                )
+            else:
+                await complete_recovery(telegram_id, "budget_update")
+                await message.answer(text=phrases.RECOVERY_BUDGET_DONE)
+
         if check_success(dl_pred, active.baseline):
-            await complete_recovery(telegram_id, "budget_update")
-            await message.answer(text=phrases.RECOVERY_BUDGET_DONE)
+            await _complete()
             return
         deficit = max(active.baseline * days_left - money_for_life, 0)
         new_days = recalculate_days(deficit, active.baseline, active.target)
         if new_days is None:
-            await complete_recovery(telegram_id, "budget_update")
-            await message.answer(text=phrases.RECOVERY_BUDGET_DONE)
+            await _complete()
             return
         if new_days + 7 > days_left:
             await complete_recovery(telegram_id, "period_end")

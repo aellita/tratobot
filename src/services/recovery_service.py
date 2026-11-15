@@ -118,6 +118,17 @@ def check_success(
     return _to_decimal(dl_pred) >= _to_decimal(baseline) * _to_decimal(success_ratio)
 
 
+def recovery_day_number(started_at, today=None) -> int:
+    """Номер дня восстановления, начиная с 1."""
+    today = today or get_msk_now()
+    return max((today.date() - started_at.date()).days + 1, 1)
+
+
+def is_early_completion(active, today=None) -> bool:
+    """True, если обычный лимит вернулся раньше запланированных дней."""
+    return recovery_day_number(active.started_at, today) < active.total_days
+
+
 def is_small_overspend(
     spent: float | Decimal,
     target: float | Decimal,

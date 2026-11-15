@@ -324,16 +324,23 @@ async def send_morning_reports(bot: Bot):
                             complete_recovery,
                             get_active_recovery,
                             get_offer_state,
+                            is_early_completion,
                             should_repeat_offer,
                         )
 
                         active = await get_active_recovery(tg_id)
                         if active:
                             if check_success(dl_pred, active.baseline):
-                                await complete_recovery(tg_id, "success")
-                                full_text += "\n\n" + phrases.RECOVERY_SUCCESS.format(
-                                    baseline=int(active.baseline)
-                                )
+                                if is_early_completion(active):
+                                    await complete_recovery(tg_id, "early_success")
+                                    full_text += "\n\n" + phrases.RECOVERY_SUCCESS_EARLY.format(
+                                        baseline=int(active.baseline)
+                                    )
+                                else:
+                                    await complete_recovery(tg_id, "success")
+                                    full_text += "\n\n" + phrases.RECOVERY_SUCCESS.format(
+                                        baseline=int(active.baseline)
+                                    )
                             else:
                                 cur_day = (
                                     get_user_now().date() - active.started_at.date()

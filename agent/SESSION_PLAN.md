@@ -440,11 +440,14 @@ remaining_period = money_for_life
 
 ---
 
-### B14: Recovery — 🟠 P1, ждёт решения
+### B14: Recovery — ✅ Готово
 
-- [ ] ⏳ Решить: A (только после запланированных дней/цели) или B (досрочно + фраза «закрыл досрочно»)
-- [ ] ⏳ `recovery_service.py:113-118`, `menu.py:126-127`, `morning_report.py:269-273` — тесты на добавление дохода при активном Recovery
-- [ ] ⏳ Воспроизвести скриншот «день 1 из 5 → обычный лимит вернулся»
+- [x] ✅ Решение **B**: досрочное закрытие разрешено, но с явной фразой «Ты восстановился раньше срока»
+- [x] ✅ `recovery_service.py` — `recovery_day_number()` + `is_early_completion()`
+- [x] ✅ `menu.py` — бюджет-хук: `early_success` + `RECOVERY_SUCCESS_EARLY`, иначе `RECOVERY_BUDGET_DONE`
+- [x] ✅ `morning_report.py` — досрочный успех показывает `RECOVERY_SUCCESS_EARLY`, плановый — `RECOVERY_SUCCESS`
+- [x] ✅ `tests/test_b14_recovery.py` — день 1 из 5, плановое закрытие, нехватка дохода (сокращение без закрытия)
+- [x] ✅ `pytest 531 passed`, `ruff check .`, `ruff format --check .`
 
 ---
 
