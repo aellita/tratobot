@@ -225,6 +225,19 @@ def get_msk_now() -> datetime:
     return datetime.now(MSK_TZ).replace(tzinfo=None)
 
 
+MORNING_CATCHUP_START = 8
+MORNING_CATCHUP_END = 12
+
+
+def is_morning_catchup_window(now: datetime) -> bool:
+    """Окно, в котором старт бота догоняет пропущенную рассылку 08:00.
+
+    Раньше 08:00 догонять нечего: отчёт ещё не должен был уйти. Верхняя
+    граница 12:00 совпадает с ``misfire_grace_time`` утренней задачи.
+    """
+    return MORNING_CATCHUP_START <= now.hour < MORNING_CATCHUP_END
+
+
 def period_dates(month: str, start_day: int) -> tuple[datetime, datetime]:
     """Границы периода, начавшегося в ``month``.
 

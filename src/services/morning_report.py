@@ -105,7 +105,7 @@ async def _log_morning_report(tg_id: int) -> None:
 
 
 async def send_morning_reports(bot: Bot):
-    logger.info("Запуск утренней рассылки в 08:00...")
+    logger.info("Запуск утренней рассылки...")
     try:
         async with async_session_maker() as session:
             result = await session.execute(select(User.telegram_id))

@@ -71,7 +71,7 @@ async def on_startup():
     await migrate_schema()
     setup_scheduler(bot, dp.storage)
     msk_now = get_msk_now()
-    if 5 <= msk_now.hour < 12:
+    if is_morning_catchup_window(msk_now):
         logger.info("Старт в утреннем окне — запускаю morning report (если не отправлен)")
         asyncio.create_task(send_morning_reports(bot))
     asyncio.create_task(dup_middleware.start_cleanup())
