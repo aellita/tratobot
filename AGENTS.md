@@ -6,12 +6,17 @@ Python 3.12 · aiogram 3.x · SQLAlchemy 2.0 async · PostgreSQL (prod) / SQLite
 
 1. Прочти `agent/RULES.md` — workflow сессии и запреты.
 2. Прочти `agent/progress.md` — статус, что сделано, инварианты.
-3. Для продуктовых сверок — `agent/PRD.md`, витрина — `README.md`.
+3. Прочти `agent/SESSION_PLAN.md` — порядок задач; для текущего аудита — `agent/bugs_2026-11-06.md`.
+4. Для продуктовых сверок — `agent/PRD.md`, витрина — `README.md`.
+
+## Границы
+
+Работаем **только внутри** `/Users/aelita-lu/Tratobot/tratobot`. Не читаем и не пишем выше по дереву (`~/...`, `~/.opencode`, соседние папки) без явного разрешения пользователя.
 
 ## Команды
 
 ```bash
-pytest -q                       # 389 тестов, in-memory SQLite
+pytest -q                       # 520 тестов, in-memory SQLite
 python -m src.db.schema_audit   # сверка моделей с реальной БД (read-only, exit 1 critical / 2 read error)
 ruff check --select F .         # линтер
 ```
@@ -25,4 +30,4 @@ ruff check --select F .         # линтер
 
 ## Доки агента
 
-Все рабочие `.md` — в `agent/` (PRD, RULES, progress, SESSION_PLAN, bugs_ux4).
+Все рабочие `.md` — в `agent/` (PRD, RULES, progress, SESSION_PLAN, bugs_ux4, bugs_2026-11-06).

@@ -290,25 +290,27 @@ def get_recovery_plan_keyboard() -> InlineKeyboardMarkup:
 def get_monthly_nav_keyboard(
     has_prev: bool, has_next: bool, prev_label: str = "", next_label: str = ""
 ) -> InlineKeyboardMarkup:
-    row = []
+    buttons: list[list[InlineKeyboardButton]] = []
+    nav = []
     if has_prev:
-        row.append(
+        nav.append(
             InlineKeyboardButton(
                 text=phrases.BTN_REPORT_PREV.format(month=prev_label),
                 callback_data="monthly_prev",
             )
         )
-    row.append(
-        InlineKeyboardButton(text=phrases.BTN_REPORT_REFRESH, callback_data="monthly_refresh")
-    )
     if has_next:
-        row.append(
+        nav.append(
             InlineKeyboardButton(
                 text=phrases.BTN_REPORT_NEXT.format(month=next_label),
                 callback_data="monthly_next",
             )
         )
-    buttons = [row]
+    if nav:
+        buttons.append(nav)
+    buttons.append(
+        [InlineKeyboardButton(text=phrases.BTN_REPORT_REFRESH, callback_data="monthly_refresh")]
+    )
     if not settings.EXPENSE_SIMPLE_CHECK:
         buttons.append([InlineKeyboardButton(text=phrases.BTN_BACK, callback_data="menu_stats")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

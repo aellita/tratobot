@@ -12,7 +12,14 @@ from ..db.database import async_session_maker
 from ..db.models.models import DailyReportsLog, User, UserSettings
 from ..utils import phrases
 from ..utils.helpers import get_msk_now
-from .expense_service import get_yesterday_expenses_sum
+from .expense_service import get_today_expenses_sum, get_yesterday_expenses_sum
+from .status_zones import (
+    PRESSURE_GREEN_MIN,
+    PRESSURE_LIGHT_MIN,
+    PRESSURE_NONE_MIN,
+    is_end_of_period,
+    limit_pressure_pct,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +34,37 @@ def _plural_days(n: int) -> str:
     if 2 <= n1 <= 4:
         return "дня"
     return "дней"
+
+
+def _select_morning_zone(
+    *,
+    end_of_period: bool,
+    money_for_life: float,
+    free_today: float,
+    overrun_today: float,
+    plan_today: float,
+    base_daily_limit: float,
+    yesterday_ok: bool,
+) -> str:
+    if end_of_period:
+        if money_for_life <= 0:
+            return "END_EMPTY"
+        if overrun_today > 0:
+            return "END_OVER"
+        return "END_OK"
+    if overrun_today > 0:
+        return "OVER"
+    if free_today <= 0:
+        return "YELLOW_SIM_NONE"
+    pct = limit_pressure_pct(plan_today, base_daily_limit)
+    if pct >= PRESSURE_GREEN_MIN:
+        # вчера был перебор — хвалить «ты машина» нельзя
+        return "OVER_YESTERDAY" if not yesterday_ok else "GREEN"
+    if pct >= PRESSURE_LIGHT_MIN:
+        return "YELLOW_LIGHT_OK" if yesterday_ok else "YELLOW_LIGHT"
+    if pct >= PRESSURE_NONE_MIN:
+        return "YELLOW_SIM_NONE"
+    return "RED_DEAD"
 
 
 def _build_recovery_morning_extra(tg_id: int) -> list[list[InlineKeyboardButton]] | None:
@@ -145,52 +183,57 @@ async def send_morning_reports(bot: Bot):
 
                 budget = await get_active_budget(tg_id)
 
-                if not budget or budget.daily_limit <= 0:
+                if not budget:
                     continue
 
-                period_start, period_end = get_period_dates(budget)
-
                 yesterday_spent = await get_yesterday_expenses_sum(tg_id)
-                from .budget_service import get_daily_pred, get_money_for_life, get_period_spent
+                from .budget_service import (
+                    get_base_daily_limit,
+                    get_free_today,
+                    get_money_for_life,
+                    get_money_for_life_raw,
+                    get_overrun_today,
+                    get_period_spent,
+                    get_plan_today,
+                    get_spent_today_at_recalc,
+                )
 
                 spent_period = await get_period_spent(tg_id, budget)
+                spent_today = await get_today_expenses_sum(tg_id)
+                money_for_life_raw = get_money_for_life_raw(budget, spent_period)
                 money_for_life = get_money_for_life(budget, spent_period)
                 days_left = budget.days_remaining
-                dl_base = budget.daily_limit
-                dl_pred = get_daily_pred(money_for_life, days_left)
-                pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0
+                dl_base = await get_base_daily_limit(budget)
+                spent_today_at_recalc = get_spent_today_at_recalc(budget)
+                dl_pred = get_plan_today(
+                    money_for_life_raw, spent_today, days_left, spent_today_at_recalc
+                )
+                free_today = get_free_today(dl_pred, spent_today)
+                overrun_today = get_overrun_today(dl_pred, spent_today)
 
-                end_of_period = days_left <= 3
+                end_of_period = is_end_of_period(days_left)
+                yesterday_ok = yesterday_spent <= dl_base
 
-                overdraft = max(yesterday_spent - dl_pred, 0)
-                if yesterday_spent <= dl_pred:
+                overdraft = max(yesterday_spent - dl_base, 0)
+                if yesterday_ok:
                     yesterday_line = phrases.YESTERDAY_OK.format(
-                        spent=int(yesterday_spent), limit=int(dl_pred)
+                        spent=int(yesterday_spent), limit=int(dl_base)
                     )
                 else:
                     yesterday_line = phrases.YESTERDAY_OVER.format(
-                        spent=int(yesterday_spent), limit=int(dl_pred), over=int(overdraft)
+                        spent=int(yesterday_spent), limit=int(dl_base), over=int(overdraft)
                     )
 
-                if end_of_period:
-                    if money_for_life <= 0:
-                        zone = "END_EMPTY"
-                        btn_type = "FRESH_START"
-                    else:
-                        zone = "END_OK"
-                        btn_type = "REGULAR"
-                elif pct_pred > 80:
-                    zone = "GREEN"
-                    btn_type = "REGULAR"
-                elif pct_pred >= 51:
-                    zone = "YELLOW_LIGHT"
-                    btn_type = "REGULAR"
-                elif pct_pred >= 26:
-                    zone = "YELLOW_SIM_NONE"
-                    btn_type = "REGULAR"
-                else:
-                    zone = "RED_DEAD"
-                    btn_type = "FRESH_START"
+                zone = _select_morning_zone(
+                    end_of_period=end_of_period,
+                    money_for_life=money_for_life,
+                    free_today=free_today,
+                    overrun_today=overrun_today,
+                    plan_today=dl_pred,
+                    base_daily_limit=dl_base,
+                    yesterday_ok=yesterday_ok,
+                )
+                btn_type = "FRESH_START" if zone in {"END_EMPTY", "RED_DEAD"} else "REGULAR"
 
                 days_text = f"{days_left} {_plural_days(days_left)}"
                 if zone == "END_EMPTY":
@@ -198,6 +241,13 @@ async def send_morning_reports(bot: Bot):
                         [
                             phrases.ZONE_END_EMPTY_1.format(days_text=days_text),
                             phrases.ZONE_END_EMPTY_2.format(days_text=days_text),
+                        ]
+                    )
+                elif zone == "END_OVER":
+                    zone_text = random.choice(
+                        [
+                            phrases.ZONE_END_OVER_1.format(days_text=days_text),
+                            phrases.ZONE_END_OVER_2.format(days_text=days_text),
                         ]
                     )
                 elif zone == "END_OK":
@@ -211,6 +261,13 @@ async def send_morning_reports(bot: Bot):
                             ),
                         ]
                     )
+                elif zone == "OVER":
+                    zone_text = random.choice(
+                        [
+                            phrases.MORNING_OVER_1,
+                            phrases.MORNING_OVER_2,
+                        ]
+                    )
                 elif zone == "GREEN":
                     zone_text = random.choice(
                         [
@@ -218,6 +275,8 @@ async def send_morning_reports(bot: Bot):
                             phrases.ZONE_GREEN_2.format(limit=int(dl_pred)),
                         ]
                     )
+                elif zone == "OVER_YESTERDAY":
+                    zone_text = phrases.MORNING_YESTERDAY_OVER_ZONE
                 elif zone == "YELLOW_LIGHT":
                     zone_text = random.choice(
                         [
@@ -225,14 +284,18 @@ async def send_morning_reports(bot: Bot):
                             phrases.ZONE_YELLOW_LIGHT_2.format(limit=int(dl_pred)),
                         ]
                     )
+                elif zone == "YELLOW_LIGHT_OK":
+                    zone_text = phrases.ZONE_YELLOW_LIGHT_OK
                 elif zone == "YELLOW_SIM_NONE":
-                    zone_text = random.choice(
-                        [
-                            phrases.MORNING_YELLOW_SIM_NONE_1.format(limit=int(dl_pred)),
-                            phrases.MORNING_YELLOW_SIM_NONE_2.format(limit=int(dl_pred)),
-                            phrases.MORNING_YELLOW_BUDGET_NERVOUS.format(limit=int(dl_pred)),
-                        ]
-                    )
+                    options = [
+                        phrases.MORNING_YELLOW_SIM_NONE_1.format(limit=int(dl_pred)),
+                        phrases.MORNING_YELLOW_SIM_NONE_2.format(limit=int(dl_pred)),
+                    ]
+                    if dl_pred < dl_base:
+                        options.append(
+                            phrases.MORNING_YELLOW_BUDGET_NERVOUS.format(limit=int(dl_pred))
+                        )
+                    zone_text = random.choice(options)
                 else:
                     zone_text = random.choice(
                         [

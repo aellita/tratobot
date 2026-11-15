@@ -1,4 +1,3 @@
-import calendar
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
@@ -40,30 +39,9 @@ def get_totem(category_name: str) -> tuple[str, str, str]:
 
 
 def get_period_dates(budget: Budget) -> tuple[datetime, datetime]:
-    year, month = map(int, budget.month.split("-"))
-    start_day = budget.period_start_day or 1
-    max_day = calendar.monthrange(year, month)[1]
-    clamped_start = min(start_day, max_day)
-    period_start = datetime(year, month, clamped_start)
+    from ..utils.helpers import period_dates
 
-    if start_day == 1:
-        next_month = month + 1
-        next_year = year
-        if next_month > 12:
-            next_month = 1
-            next_year += 1
-        period_end = datetime(next_year, next_month, 1) - timedelta(seconds=1)
-    else:
-        next_month = month + 1
-        next_year = year
-        if next_month > 12:
-            next_month = 1
-            next_year += 1
-        max_day_next = calendar.monthrange(next_year, next_month)[1]
-        clamped_end = min(start_day - 1, max_day_next)
-        period_end = datetime(next_year, next_month, clamped_end, 23, 59, 59)
-
-    return period_start, period_end
+    return period_dates(budget.month, budget.period_start_day or 1)
 
 
 def is_period_active(budget: Budget) -> bool:

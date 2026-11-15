@@ -45,8 +45,16 @@ def _build_container_text(session_expenses: list[str]) -> str:
     return phrases.EVENING_CONTAINER.format(expenses=expenses_text)
 
 
-def get_evening_message(limit: float, spent: float, available_cash: float, days_left: int) -> str:
+def get_evening_message(
+    limit: float,
+    spent: float,
+    available_cash: float,
+    days_left: int,
+    tomorrow: float | None = None,
+) -> str:
     if spent == 0:
+        if limit <= 0:
+            return phrases.EVENING_ZERO_NO_MONEY
         return random.choice(
             [
                 phrases.EVENING_ZERO_1.format(limit=int(limit)),
@@ -60,13 +68,14 @@ def get_evening_message(limit: float, spent: float, available_cash: float, days_
             return phrases.EVENING_GREEN_1.format(
                 limit=int(limit), spent=int(spent), saved=int(saved)
             )
-        return random.choice(
-            [
-                phrases.EVENING_GREEN_2.format(limit=int(limit), spent=int(spent)),
-                phrases.EVENING_GREEN_3.format(limit=int(limit), spent=int(spent)),
-                phrases.EVENING_GREEN_4.format(spent=int(spent), saved=int(saved)),
-            ]
-        )
+        options = [
+            phrases.EVENING_GREEN_2.format(limit=int(limit), spent=int(spent)),
+            phrases.EVENING_GREEN_4.format(spent=int(spent), saved=int(saved)),
+        ]
+        # «Лимит на завтра подрос» — только если он реально выше сегодняшнего.
+        if tomorrow is not None and tomorrow > limit:
+            options.append(phrases.EVENING_GREEN_3.format(limit=int(limit), spent=int(spent)))
+        return random.choice(options)
     overdraft = spent - limit
     if spent > 3 * limit:
         return phrases.EVENING_OVER_SPECIAL.format(over=int(overdraft))
@@ -98,6 +107,15 @@ _MONTH_NAMES_RU = {
 }
 
 
+def _build_teaser(expense_lines: list[str], date_str: str) -> str:
+    if not expense_lines:
+        return INITIAL_TEXT
+    quote_lines = [f"Сегодня, {date_str}:"]
+    quote_lines.extend(expense_lines)
+    blockquote = "<blockquote>" + "\n".join(quote_lines) + "</blockquote>"
+    return f"{INITIAL_TEXT}\n\n{blockquote}"
+
+
 async def send_evening_teaser(bot: Bot, storage: BaseStorage):
     logger.info("Запуск вечернего тизера в 22:00...")
 
@@ -118,7 +136,7 @@ async def send_evening_teaser(bot: Bot, storage: BaseStorage):
             from .budget_service import get_active_budget
 
             budget = await get_active_budget(tg_id)
-            if not budget or budget.daily_limit <= 0:
+            if not budget:
                 continue
 
             storage_key = StorageKey(bot_id=bot.id, chat_id=tg_id, user_id=tg_id)
@@ -133,10 +151,7 @@ async def send_evening_teaser(bot: Bot, storage: BaseStorage):
             expense_lines = await get_today_expenses_grouped(tg_id)
 
             if expense_lines:
-                quote_lines = [f"> Сегодня, {date_str}:"]
-                quote_lines.extend(f"> {line}" for line in expense_lines)
-                blockquote = "\n".join(quote_lines)
-                teaser_text = f"{INITIAL_TEXT}\n\n{blockquote}"
+                teaser_text = _build_teaser(expense_lines, date_str)
             else:
                 teaser_text = INITIAL_TEXT
 

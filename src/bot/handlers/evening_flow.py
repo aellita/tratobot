@@ -157,22 +157,29 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
 
         if budget:
             from ...services.budget_service import (
-                get_daily_pred,
                 get_money_for_life,
+                get_money_for_life_raw,
                 get_period_spent,
+                get_plan_today,
+                get_spent_today_at_recalc,
             )
+            from ...services.status_zones import tomorrow_plan
 
             days_left = budget.days_remaining
             period_spent = await get_period_spent(user_id, budget)
+            money_for_life_raw = get_money_for_life_raw(budget, period_spent)
             money_for_life = get_money_for_life(budget, period_spent)
+            spent_today_at_recalc = get_spent_today_at_recalc(budget)
             available_cash = money_for_life
-            limit = get_daily_pred(money_for_life, days_left)
+            limit = get_plan_today(money_for_life_raw, spent, days_left, spent_today_at_recalc)
+            tomorrow = tomorrow_plan(money_for_life, days_left)
         else:
             days_left = 1
             available_cash = 0
             limit = 0
+            tomorrow = 0.0
 
-        if limit <= 0:
+        if not budget:
             await callback.message.answer(
                 phrases.ERR_REPORT_FAILED,
                 reply_markup=await get_main_menu_keyboard(user_id),
@@ -186,6 +193,7 @@ async def finalize_evening_report(callback: CallbackQuery, state: FSMContext):
             spent=spent,
             available_cash=available_cash,
             days_left=days_left,
+            tomorrow=tomorrow,
         )
 
         kb = None

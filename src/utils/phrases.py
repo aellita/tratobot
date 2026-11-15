@@ -50,7 +50,7 @@ BTN_DELETE = "🗑️ Удалить"
 BTN_RESTORE = "↩️ Восстановить"
 
 # ── Error messages ─────────────────────────────────────────
-ERR_GENERIC = "❌ Что-то пошло не так. Попробуй /start ещё раз."
+ERR_GENERIC = "😨 Ой-ёёёй, случилась ошибочка!\n\nМы уже оповестили администратора."
 ERR_DB = "❌ Ошибка базы данных. Попробуй /start ещё раз."
 ERR_INVALID_NUMBER = "❌ Введи число. Например: {example}"
 ERR_TOO_MANY_RETRIES = "🙅 Слишком много неудачных попыток. Возвращаю в меню."
@@ -96,8 +96,6 @@ HINT_JUNK_CHARS = "убрал лишний знак"
 ERR_WISHLIST_EMPTY = "❌ В Хотелке пока пусто. Попробуй другой вариант."
 
 # ── Success / Info messages ────────────────────────────────
-WELCOME_MENU = "👋 Выбери действие:"
-
 HELP_TEXT = (
     "📋 <b>Что я умею:</b>\n\n"
     "💸 <b>Добавить трату</b> — записать расход\n"
@@ -250,7 +248,11 @@ PERIOD_EDIT_PROMPT = (
     "📅 А какого числа у тебя начинается финансовый месяц?\n(Когда приходит основная зарплата)"
 )
 
-INCOME_ADDED = "✅ Готово! Доход увеличен на {amount}₽\n💰 Текущий доход: {total}₽"
+INCOME_ADDED = (
+    "✅ Добавлено {amount} ₽\n💰 Остаток: {remaining} ₽\n📅 Лимит на завтра: {per_day} ₽/день"
+)
+INCOME_ADDED_LAST_DAY = "✅ Добавлено {amount} ₽\n💰 Остаток: {remaining} ₽"
+INCOME_ADDED_EMPTY = "✅ Добавлено {amount} ₽\n💰 Остаток: 0 ₽"
 MANDATORY_UPDATED = "✅ Готово! Обязательные: {amount}₽"
 SAVINGS_UPDATED = "✅ Готово! Кубышка: {amount}₽"
 
@@ -313,19 +315,26 @@ EVENING_TIMEOUT = (
 
 # ── Morning report ─────────────────────────────────────────
 MORNING_GREETING = "☀️ Доброе утро, бро!\n\n"
-MORNING_TODAY_PLAN = "📋 План на сегодня: {limit} ₽/день"
+MORNING_TODAY_PLAN = "📋 Лимит: {limit} ₽/день"
 
 YESTERDAY_OK = "📅 Вчера: ты потратил {spent} ₽ из {limit} ₽ — уложился 👌"
 YESTERDAY_OVER = "📅 Вчера: ты потратил {spent} ₽ из {limit} ₽ — перебор {over} ₽."
 
 ZONE_END_EMPTY_1 = "🏁 Осталось {days_text}, а денег уже ноль. Бро, держим курс — дотянем."
 ZONE_END_EMPTY_2 = "🏁 Ещё {days_text}, а кэш уже на нуле. Спокойно, бро, финиш рядом."
+ZONE_END_OVER_1 = "🏁 Осталось {days_text}. Сегодня уже перебор — дальше только по плану, бро."
+ZONE_END_OVER_2 = "🏁 Финиш через {days_text}, а сегодня вышли за план. Соберись, осталось немного."
 ZONE_END_OK_1 = "🥳 Ещё {days_text}, а у тебя {money} ₽. Бро, вот это запас!"
 ZONE_END_OK_2 = "🥳 {money} ₽ на последние {days_text}. Бро, мы красиво заходим на финиш."
 ZONE_GREEN_1 = "Бро, ты машина. Прогноз — {limit} ₽/день. Держим курс."
 ZONE_GREEN_2 = "Красиво. Прогноз — {limit} ₽/день. Так и едем."
 ZONE_YELLOW_LIGHT_1 = "📉 Бро, слегка разогнались. Прогноз — {limit} ₽/день. Сегодня чуть полегче."
 ZONE_YELLOW_LIGHT_2 = "📉 Бро, притормаживаем. Прогноз — {limit} ₽/день."
+ZONE_YELLOW_LIGHT_OK = "Вчера уложился — уже победа. Сегодня держим темп, бро."
+MORNING_YESTERDAY_OVER_ZONE = "Вчера вышли за план. Сегодня подтянемся, бро."
+
+MORNING_OVER_1 = "Сегодня уже перебор. Больше трат — только после пересчёта, бро."
+MORNING_OVER_2 = "План на сегодня пробит. Останавливаемся и идём дальше аккуратно."
 
 MORNING_YELLOW_SIM_NONE_1 = "Прогноз — {limit} ₽/день. Бро, держимся."
 MORNING_YELLOW_SIM_NONE_2 = "{limit} ₽/день. Сегодня чуть бережнее с кошельком."
@@ -340,6 +349,10 @@ EVENING_ZERO_1 = (
     "🔋 <b>Вечерний итог:</b>\n"
     "Бро, сегодня ни одной траты, лимит {limit} ₽ цел. "
     "Проверь на всякий случай, всё ли записано."
+)
+EVENING_ZERO_NO_MONEY = (
+    "🔋 <b>Вечерний итог:</b>\n"
+    "На сегодня лимит 0 ₽, но и трат нет. День закрыт — завтра начнём заново."
 )
 EVENING_ZERO_2 = (
     "🌟 <b>День без трат?</b>\n"
@@ -728,18 +741,21 @@ ROLLOVER_WITH_DETAILS = (
 
 STATUS_ZONE_ATAS = "Атас"
 STATUS_ZONE_FINISH = "Финиш"
-STATUS_ZONE_IN_LIMIT = "В лимите"
-STATUS_ZONE_CAN_MORE = "Можно больше"
-STATUS_ZONE_ON_EDGE = "На грани"
-STATUS_ZONE_CRITICAL = "Критично"
+STATUS_ZONE_NORM = "В норме"
+STATUS_ZONE_SLIGHTLY_LOW = "Чуть ниже нормы"
+STATUS_ZONE_LOW = "Ниже нормы"
+STATUS_ZONE_ZERO = "На нуле"
 STATUS_REMAINING_FREE = "Свободно {amount} ₽"
 STATUS_REMAINING_ZERO = "Свободно 0 ₽ ⛔"
 STATUS_SPENT = "Потрачено {amount} ₽"
+STATUS_OVERRUN = "Перерасход {amount} ₽"
+STATUS_PLAN_TODAY = "План на сегодня: {amount} ₽"
 STATUS_RESERVES_HEADER = "Резервы под охраной"
 STATUS_BALANCE_TITLE = "БАЛАНС"
 STATUS_TODAY_TITLE = "Сегодня"
 STATUS_PERIOD_TITLE = "Период (до {end} · {days} дн.)"
-STATUS_REMAINING_PERIOD = "Остаток {amount} ₽ · Лимит {limit} ₽/день"
+STATUS_REMAINING_PERIOD = "Остаток {amount} ₽"
+STATUS_TOMORROW_LIMIT = "Лимит на завтра {amount} ₽/день"
 STATUS_FOOTER_END_EMPTY_1 = (
     "Финишная прямая! Кошелёк пуст. Держимся на морально-волевых, без новых долгов!"
 )
@@ -748,18 +764,31 @@ STATUS_FOOTER_END_EMPTY_3 = "Последние метры, денег нет. �
 STATUS_FOOTER_END_OK_1 = "Осталось пару дней, а у нас ещё есть кэш! Досрочная победа!"
 STATUS_FOOTER_END_OK_2 = "Финишная прямая, в кармане шуршат купюры! Горжусь дисциплиной!"
 STATUS_FOOTER_END_OK_3 = "Период почти закрыт, бюджет не пробит! Абсолютная победа!"
+STATUS_FOOTER_END_OVER_1 = "Финишная прямая, но сегодня перебор. Дальше — только по плану, бро."
+STATUS_FOOTER_END_OVER_2 = "Последние дни, сегодня вышли за план. Держим удар до конца!"
+STATUS_FOOTER_END_TIGHT_1 = "До конца периода пара дней, а на сегодня денег нет. Держимся, бро."
+STATUS_FOOTER_END_TIGHT_2 = "Финиш близко, но сегодня лимит уже потрачен. Завтра разрулим."
 STATUS_FOOTER_GREEN_1 = "Идём идеально по графику! Прогнозный лимит: {limit} ₽/день. Жаба спокойна!"
 STATUS_FOOTER_GREEN_2 = "Всё пучком. Лимит комфортный. Продолжай в том же духе!"
 STATUS_FOOTER_GREEN_3 = "Финансовая карма в порядке. Можно позволить себе чуточку больше!"
 STATUS_FOOTER_YELLOW_LIGHT_1 = "Заметил, мы ускорились. Лимит сожмётся до {limit} ₽. Притормози?"
 STATUS_FOOTER_YELLOW_LIGHT_2 = "Съезжаем с курса. Прогноз {limit} ₽/день. Включи осознанность."
 STATUS_FOOTER_YELLOW_LIGHT_3 = "График пополз вниз. Прогноз {limit} ₽/день — удержим планку?"
+STATUS_FOOTER_YELLOW_LIGHT_NO_NUM_1 = "Заметил, мы ускорились. Сегодня без лишних трат, притормози?"
+STATUS_FOOTER_YELLOW_LIGHT_NO_NUM_2 = "Съезжаем с курса. Включи осознанность, бро."
+STATUS_FOOTER_YELLOW_LIGHT_NO_NUM_3 = "График пополз вниз. Удержим планку?"
 STATUS_FOOTER_YELLOW_NONE_1 = "Лимит сожмётся до {limit} ₽/день. Режим супер-экономии."
 STATUS_FOOTER_YELLOW_NONE_2 = "Прогноз {limit} ₽/день. Постарайся сегодня ничего не покупать!"
-STATUS_FOOTER_YELLOW_NONE_3 = "До конца периода — гречка. Лимит {limit} ₽/день. Держимся!"
+STATUS_FOOTER_YELLOW_NONE_3 = "До конца периода держим планку. Лимит {limit} ₽/день. Не сдаёмся!"
+STATUS_FOOTER_YELLOW_NONE_NO_NUM = "Свободного лимита нет. Сегодня — только самое необходимое, бро."
+STATUS_FOOTER_YELLOW_SQUEEZE_NO_NUM = "План сжался, но на сегодня деньги есть. Держим темп, бро."
 STATUS_FOOTER_RED_NONE_1 = "Лимит просел до {limit} ₽/день. Держимся, бро."
 STATUS_FOOTER_RED_NONE_2 = "Плотно сейчас — {limit} ₽/день. Сегодня полегче, бро."
 STATUS_FOOTER_RED_NONE_3 = "Почти на нуле — {limit} ₽/день. Пересчитаем, если надо."
+STATUS_FOOTER_RED_NO_NUM_1 = "Перерасход сегодня. Дальше — аккуратнее, без резких трат."
+STATUS_FOOTER_RED_NO_NUM_2 = "Сегодня вышли за план. Завтра держимся крепче, бро."
+STATUS_FOOTER_RED_TIGHT_NO_NUM_1 = "План почти на нуле. Сегодня — минимум, бро."
+STATUS_FOOTER_RED_TIGHT_NO_NUM_2 = "Бюджет на нуле. Дальше идём по факту, без иллюзий."
 STATUS_FOOTER_RED_DEAD_1 = "Пробили дно! Деньги кончились. Пора пересобрать бюджет."
 STATUS_FOOTER_RED_DEAD_2 = "Дальше ехать некуда. Пора пересчитать лимит?"
 STATUS_FOOTER_RED_DEAD_3 = "Математика не бьётся с картой. Пора обнулить месяц!"
@@ -774,8 +803,11 @@ ROLLOVER_KEEP_DATE_PROMPT = "🗓️ Обычно мы стартуем {date}-�
 ROLLOVER_CARRIED_MANDATORY = "• Обязательные: {amount}₽"
 STATUS_RESERVE_MANDATORY = "Обязательные {amount}"
 STATUS_BUDGET_COMPLETE = (
-    "🎉 <b>Готово!</b>\n\n📊 Бюджет на {month}:\n• Доход: {income}₽\n"
-    "💰 <b>Дневной лимит: {limit}₽</b>\n\n{hint}"
+    "🎉 <b>Готово!</b>\n\n"
+    "📅 Бюджет на период {period}:\n"
+    "• Доход: {income}₽\n"
+    "💰 <b>Дневной лимит: {limit}₽</b>\n"
+    "• Осталось: {days} {days_word}\n\n{hint}"
 )
 BALANCE_UNKNOWN = "неизвестно"
 PERIOD_DAY_SUFFIX = "-го"

@@ -56,6 +56,8 @@ class Budget(Base):
     period_start_day: Mapped[int] = mapped_column(Integer, default=1)
     free_money: Mapped[float] = mapped_column(Float, default=0)
     spent_at_recalc: Mapped[float] = mapped_column(Float, default=0)
+    spent_today_at_recalc: Mapped[float] = mapped_column(Float, default=0)
+    recalc_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     base_daily_limit: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now)
@@ -71,29 +73,21 @@ class Budget(Base):
 
     @property
     def days_remaining(self) -> int:
-        import calendar
+        from ...utils.helpers import period_dates
 
         today = _msk_now()
-        start = self._clamped_start
-        days_in_month = calendar.monthrange(today.year, today.month)[1]
-        if start == 1:
-            return max(days_in_month - today.day + 1, 0)
-        if today.day >= start:
-            remaining = days_in_month - today.day
-            next_days = start - 1
-            return remaining + next_days + 1
-        else:
-            return start - today.day
+        period_start, period_end = period_dates(self.month, self.period_start_day or 1)
+        if today.date() > period_end.date():
+            return 0
+        if today.date() < period_start.date():
+            return (period_end.date() - period_start.date()).days + 1
+        return (period_end.date() - today.date()).days + 1
 
     @property
     def _period_total_days(self) -> int:
-        import calendar
+        from ...utils.helpers import period_total_days
 
-        today = _msk_now()
-        start = self._clamped_start
-        if start == 1:
-            return calendar.monthrange(today.year, today.month)[1]
-        return 30
+        return period_total_days(self.month, self.period_start_day or 1)
 
     @property
     def daily_limit(self) -> float:

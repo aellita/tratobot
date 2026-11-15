@@ -1,7 +1,7 @@
 import html
 import math
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import emoji
@@ -223,6 +223,41 @@ def _parse_math_prefix(text: str) -> tuple[float, str] | None:
 
 def get_msk_now() -> datetime:
     return datetime.now(MSK_TZ).replace(tzinfo=None)
+
+
+def period_dates(month: str, start_day: int) -> tuple[datetime, datetime]:
+    """Границы периода, начавшегося в ``month``.
+
+    Для ``start_day == 1`` — календарный месяц; иначе от ``start_day`` до
+    ``start_day - 1`` следующего месяца включительно.
+    """
+    import calendar
+
+    year, mon = map(int, month.split("-"))
+    max_day = calendar.monthrange(year, mon)[1]
+    start = max(1, min(start_day or 1, max_day))
+    period_start = datetime(year, mon, start)
+
+    next_mon = mon + 1
+    next_year = year
+    if next_mon > 12:
+        next_mon = 1
+        next_year += 1
+
+    if (start_day or 1) == 1:
+        period_end = datetime(next_year, next_mon, 1) - timedelta(seconds=1)
+    else:
+        max_day_next = calendar.monthrange(next_year, next_mon)[1]
+        end = max(1, min(start_day - 1, max_day_next))
+        period_end = datetime(next_year, next_mon, end, 23, 59, 59)
+
+    return period_start, period_end
+
+
+def period_total_days(month: str, start_day: int) -> int:
+    """Фактическая длина периода, начавшегося в ``month`` (28–31 день)."""
+    period_start, period_end = period_dates(month, start_day)
+    return (period_end.date() - period_start.date()).days + 1
 
 
 def get_user_now(telegram_id: int | None = None) -> datetime:

@@ -37,7 +37,7 @@ class TestDaysRemaining:
 
     def test_last_day_period_start_20(self, monkeypatch):
         _patch_model_date(monkeypatch, datetime(2026, 9, 19))
-        assert _make_budget(period_start=20).days_remaining == 1
+        assert _make_budget(period_start=20, month="2026-08").days_remaining == 1
 
     def test_mid_period_start_1(self, monkeypatch):
         _patch_model_date(monkeypatch, datetime(2026, 9, 15))
@@ -133,7 +133,9 @@ class TestBuildStatus:
         monkeypatch.setattr("src.services.expense_service.get_msk_now", lambda: dt)
 
         text, _ = await _build_status(1001)
-        assert "Лимит 5,000 ₽/день" in text
+        assert "Свободно 5,000 ₽" in text
+        assert "Лимит на завтра 5,172 ₽/день" in text
+        assert "План на сегодня" not in text
 
     async def test_dl_pred_recalculates_after_spending(self, db_session, monkeypatch):
         from src.bot.handlers.menu import _build_status
@@ -165,4 +167,6 @@ class TestBuildStatus:
         monkeypatch.setattr("src.services.expense_service.get_msk_now", lambda: dt)
 
         text, _ = await _build_status(1001)
-        assert "Лимит 5,714 ₽/день" in text
+        assert "Свободно 5,714 ₽" in text
+        assert "Лимит на завтра 6,000 ₽/день" in text
+        assert "План на сегодня" not in text

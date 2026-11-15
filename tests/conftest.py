@@ -16,6 +16,7 @@ import src.services.category_service as _cat_svc
 import src.services.expense_service as _es
 import src.services.goal_service as _gs
 from src.db.models.models import Base, Budget, Expense, User, UserSettings, Wishlist
+from src.utils.helpers import get_msk_now
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -64,7 +65,7 @@ async def test_user(db_session):
 
 @pytest_asyncio.fixture
 async def test_budget(db_session, test_user):
-    today = datetime.now()
+    today = get_msk_now()
     budget = Budget(
         telegram_id=99999,
         month=today.strftime("%Y-%m"),

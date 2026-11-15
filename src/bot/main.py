@@ -4,13 +4,14 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import ErrorEvent, Message
+from aiogram.types import ErrorEvent
 
 from ..core.config import settings
 from ..db.database import close_db, init_db, migrate_schema
 from ..services.morning_report import send_morning_reports
 from ..utils import phrases
 from ..utils.helpers import get_msk_now
+from .error_notify import extract_chat_id, notify_admin
 from .handlers.categories import router as categories_router
 from .handlers.evening_flow import router as evening_router
 from .handlers.history import router as history_router
@@ -51,17 +52,16 @@ async def error_handler(event: ErrorEvent):
     logger.error("Unhandled exception", exc_info=event.exception)
 
     update = event.update
-    msg: Message | None = None
-    if hasattr(update, "message"):
-        msg = update.message
-    elif hasattr(update, "callback_query") and update.callback_query:
-        msg = update.callback_query.message
+    chat_id = extract_chat_id(update)
 
-    if msg:
+    if chat_id is not None:
         try:
-            await msg.answer(phrases.ERR_GENERIC)
+            await bot.send_message(chat_id, phrases.ERR_GENERIC)
         except Exception:
-            pass
+            logger.error("Failed to send error message to user", exc_info=True)
+
+    await notify_admin(bot, update, event.exception, settings.ADMIN_CHAT_ID)
+    return True
 
 
 async def on_startup():

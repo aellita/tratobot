@@ -88,6 +88,7 @@ Docker: `python:3.12-slim`, `CMD ["python", "-m", "src.bot.main"]`. Деплой
 |---|---|---|
 | `BOT_TOKEN` | — | Токен бота от `@BotFather` |
 | `DATABASE_URL` | `sqlite+aiosqlite:///tratobot.db` | SQLite (dev) / PostgreSQL (prod) |
+| `ADMIN_CHAT_ID` | — | Telegram ID админа для traceback'ов и `user_id` при ошибках |
 | `EXPENSE_SIMPLE_CHECK` | `True` | Reply-меню внизу чата вместо inline-меню |
 | `RECOVERY_ENABLED` | `True` | Kill-switch режима восстановления лимита |
 
@@ -106,7 +107,7 @@ echo $?   # 0 — чисто, 1 — есть critical, 2 — не удалось
 
 ## Тесты и качество
 
-**389 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
+**520 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -118,8 +119,9 @@ CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `my
 |------|-------|
 | `agent/PRD.md` | Продуктовая спецификация |
 | `agent/RULES.md` | Правила разработки |
-| `agent/progress.md` | Журнал сессий, баги B1–B5 и решения |
-| `agent/SESSION_PLAN.md` | План работ по неделям |
+| `agent/progress.md` | Журнал сессий, баги B1–B10 и решения |
+| `agent/SESSION_PLAN.md` | План работ и порядок задач |
+| `agent/bugs_2026-11-06.md` | Текущий аудит багов: P0 с цитатами, цифрами и тестами |
 | `docs/PHRASE_MAP.md` | Карта всех фраз бота |
 
 ## Структура проекта
@@ -142,7 +144,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 389 тестов
+├── tests/               # 520 тестов
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile
@@ -150,7 +152,7 @@ tratobot/
 ├── pyproject.toml
 ├── requirements.txt
 ├── requirements-dev.txt
-├── agent/               # инструкции для агента: PRD, RULES, progress, SESSION_PLAN, bugs_ux4
+├── agent/               # инструкции: PRD, RULES, progress, SESSION_PLAN, bugs_ux4, bugs_2026-11-06
 ├── AGENTS.md            # хаб для агента (что читать в начале сессии)
 ├── opencode.json        # project config (instructions → AGENTS.md)
 └── README.md

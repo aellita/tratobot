@@ -1,5 +1,6 @@
 import logging
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logging.basicConfig(level=logging.INFO)
@@ -10,10 +11,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        env_ignore_empty=True,
     )
 
     BOT_TOKEN: str = ""
     DATABASE_URL: str = "sqlite+aiosqlite:///tratobot.db"
+    ADMIN_CHAT_ID: int | None = None
     EXPENSE_SIMPLE_CHECK: bool = True
     RECOVERY_ENABLED: bool = True
 
@@ -28,6 +31,13 @@ class Settings(BaseSettings):
     RECOVERY_COOLDOWN_DAYS: int = 3
     RECOVERY_MIN_BASE_LIMIT: float = 1000.0
     RECOVERY_REPEAT_DEFICIT_MULT: float = 0.50
+
+    @field_validator("ADMIN_CHAT_ID", mode="before")
+    @classmethod
+    def _empty_admin_chat_id_is_none(cls, value):
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return value
 
     @property
     def db_url(self) -> str:

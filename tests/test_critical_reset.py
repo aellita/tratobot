@@ -8,6 +8,7 @@ from src.bot.handlers.menu import (
     recalc_limit,
     save_recalc_balance,
 )
+from src.utils import phrases
 
 
 def _make_message(text: str, user_id: int = 99999, first_name: str = "Test") -> MagicMock:
@@ -104,18 +105,20 @@ class TestSaveRecalcBalance:
         state.clear.assert_awaited()
         msg.answer.assert_awaited()
 
-    async def test_no_budget_handled_gracefully(self):
+    async def test_no_budget_shows_honest_error(self):
         msg = _make_message("50000")
         state = _make_state()
 
         with (
-            patch(
-                "src.bot.handlers.menu.reconcile_budget_with_reality",
-                AsyncMock(return_value=(0.0, 1, 0.0, 0.0, 0.0)),
-            ),
-            patch("src.bot.handlers.menu.apply_reconciliation"),
+            patch("src.bot.handlers.menu.reconcile_budget_with_reality", AsyncMock()) as rec,
+            patch("src.bot.handlers.menu.apply_reconciliation", AsyncMock()) as apply,
         ):
             await save_recalc_balance(msg, state)
+
+        msg.answer.assert_awaited_once_with(phrases.ERR_NO_BUDGET)
+        state.clear.assert_awaited()
+        rec.assert_not_awaited()
+        apply.assert_not_awaited()
 
 
 class TestChangeBudget:
@@ -146,3 +149,38 @@ class TestChangeBudget:
 
         state.set_state.assert_awaited_with(EditBudget.waiting_for_recalc_balance)
         cb.message.edit_text.assert_awaited()
+
+
+class TestRolloverMonth:
+    async def test_keep_uses_period_start_month(self, db_session, monkeypatch):
+        from datetime import datetime
+        from types import SimpleNamespace
+
+        from src.bot.handlers.menu import rollover_keep_budget
+        from src.db.models.models import Budget, User
+        from src.services.budget_service import get_active_budget
+
+        frozen = datetime(2026, 10, 1)
+        monkeypatch.setattr("src.services.budget_service.get_msk_now", lambda: frozen)
+        monkeypatch.setattr("src.utils.helpers.get_msk_now", lambda: frozen)
+        monkeypatch.setattr("src.db.models.models._msk_now", lambda: frozen)
+
+        db_session.add(User(telegram_id=1001))
+        old = Budget(
+            telegram_id=1001,
+            month="2026-09",
+            total_income=90000.0,
+            period_start_day=20,
+        )
+        db_session.add(old)
+        await db_session.commit()
+
+        cb = _make_callback("rollover:keep", user_id=1001)
+        state = _make_state()
+
+        await rollover_keep_budget(cb, SimpleNamespace(budget_id=old.id), state)
+
+        budget = await get_active_budget(1001)
+        assert budget is not None
+        assert budget.month == "2026-09"
+        assert budget.period_start_day == 20

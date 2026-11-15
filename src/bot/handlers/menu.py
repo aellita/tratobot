@@ -21,9 +21,12 @@ from ...db.models.models import (
     Wishlist,
 )
 from ...services.budget_service import (
+    NoActiveBudgetError,
     apply_reconciliation,
-    delete_current_budget,
+    delete_all_budgets,
     get_active_budget,
+    get_base_daily_limit,
+    month_for_period_start,
     reconcile_budget_with_reality,
     save_budget,
     update_budget_field,
@@ -43,6 +46,23 @@ from ...services.expense_service import (
     get_today_expenses_grouped,
     get_today_expenses_sum,
     parse_multi_expense_text,
+)
+from ...services.status_zones import (
+    TREND_GREEN,
+    TREND_LIGHT,
+    TREND_NONE,
+    TREND_OVER,
+    TREND_SQUEEZE,
+    ZONE_ATAS,
+    ZONE_BLUE,
+    ZONE_FINISH,
+    ZONE_GREEN,
+    ZONE_YELLOW,
+    forecast_amount,
+    is_end_of_period,
+    limit_trend,
+    status_zone,
+    tomorrow_plan,
 )
 from ...services.user_service import get_or_create_user
 from ...utils import phrases
@@ -192,6 +212,19 @@ async def get_budget_or_none(telegram_id: int) -> Budget | None:
     return await get_active_budget(telegram_id)
 
 
+async def _apply_budget_update(source: CallbackQuery | Message, field: str, value) -> Budget | None:
+    """Обновить поле активного бюджета или честно сказать, что его нет."""
+    try:
+        return await update_budget_field(source.from_user.id, field, value)
+    except NoActiveBudgetError:
+        text = phrases.ERR_NO_BUDGET
+        if isinstance(source, CallbackQuery):
+            await source.message.answer(text)
+        else:
+            await source.answer(text)
+        return None
+
+
 def _build_expense_check_kb(
     first_id: int | None, line_count: int, corrected_ids: list[int] | None = None
 ) -> InlineKeyboardMarkup | None:
@@ -305,11 +338,6 @@ async def cmd_start(message: Message, state: FSMContext):
             text=phrases.WELCOME_BACK,
             reply_markup=get_start_choice_keyboard(),
         )
-        if settings.EXPENSE_SIMPLE_CHECK:
-            await message.answer(
-                text=phrases.WELCOME_MENU,
-                reply_markup=get_main_reply_keyboard(),
-            )
 
 
 @router.callback_query(F.data == "open_menu")
@@ -348,7 +376,7 @@ async def reset_budget(callback: CallbackQuery, state: FSMContext):
     )
     await seed_user_categories(callback.from_user.id)
 
-    await delete_current_budget(callback.from_user.id)
+    await delete_all_budgets(callback.from_user.id)
 
     greeting = random.choice(GREETINGS)
     await callback.message.edit_text(text=greeting)
@@ -376,7 +404,7 @@ async def rollover_keep_budget(
         return
 
     tg_id = callback.from_user.id
-    month = get_msk_now().strftime("%Y-%m")
+    month = month_for_period_start(old.period_start_day or 1)
 
     old_mandatory = old.mandatory_payments
     old_wishlist_name = old.wishlist_name
@@ -473,17 +501,9 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if not budget:
         return phrases.NO_BUDGET, await get_main_menu_keyboard(tg_id)
 
-    async with async_session_maker() as session:
-        today_start = get_msk_now().replace(hour=0, minute=0, second=0, microsecond=0)
-        result = await session.execute(
-            select(func.sum(Expense.amount)).where(
-                Expense.telegram_id == tg_id,
-                Expense.is_deleted == False,
-                Expense.date >= today_start,
-            )
-        )
-        spent_today = result.scalar() or 0
+    spent_today = await get_today_expenses_sum(tg_id)
 
+    async with async_session_maker() as session:
         from ...services.monthly_report import get_period_dates
 
         period_start, period_end = get_period_dates(budget)
@@ -500,47 +520,62 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         spent_period = result.scalar() or 0
 
     days_left = budget.days_remaining
-    dl_base = budget.daily_limit
+    dl_base = await get_base_daily_limit(budget)
 
-    from ...services.budget_service import get_daily_pred, get_money_for_life
+    from ...services.budget_service import (
+        get_free_today,
+        get_money_for_life,
+        get_money_for_life_raw,
+        get_overrun_today,
+        get_plan_today,
+        get_spent_today_at_recalc,
+    )
 
+    money_for_life_raw = get_money_for_life_raw(budget, spent_period)
     money_for_life = get_money_for_life(budget, spent_period)
-    dl_pred = get_daily_pred(money_for_life, days_left)
-    pct_pred = dl_pred / max(dl_base, 1) * 100 if dl_base > 0 else 0
+    spent_today_at_recalc = get_spent_today_at_recalc(budget)
+    plan_today = get_plan_today(money_for_life_raw, spent_today, days_left, spent_today_at_recalc)
+    free_today = get_free_today(plan_today, spent_today)
+    overrun_today = get_overrun_today(plan_today, spent_today)
+    plan_tomorrow = tomorrow_plan(money_for_life, days_left)
 
-    remaining_today = max(dl_pred - spent_today, 0)
     remaining_period = money_for_life
-    period_end_day = budget.period_start_day or 1
-    period_end_str = f"{period_end_day}{phrases.PERIOD_DAY_SUFFIX}"
+    period_end_str = f"{period_end.day}{phrases.PERIOD_DAY_SUFFIX}"
 
-    end_of_period = days_left <= 3
+    end_of_period = is_end_of_period(days_left)
+    zone = status_zone(
+        plan_today=plan_today,
+        base_daily_limit=dl_base,
+        money_for_life=money_for_life,
+        days_left=days_left,
+    )
 
-    if end_of_period and money_for_life <= 0:
+    if zone == ZONE_ATAS:
         zone_emoji = "🔴"
         zone_label = phrases.STATUS_ZONE_ATAS
-    elif end_of_period:
+    elif zone == ZONE_FINISH:
         zone_emoji = "🟢"
         zone_label = phrases.STATUS_ZONE_FINISH
-    elif pct_pred > 80:
+    elif zone == ZONE_GREEN:
         zone_emoji = "🟢"
-        zone_label = phrases.STATUS_ZONE_IN_LIMIT
-    elif pct_pred >= 51:
+        zone_label = phrases.STATUS_ZONE_NORM
+    elif zone == ZONE_BLUE:
         zone_emoji = "🔵"
-        zone_label = phrases.STATUS_ZONE_CAN_MORE
-    elif pct_pred >= 26:
+        zone_label = phrases.STATUS_ZONE_SLIGHTLY_LOW
+    elif zone == ZONE_YELLOW:
         zone_emoji = "🟡"
-        zone_label = phrases.STATUS_ZONE_ON_EDGE
+        zone_label = phrases.STATUS_ZONE_LOW
     else:
         zone_emoji = "🔴"
-        zone_label = phrases.STATUS_ZONE_CRITICAL
+        zone_label = phrases.STATUS_ZONE_ZERO
 
-    if remaining_today > 0:
-        today_line = phrases.STATUS_REMAINING_FREE.format(amount=f"{int(remaining_today):,}")
+    if free_today > 0:
+        today_line = phrases.STATUS_REMAINING_FREE.format(amount=f"{int(free_today):,}")
     else:
         today_line = phrases.STATUS_REMAINING_ZERO
 
     spent_line = phrases.STATUS_SPENT.format(amount=f"{int(spent_today):,}")
-    if spent_today > dl_pred:
+    if overrun_today > 0:
         spent_line += " ⚠️"
 
     expense_lines = await get_today_expenses_grouped(tg_id)
@@ -604,10 +639,36 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
         except Exception:
             pass
 
+    # Footer needed before the period line: the number lives either in the
+    # footer or in «Период», never in both.
+    if _recovery_active is not None or _recovery_offer:
+        footer = "Идём по плану 👍" if overrun_today <= 0 else phrases.STATUS_FOOTER_RED_NO_NUM_2
+        footer_has_number = False
+    else:
+        footer, footer_has_number = _pick_status_footer(
+            end_of_period=end_of_period,
+            money_for_life=money_for_life,
+            overrun_today=overrun_today,
+            free_today=free_today,
+            plan_today=plan_today,
+            plan_tomorrow=plan_tomorrow,
+            days_left=days_left,
+            base_daily_limit=dl_base,
+        )
+
+    period_line = phrases.STATUS_REMAINING_PERIOD.format(amount=f"{int(remaining_period):,}")
+    if (
+        not footer_has_number
+        and days_left >= 2
+        and money_for_life > 0
+        and _recovery_active is None
+        and not _recovery_offer
+    ):
+        period_line += " · " + phrases.STATUS_TOMORROW_LIMIT.format(
+            amount=f"{int(plan_tomorrow):,}"
+        )
+
     # today line: if active, use target
-    _remaining_period_line = phrases.STATUS_REMAINING_PERIOD.format(
-        amount=f"{int(remaining_period):,}", limit=f"{int(dl_pred):,}"
-    )
     if _recovery_active is not None:
         _target_int = int(_recovery_active.target)
         _rem_target = max(_target_int - int(spent_today), 0)
@@ -632,7 +693,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             f"{today_line} · {spent_line}{expenses_block}"
             f"{_after_restoration}\n\n"
             f"<b>{phrases.STATUS_PERIOD_TITLE.format(end=period_end_str, days=days_left)}</b>\n"
-            f"{_remaining_period_line} · Прогноз: {int(dl_pred):,}\n"
+            f"{period_line}\n"
             f"{reserves_block}"
         )
     else:
@@ -641,7 +702,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
             f"<b>{phrases.STATUS_TODAY_TITLE}</b>\n"
             f"{today_line} · {spent_line}{expenses_block}\n\n"
             f"<b>{phrases.STATUS_PERIOD_TITLE.format(end=period_end_str, days=days_left)}</b>\n"
-            f"{_remaining_period_line}"
+            f"{period_line}"
             f"{reserves_block}"
         )
 
@@ -660,7 +721,9 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
 
                 recovery_kb_extra = get_recovery_active_keyboard()
             elif _recovery_offer:
-                recovery_block = f"\n\n{phrases.RECOVERY_DAILY_OFFER.format(dl_pred=int(dl_pred))}"
+                recovery_block = (
+                    f"\n\n{phrases.RECOVERY_DAILY_OFFER.format(dl_pred=int(plan_today))}"
+                )
                 from ..keyboards import get_recovery_plan_keyboard
 
                 recovery_kb_extra = get_recovery_plan_keyboard()
@@ -670,66 +733,7 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if recovery_block:
         text += recovery_block
 
-    # Zone footer hidden when recovery offer/active (priority B)
-    if _recovery_active is not None or _recovery_offer:
-        footer = "Идём по плану 👍"
-        btns = "REGULAR"
-    elif end_of_period:
-        if money_for_life <= 0:
-            footer = random.choice(
-                [
-                    phrases.STATUS_FOOTER_END_EMPTY_1,
-                    phrases.STATUS_FOOTER_END_EMPTY_2,
-                    phrases.STATUS_FOOTER_END_EMPTY_3,
-                ]
-            )
-            btns = "REGULAR"
-        else:
-            footer = random.choice(
-                [
-                    phrases.STATUS_FOOTER_END_OK_1,
-                    phrases.STATUS_FOOTER_END_OK_2,
-                    phrases.STATUS_FOOTER_END_OK_3,
-                ]
-            )
-            btns = "REGULAR"
-    elif pct_pred > 80:
-        footer = random.choice(
-            [
-                phrases.STATUS_FOOTER_GREEN_1.format(limit=f"{int(dl_pred):,}"),
-                phrases.STATUS_FOOTER_GREEN_2,
-                phrases.STATUS_FOOTER_GREEN_3,
-            ]
-        )
-        btns = "REGULAR"
-    elif pct_pred >= 51:
-        footer = random.choice(
-            [
-                phrases.STATUS_FOOTER_YELLOW_LIGHT_1.format(limit=f"{int(dl_pred):,}"),
-                phrases.STATUS_FOOTER_YELLOW_LIGHT_2.format(limit=f"{int(dl_pred):,}"),
-                phrases.STATUS_FOOTER_YELLOW_LIGHT_3.format(limit=f"{int(dl_pred):,}"),
-            ]
-        )
-        btns = "REGULAR"
-    elif pct_pred >= 26:
-        footer = random.choice(
-            [
-                phrases.STATUS_FOOTER_YELLOW_NONE_1.format(limit=f"{int(dl_pred):,}"),
-                phrases.STATUS_FOOTER_YELLOW_NONE_2.format(limit=f"{int(dl_pred):,}"),
-                phrases.STATUS_FOOTER_YELLOW_NONE_3.format(limit=f"{int(dl_pred):,}"),
-            ]
-        )
-        btns = "REGULAR"
-    else:
-        footer = random.choice(
-            [
-                phrases.STATUS_FOOTER_RED_NONE_1.format(limit=f"{int(dl_pred):,}"),
-                phrases.STATUS_FOOTER_RED_NONE_2.format(limit=f"{int(dl_pred):,}"),
-                phrases.STATUS_FOOTER_RED_NONE_3.format(limit=f"{int(dl_pred):,}"),
-            ]
-        )
-        btns = "REGULAR"
-
+    btns = "REGULAR"
     base_kb = _build_status_keyboard(btns, tg_id)
     if recovery_kb_extra is not None:
         merged = list(base_kb.inline_keyboard) + list(recovery_kb_extra.inline_keyboard)
@@ -737,6 +741,156 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     else:
         kb = base_kb
     return text + "\n\n" + footer if footer else text, kb
+
+
+def _pick_status_footer(
+    *,
+    end_of_period: bool,
+    money_for_life: float,
+    overrun_today: float,
+    free_today: float,
+    plan_today: float,
+    plan_tomorrow: float,
+    days_left: int,
+    base_daily_limit: float,
+) -> tuple[str, bool]:
+    """Вернуть фразу футера и признак «в ней есть цифра».
+
+    Цифра завтрашнего лимита должна быть ровно в одном месте: если футер
+    её показывает, «Период» обходится без неё, и наоборот.
+    """
+    if end_of_period:
+        if money_for_life <= 0:
+            return (
+                random.choice(
+                    [
+                        phrases.STATUS_FOOTER_END_EMPTY_1,
+                        phrases.STATUS_FOOTER_END_EMPTY_2,
+                        phrases.STATUS_FOOTER_END_EMPTY_3,
+                    ]
+                ),
+                False,
+            )
+        if overrun_today > 0:
+            return (
+                random.choice(
+                    [
+                        phrases.STATUS_FOOTER_END_OVER_1,
+                        phrases.STATUS_FOOTER_END_OVER_2,
+                    ]
+                ),
+                False,
+            )
+        if free_today <= 0:
+            return (
+                random.choice(
+                    [
+                        phrases.STATUS_FOOTER_END_TIGHT_1,
+                        phrases.STATUS_FOOTER_END_TIGHT_2,
+                    ]
+                ),
+                False,
+            )
+        return (
+            random.choice(
+                [
+                    phrases.STATUS_FOOTER_END_OK_1,
+                    phrases.STATUS_FOOTER_END_OK_2,
+                    phrases.STATUS_FOOTER_END_OK_3,
+                ]
+            ),
+            False,
+        )
+
+    if money_for_life <= 0:
+        return (
+            random.choice(
+                [
+                    phrases.STATUS_FOOTER_RED_DEAD_1,
+                    phrases.STATUS_FOOTER_RED_DEAD_2,
+                    phrases.STATUS_FOOTER_RED_DEAD_3,
+                ]
+            ),
+            False,
+        )
+
+    trend = limit_trend(plan_today, base_daily_limit, free_today, overrun_today)
+    forecast = forecast_amount(plan_today, plan_tomorrow, days_left)
+
+    if trend == TREND_OVER:
+        return (
+            random.choice(
+                [
+                    phrases.STATUS_FOOTER_RED_NO_NUM_1,
+                    phrases.STATUS_FOOTER_RED_NO_NUM_2,
+                ]
+            ),
+            False,
+        )
+    if trend == TREND_NONE:
+        return phrases.STATUS_FOOTER_YELLOW_NONE_NO_NUM, False
+    if trend == TREND_GREEN:
+        if forecast is not None:
+            return phrases.STATUS_FOOTER_GREEN_1.format(limit=f"{forecast:,}"), True
+        return (
+            random.choice([phrases.STATUS_FOOTER_GREEN_2, phrases.STATUS_FOOTER_GREEN_3]),
+            False,
+        )
+    if trend == TREND_LIGHT:
+        if forecast is not None:
+            return (
+                random.choice(
+                    [
+                        phrases.STATUS_FOOTER_YELLOW_LIGHT_1.format(limit=f"{forecast:,}"),
+                        phrases.STATUS_FOOTER_YELLOW_LIGHT_2.format(limit=f"{forecast:,}"),
+                        phrases.STATUS_FOOTER_YELLOW_LIGHT_3.format(limit=f"{forecast:,}"),
+                    ]
+                ),
+                True,
+            )
+        return (
+            random.choice(
+                [
+                    phrases.STATUS_FOOTER_YELLOW_LIGHT_NO_NUM_1,
+                    phrases.STATUS_FOOTER_YELLOW_LIGHT_NO_NUM_2,
+                    phrases.STATUS_FOOTER_YELLOW_LIGHT_NO_NUM_3,
+                ]
+            ),
+            False,
+        )
+    if trend == TREND_SQUEEZE:
+        if forecast is not None:
+            return (
+                random.choice(
+                    [
+                        phrases.STATUS_FOOTER_YELLOW_NONE_1.format(limit=f"{forecast:,}"),
+                        phrases.STATUS_FOOTER_YELLOW_NONE_3.format(limit=f"{forecast:,}"),
+                    ]
+                ),
+                True,
+            )
+        return phrases.STATUS_FOOTER_YELLOW_SQUEEZE_NO_NUM, False
+
+    # TREND_DEAD
+    if forecast is not None:
+        return (
+            random.choice(
+                [
+                    phrases.STATUS_FOOTER_RED_NONE_1.format(limit=f"{forecast:,}"),
+                    phrases.STATUS_FOOTER_RED_NONE_3.format(limit=f"{forecast:,}"),
+                ]
+            ),
+            True,
+        )
+    return (
+        random.choice(
+            [
+                phrases.STATUS_FOOTER_RED_TIGHT_NO_NUM_1,
+                phrases.STATUS_FOOTER_RED_TIGHT_NO_NUM_2,
+            ]
+        ),
+        False,
+    )
 
 
 def _build_status_keyboard(btn_type: str, tg_id: int) -> InlineKeyboardMarkup:
@@ -1072,12 +1226,16 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         await state.clear()
         return
 
-    month = get_msk_now().strftime("%Y-%m")
+    today = get_msk_now()
     wishlist_name = (
         data.get("wishlist_name", phrases.DEFAULT_WISHLIST_NAME) or phrases.DEFAULT_WISHLIST_NAME
     )
     wishlist_price = data.get("wishlist_price", 0)
     period_start_day = data.get("period_start_day", 1)
+
+    # Budget.month — месяц, в котором начался период. Если выбранный день
+    # старта ещё не наступил, текущий период начался в прошлом месяце.
+    month = month_for_period_start(period_start_day, today)
 
     await save_budget(
         telegram_id=telegram_id,
@@ -1102,25 +1260,25 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
             session.add(UserSettings(telegram_id=telegram_id, rounding_mode=rounding_mode))
         await session.commit()
 
-    import calendar
-
-    today = get_msk_now()
     available = data.get("income", 0) - data.get("mandatory", 0) - data.get("black_day", 0)
-    days_in_month = calendar.monthrange(today.year, today.month)[1]
-    clamped_start = min(period_start_day, days_in_month)
-    if clamped_start == 1:
-        days_remaining = max(days_in_month - today.day + 1, 0)
-    elif today.day >= clamped_start:
-        remaining_this = days_in_month - today.day
-        days_remaining = remaining_this + clamped_start
+    budget = await get_active_budget(telegram_id)
+    if budget:
+        from ...services.monthly_report import get_period_dates
+
+        period_start, period_end = get_period_dates(budget)
+        days_remaining = max(budget.days_remaining, 1)
+        period_label = f"{period_start:%d.%m}–{period_end:%d.%m}"
     else:
-        days_remaining = clamped_start - today.day
+        days_remaining = 1
+        period_label = "—"
     daily_limit = max(available / max(days_remaining, 1), 0)
 
     text = phrases.STATUS_BUDGET_COMPLETE.format(
-        month=month,
+        period=period_label,
         income=f"{data.get('income', 0):,.0f}",
         limit=f"{daily_limit:,.0f}",
+        days=days_remaining,
+        days_word=_plural_days(days_remaining),
         hint=phrases.ONBOARDING_HINT_SETTINGS,
     )
 
@@ -1129,18 +1287,6 @@ async def _finish_onboarding(source: CallbackQuery | Message, state: FSMContext)
         await source.message.edit_text(text=text, reply_markup=kb)
     else:
         await source.answer(text=text, reply_markup=kb)
-
-    if settings.EXPENSE_SIMPLE_CHECK:
-        if isinstance(source, CallbackQuery):
-            await source.message.answer(
-                text=phrases.WELCOME_MENU,
-                reply_markup=get_main_reply_keyboard(),
-            )
-        else:
-            await source.answer(
-                text=phrases.WELCOME_MENU,
-                reply_markup=get_main_reply_keyboard(),
-            )
 
     await state.clear()
 
@@ -1193,7 +1339,11 @@ async def handle_period_start_choice(callback: CallbackQuery, state: FSMContext)
         await state.update_data(period_start_day=day)
         await _finish_onboarding(callback, state)
     elif current_state == EditBudget.waiting_for_period_start.state:
-        await update_budget_field(callback.from_user.id, "period_start_day", day)
+        updated = await _apply_budget_update(callback, "period_start_day", day)
+        if updated is None:
+            await state.clear()
+            await callback.answer()
+            return
         await callback.message.edit_text(
             text=phrases.PERIOD_UPDATED.format(day=day),
             reply_markup=await get_main_menu_keyboard(callback.from_user.id),
@@ -1361,7 +1511,7 @@ async def _finish_new_period(source: CallbackQuery | Message, state: FSMContext)
         wishlist_name = phrases.DEFAULT_WISHLIST_NAME
         wishlist_target = 0
 
-    month = get_msk_now().strftime("%Y-%m")
+    month = month_for_period_start(period_start_day)
     await save_budget(
         telegram_id=tg_id,
         month=month,
@@ -1821,7 +1971,7 @@ async def save_new_category(message: Message, state: FSMContext):
         )
         if existing.scalar_one_or_none():
             await message.answer(
-                text=phrases.ERR_CATEGORY_EXISTS.format(name=name),
+                text=phrases.ERR_CATEGORY_EXISTS.format(name=safe(name)),
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [InlineKeyboardButton(text=phrases.BTN_CANCEL, callback_data="cancel")],
@@ -1855,7 +2005,7 @@ async def save_new_category(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer(
-        text=phrases.CATEGORY_CREATED.format(name=name, desc=expense.description),
+        text=phrases.CATEGORY_CREATED.format(name=safe(name), desc=safe(expense.description or "")),
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
 
@@ -1973,6 +2123,12 @@ async def save_recalc_balance(message: Message, state: FSMContext):
         await handle_invalid_input(
             message, state, phrases.ERR_INVALID_NUMBER.format(example="50000")
         )
+        return
+
+    budget = await get_budget_or_none(message.from_user.id)
+    if not budget:
+        await message.answer(phrases.ERR_NO_BUDGET)
+        await state.clear()
         return
 
     new_limit, days_left, money_for_life, mandatory, cubyshka = await reconcile_budget_with_reality(
@@ -2137,7 +2293,10 @@ async def save_edit_period_start(message: Message, state: FSMContext):
     if day > days_in_month:
         day = days_in_month
 
-    await update_budget_field(message.from_user.id, "period_start_day", day)
+    updated = await _apply_budget_update(message, "period_start_day", day)
+    if updated is None:
+        await state.clear()
+        return
 
     await message.answer(
         text=phrases.PERIOD_UPDATED.format(day=day),
@@ -2162,15 +2321,39 @@ async def save_add_income(message: Message, state: FSMContext):
         await message.answer(phrases.ERR_NO_BUDGET)
         await state.clear()
         return
+
     if budget.free_money > 0:
-        new_total = budget.free_money + amount
-        await update_budget_field(message.from_user.id, "free_money", new_total)
+        updated = await _apply_budget_update(message, "free_money", budget.free_money + amount)
     else:
-        new_total = budget.total_income + amount
-        await update_budget_field(message.from_user.id, "total_income", new_total)
+        updated = await _apply_budget_update(message, "total_income", budget.total_income + amount)
+    if updated is None:
+        await state.clear()
+        return
+
+    from ...services.budget_service import get_money_for_life, get_period_spent
+    from ...services.status_zones import tomorrow_plan
+
+    spent_period = await get_period_spent(message.from_user.id, updated)
+    money_for_life = get_money_for_life(updated, spent_period)
+    days_left = max(updated.days_remaining, 1)
+    per_day = tomorrow_plan(money_for_life, days_left)
+
+    if money_for_life <= 0:
+        text = phrases.INCOME_ADDED_EMPTY.format(amount=f"{amount:,.0f}")
+    elif days_left <= 1:
+        text = phrases.INCOME_ADDED_LAST_DAY.format(
+            amount=f"{amount:,.0f}",
+            remaining=f"{money_for_life:,.0f}",
+        )
+    else:
+        text = phrases.INCOME_ADDED.format(
+            amount=f"{amount:,.0f}",
+            remaining=f"{money_for_life:,.0f}",
+            per_day=f"{per_day:,.0f}",
+        )
 
     await message.answer(
-        text=phrases.INCOME_ADDED.format(amount=f"{amount:,.0f}", total=f"{new_total:,.0f}"),
+        text=text,
         reply_markup=await get_main_menu_keyboard(message.from_user.id),
     )
     await _handle_recovery_budget_change(message.from_user.id, message)
@@ -2187,7 +2370,10 @@ async def save_mandatory(message: Message, state: FSMContext):
         )
         return
 
-    await update_budget_field(message.from_user.id, "mandatory_payments", amount)
+    updated = await _apply_budget_update(message, "mandatory_payments", amount)
+    if updated is None:
+        await state.clear()
+        return
     if message.from_user.id in _from_advanced_planning:
         _from_advanced_planning.discard(message.from_user.id)
         await state.clear()
@@ -2213,7 +2399,10 @@ async def save_black_day(message: Message, state: FSMContext):
         )
         return
 
-    await update_budget_field(message.from_user.id, "black_day_fund", amount)
+    updated = await _apply_budget_update(message, "black_day_fund", amount)
+    if updated is None:
+        await state.clear()
+        return
     if message.from_user.id in _from_advanced_planning:
         _from_advanced_planning.discard(message.from_user.id)
         await state.clear()
@@ -2234,8 +2423,14 @@ async def save_wishlist(message: Message, state: FSMContext):
     name, price = _parse_wishlist(message.text.strip())
     name = name[:255]
 
-    await update_budget_field(message.from_user.id, "wishlist_name", name)
-    await update_budget_field(message.from_user.id, "wishlist_target", price)
+    updated = await _apply_budget_update(message, "wishlist_name", name)
+    if updated is None:
+        await state.clear()
+        return
+    updated = await _apply_budget_update(message, "wishlist_target", price)
+    if updated is None:
+        await state.clear()
+        return
     # full removal: also clear Wishlist table so status hides
     try:
         async with async_session_maker() as session:
