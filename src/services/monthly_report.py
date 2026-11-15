@@ -244,6 +244,13 @@ def format_summary_text(data: dict, label: str = "") -> str:
         f"<p><b>💰 {phrases.MONTHLY_TOTAL_SPENT.format(amount=_total)}</b> ({zone_str})</p>"
     )
 
+    saved = float(budget.total_income) - float(data["total_spent"])
+    if not active and saved != 0:
+        if saved > 0:
+            parts.append(f"<p>{phrases.MONTHLY_SAVED.format(amount=f'{saved:,.0f}')}</p>")
+        else:
+            parts.append(f"<p>{phrases.MONTHLY_OVERRUN.format(amount=f'{abs(saved):,.0f}')}</p>")
+
     budget_income = int(budget.total_income)
     parts.append(f"<p>💵 {phrases.MONTHLY_BUDGET_LABEL.format(amount=f'{budget_income:,}')}</p>")
 
@@ -272,17 +279,8 @@ def format_summary_text(data: dict, label: str = "") -> str:
         _total2 = f"{int(data['total_spent']):,}"
         parts.append(f"<p><b>{phrases.MONTHLY_TOTAL_LABEL.format(amount=_total2)}</b></p>")
 
-        if data["rounding_total"] > 0:
-            _rnd = f"{data['rounding_total']:,.0f}"
-            parts.append(f"<p>🐸 {phrases.MONTHLY_ROUNDING_LABEL.format(amount=_rnd)}</p>")
-
     details = phrases.MONTHLY_DETAILS.format(
         daily_limit=int(budget.daily_limit),
-        rounding_total=int(data["rounding_total"]),
-        black_day=int(data["bdf_amount"]),
-        black_day_used=int(data["bdf_used"]),
-        wishlist_current=int(data["wishlist_current"]),
-        wishlist_target=int(data["wishlist_target"]),
         mandatory=int(budget.mandatory_payments),
     )
 
