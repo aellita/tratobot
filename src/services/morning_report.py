@@ -299,8 +299,8 @@ async def send_morning_reports(bot: Bot):
                 else:
                     zone_text = random.choice(
                         [
-                            phrases.MORNING_RED_DEAD_1,
-                            phrases.MORNING_RED_DEAD_2,
+                            phrases.MORNING_RED_DEAD_1.format(limit=int(dl_pred)),
+                            phrases.MORNING_RED_DEAD_2.format(limit=int(dl_pred)),
                         ]
                     )
 
