@@ -10,7 +10,7 @@ from ..core.config import settings
 from ..db.database import close_db, init_db, migrate_schema
 from ..services.morning_report import send_morning_reports
 from ..utils import phrases
-from ..utils.helpers import get_msk_now
+from ..utils.helpers import get_msk_now, is_morning_catchup_window
 from .error_notify import extract_chat_id, notify_admin
 from .handlers.categories import router as categories_router
 from .handlers.evening_flow import router as evening_router
