@@ -236,14 +236,14 @@ def format_summary_text(data: dict, label: str = "") -> str:
 
     parts.append("<hr>")
 
-    zone_str = phrases.MONTHLY_ZONE_TAG.format(zone_label=data["zone_label"])
+    zone_str = phrases.MONTHLY_ZONE_TAG.format(zone_label=_esc(data["zone_label"]))
     _total = f"{data['total_spent']:,.0f}"
     parts.append(
         f"<p><b>💰 {phrases.MONTHLY_TOTAL_SPENT.format(amount=_total)}</b> ({zone_str})</p>"
     )
 
     saved = float(budget.total_income) - float(data["total_spent"])
-    if not active and saved != 0:
+    if not active and round(saved, 2) != 0:
         if saved > 0:
             parts.append(f"<p>{phrases.MONTHLY_SAVED.format(amount=f'{saved:,.0f}')}</p>")
         else:

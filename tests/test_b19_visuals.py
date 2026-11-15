@@ -25,11 +25,6 @@ def _data() -> dict:
         "totem_name": "Винни-Пух",
         "totem_phrase": "—",
         "totem_emoji": "🍯",
-        "wishlist_current": 0.0,
-        "wishlist_target": 0.0,
-        "bdf_amount": 0.0,
-        "bdf_used": 0.0,
-        "rounding_total": 0.0,
         "period_label": "1 сен – 30 сен 2026",
     }
 
