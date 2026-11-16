@@ -158,6 +158,22 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 **Ревью:** HIGH нет. Усилены тесты смещённого старта и guard `max(1, total_days)`. Интеграционная связка `build_summary_data` → `compute_avg_day` отложена в M6 (нужен патч `async_session_maker` в `tests/conftest.py`).
 **Файлы:** `src/services/monthly_report.py`, `tests/test_monthly_report.py`.
 
+### ✅ M3: «Без категории» в сортировке (2026-11-16)
+
+**Проблема:** `get_category_breakdown()` сортировал SQL только именованные категории, а «Без категории» (`category_id IS NULL`) дописывалось в Python всегда последней. Таблица, топ месяца и тотем строились по именованным категориям, игнорируя реального лидера.
+
+**Решение:**
+- `get_category_breakdown()`: merge именованных + uncategorized в dict, слив дубли по имени «Без категории»; финальная сортировка по `(amount desc, count desc)`.
+- Две новые фразы в `phrases.py` для топа «Без категории»:
+  - Активный: `MONTHLY_EGG_TOTEM_NO_CATEGORY` — «🥚 Твой тотем за {period} ещё зреет! Пока там в топе «Без категории». Разбери эти траты, бро — и тотем вылупится точным.»
+  - Закрытый: `MONTHLY_TOTEM_NO_CATEGORY` — «🍊 Твой тотем — Чебурашка. Больше всего бюджета ушло в «Без категории»: пока не раскидаешь эти траты, мне не понять, что ты за зверь.»
+- `format_summary_text()`: пустой период → `MONTHLY_EMPTY`; активный/закрытый с топом «Без категории» → новые фразы; остальные → `get_totem()` как раньше.
+- `DEFAULT «Прочее» (📦)` — текущий путь через `get_totem()` (попадает в Чебурашку, без спец-фраз).
+
+**Тесты:** `tests/test_monthly_report.py` (+3: `test_closed_period_no_category_top_totem_variant_a`, `test_active_period_no_category_top_egg_variant_a`, `test_zero_expenses_shows_empty`). `pytest 563 passed`, `ruff check .`, `ruff format --check .`.
+
+**Файлы:** `src/services/monthly_report.py`, `src/utils/phrases.py`, `tests/test_monthly_report.py`.
+
 ### Бот мужского пола: фикс всех фраз (2026-09-01)
 **Проблема:** бот обращался к себе в женском роде («я сама разберусь», «не поняла», «если забыла внести», «посмотрела»). Грамматический род не совпадал с мужским персонажем.
 

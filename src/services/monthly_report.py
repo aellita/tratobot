@@ -119,13 +119,30 @@ async def get_category_breakdown(
         rows = result.all()
 
     uncategorized_result = await _get_uncategorized_sum(telegram_id, period_start, period_end)
-    results: list[tuple[str | None, int, float]] = [
-        (row.name, row[2], float(row[3]) if row[3] else 0.0) for row in rows
-    ]
+
+    # Build dict: name -> (count, amount), merge "Без категории" if real category exists
+    merged: dict[str, tuple[int, float]] = {}
+    for row in rows:
+        name = row.name
+        count = row[2]
+        amount = float(row[3]) if row[3] else 0.0
+        merged[name] = (count, amount)
+
     if uncategorized_result:
         cat_name, count, amount = uncategorized_result
-        results.append((cat_name, count, amount))
-    return results
+        if cat_name in merged:
+            old_count, old_amount = merged[cat_name]
+            merged[cat_name] = (old_count + count, old_amount + amount)
+        else:
+            merged[cat_name] = (count, amount)
+
+    # Sort by amount desc, then count desc
+    sorted_items = sorted(
+        merged.items(),
+        key=lambda x: (x[1][1], x[1][0]),
+        reverse=True,
+    )
+    return [(name, count, amount) for name, (count, amount) in sorted_items]
 
 
 async def _get_uncategorized_sum(
@@ -240,19 +257,35 @@ def format_summary_text(data: dict, label: str = "") -> str:
 
     parts: list[str] = [f"<h2>{phrases.MONTHLY_HEADER.format(period_label=_esc(header_text))}</h2>"]
 
-    if active:
-        egg = phrases.MONTHLY_EGG_TOTEM.format(
-            period=period_start.strftime("%B").lower(),
-            top_cat=data["top_cat_name"],
-            totem_name=data["totem_name"],
-        )
-        parts.append(f"<p>{_esc(egg)}</p>")
+    # Empty period → MONTHLY_EMPTY, no totem
+    if not data["breakdown"]:
+        parts.append(f"<p>{_esc(phrases.MONTHLY_EMPTY)}</p>")
+        parts.append("<hr>")
     else:
-        totem_line = (
-            f"<p>{data['totem_emoji']} <b>{_esc(data['totem_name'])}</b>"
-            f" — {_esc(data['totem_phrase'])}</p>"
-        )
-        parts.append(totem_line)
+        top_cat = data["top_cat_name"]
+        is_no_category_top = top_cat == phrases.MONTHLY_NO_CATEGORY
+
+        if active:
+            if is_no_category_top:
+                egg = phrases.MONTHLY_EGG_TOTEM_NO_CATEGORY.format(
+                    period=period_start.strftime("%B").lower()
+                )
+            else:
+                egg = phrases.MONTHLY_EGG_TOTEM.format(
+                    period=period_start.strftime("%B").lower(),
+                    top_cat=top_cat,
+                    totem_name=data["totem_name"],
+                )
+            parts.append(f"<p>{_esc(egg)}</p>")
+        else:
+            if is_no_category_top:
+                totem_line = f"<p>{_esc(phrases.MONTHLY_TOTEM_NO_CATEGORY)}</p>"
+            else:
+                totem_line = (
+                    f"<p>{data['totem_emoji']} <b>{_esc(data['totem_name'])}</b>"
+                    f" — {_esc(data['totem_phrase'])}</p>"
+                )
+            parts.append(totem_line)
 
     parts.append("<hr>")
 

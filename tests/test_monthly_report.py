@@ -102,3 +102,62 @@ class TestDetailsSuffix:
     def test_details_end_with_mandatory_line(self):
         text = format_summary_text(_summary_data())
         assert text.endswith("Обязательные платежи: <code>10,000 ₽</code>\n</details>")
+
+
+class TestM3NoCategorySorting:
+    """M3: 'Без категории' participates in sort, not appended at the end."""
+
+    def test_closed_period_no_category_top_totem_variant_a(self):
+        """Closed period: top is 'Без категории' → MONTHLY_TOTEM_NO_CATEGORY phrase."""
+        data = _summary_data(total_spent=50000.0)
+        data.update(
+            {
+                "active": False,
+                "breakdown": [(phrases.MONTHLY_NO_CATEGORY, 5, 50000.0)],
+                "top_cat_name": phrases.MONTHLY_NO_CATEGORY,
+                "totem_name": "Чебурашка",
+                "totem_phrase": phrases.MONTHLY_TOTEM_DEFAULT.format(
+                    category=phrases.MONTHLY_NO_CATEGORY
+                ),
+                "totem_emoji": "🍊",
+            }
+        )
+        text = format_summary_text(data)
+        assert "Твой тотем — Чебурашка" in text
+        assert "Больше всего бюджета ушло в «Без категории»" in text
+        assert "пока не раскидаешь эти траты" in text
+        assert "мне не понять, что ты за зверь" in text
+
+    def test_active_period_no_category_top_egg_variant_a(self):
+        """Active period: top is 'Без категории' → MONTHLY_EGG_TOTEM_NO_CATEGORY phrase."""
+        data = _summary_data(total_spent=50000.0)
+        data.update(
+            {
+                "active": True,
+                "breakdown": [(phrases.MONTHLY_NO_CATEGORY, 5, 50000.0)],
+                "top_cat_name": phrases.MONTHLY_NO_CATEGORY,
+                "totem_name": "Чебурашка",
+                "totem_phrase": phrases.MONTHLY_TOTEM_DEFAULT.format(
+                    category=phrases.MONTHLY_NO_CATEGORY
+                ),
+                "totem_emoji": "🍊",
+            }
+        )
+        text = format_summary_text(data)
+        assert "Твой тотем за september ещё зреет" in text
+        assert "Пока там в топе «Без категории»" in text
+        assert "Разбери эти траты, бро — и тотем вылупится точным" in text
+        assert "лидируешь в категории" not in text  # old template not used
+
+    def test_zero_expenses_shows_empty(self):
+        """Zero expenses → MONTHLY_EMPTY message, no totem line."""
+        data = _summary_data(total_spent=0.0)
+        data.update(
+            {
+                "breakdown": [],
+                "top_cat_name": "—",
+            }
+        )
+        text = format_summary_text(data)
+        assert "За этот период пока нет трат" in text
+        assert "Начни записывать" in text

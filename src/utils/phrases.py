@@ -620,6 +620,16 @@ MONTHLY_TOTEM_DEFAULT = (
 )
 
 MONTHLY_NO_CATEGORY = "Без категории"
+MONTHLY_EGG_TOTEM_NO_CATEGORY = (
+    "🥚 Твой тотем за {period} ещё зреет!\n"
+    "Пока там в топе «Без категории».\n"
+    "Разбери эти траты, бро — и тотем вылупится точным."
+)
+MONTHLY_TOTEM_NO_CATEGORY = (
+    "🍊 Твой тотем — Чебурашка.\n"
+    "Больше всего бюджета ушло в «Без категории»: "
+    "пока не раскидаешь эти траты, мне не понять, что ты за зверь."
+)
 MONTHLY_NO_DATA = "Нет данных"
 MONTHLY_ZONE_GREEN = "Зелёная"
 MONTHLY_ZONE_BLUE = "Синяя"
