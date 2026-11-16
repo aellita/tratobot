@@ -36,6 +36,42 @@ def _plural_days(n: int) -> str:
     return "дней"
 
 
+def _yesterday_plan(
+    money_for_life_raw: float,
+    yesterday_spent: float,
+    spent_today: float,
+    days_left: int,
+) -> float:
+    """План, который действовал вчера: остаток до вчерашних трат / дни на вчера.
+
+    ``money_for_life_raw`` — остаток **сейчас**, уже после сегодняшних и
+    вчерашних трат. Чтобы получить остаток на начало вчера, возвращаем оба
+    дня, а дней на вчера было ``days_left + 1``.
+
+    ``spent_today_at_recalc`` сюда передавать нельзя: снапшот уже вычтен
+    из ``money_for_life_raw``.
+    """
+    from .budget_service import get_plan_today
+
+    return get_plan_today(money_for_life_raw, yesterday_spent + spent_today, days_left + 1)
+
+
+def _yesterday_line(yesterday_spent: float, plan_yesterday: float) -> tuple[str, bool]:
+    """Строка «Вчера» и признак «уложился».
+
+    Сравниваем ровно те числа, которые показываем, чтобы не появлялось
+    «потратил 1000 из 1000 — перебор 0 ₽» из-за копеек.
+    """
+    spent_int = int(yesterday_spent)
+    limit_int = int(plan_yesterday)
+    if spent_int <= limit_int:
+        return phrases.YESTERDAY_OK.format(spent=spent_int, limit=limit_int), True
+    return (
+        phrases.YESTERDAY_OVER.format(spent=spent_int, limit=limit_int, over=spent_int - limit_int),
+        False,
+    )
+
+
 def _select_morning_zone(
     *,
     end_of_period: bool,
@@ -212,17 +248,10 @@ async def send_morning_reports(bot: Bot):
                 overrun_today = get_overrun_today(dl_pred, spent_today)
 
                 end_of_period = is_end_of_period(days_left)
-                yesterday_ok = yesterday_spent <= dl_base
-
-                overdraft = max(yesterday_spent - dl_base, 0)
-                if yesterday_ok:
-                    yesterday_line = phrases.YESTERDAY_OK.format(
-                        spent=int(yesterday_spent), limit=int(dl_base)
-                    )
-                else:
-                    yesterday_line = phrases.YESTERDAY_OVER.format(
-                        spent=int(yesterday_spent), limit=int(dl_base), over=int(overdraft)
-                    )
+                plan_yesterday = _yesterday_plan(
+                    money_for_life_raw, yesterday_spent, spent_today, days_left
+                )
+                yesterday_line, yesterday_ok = _yesterday_line(yesterday_spent, plan_yesterday)
 
                 zone = _select_morning_zone(
                     end_of_period=end_of_period,
