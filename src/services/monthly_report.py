@@ -12,7 +12,7 @@ from ..db.models.models import (
     Wishlist,
 )
 from ..utils import phrases
-from ..utils.helpers import get_msk_now
+from ..utils.helpers import get_msk_now, period_total_days
 
 TOTEM_MAP: list[tuple[list[str], str, str, str]] = [
     (
@@ -54,6 +54,26 @@ def is_period_active(budget: Budget) -> bool:
     if today.day < start and budget.month == last_month:
         return True
     return False
+
+
+def compute_avg_day(
+    total_spent: float,
+    period_start: datetime,
+    total_days: int,
+    active: bool,
+    today: datetime,
+) -> float:
+    """Средний расход в день: от фактической длины периода, не от 30."""
+    if total_spent <= 0:
+        return 0.0
+
+    if active:
+        elapsed = (today.date() - period_start.date()).days + 1
+        days = max(1, min(elapsed, total_days))
+    else:
+        days = max(1, total_days)
+
+    return total_spent / days
 
 
 async def get_all_budgets(telegram_id: int) -> list[Budget]:
@@ -315,7 +335,8 @@ async def build_summary_data(telegram_id: int, budget: Budget) -> dict:
     active = is_period_active(budget)
     breakdown = await get_category_breakdown(telegram_id, period_start, period_end)
     total_spent = sum(amount for _, _, amount in breakdown) if breakdown else 0.0
-    avg_day = total_spent / 30 if total_spent > 0 else 0.0
+    total_days = period_total_days(budget.month, budget.period_start_day or 1)
+    avg_day = compute_avg_day(total_spent, period_start, total_days, active, get_msk_now())
 
     zone_label = _zone_for_period(
         total_spent, budget.total_income, budget.mandatory_payments, budget.black_day_fund
