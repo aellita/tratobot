@@ -314,7 +314,7 @@ def format_summary_text(data: dict, label: str = "") -> str:
             det_html += f"• {lbl.strip()}: <code>{_esc(val.strip())}</code><br>"
         else:
             det_html += f"• {_esc(content)}<br>"
-    det_html = det_html.rstrip("<br>")
+    det_html = det_html.removesuffix("<br>")
 
     period_label = data.get("period_label", "")
     if period_label:

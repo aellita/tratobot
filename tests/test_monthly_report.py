@@ -1,6 +1,8 @@
 from datetime import datetime
+from types import SimpleNamespace
 
-from src.services.monthly_report import compute_avg_day
+from src.services.monthly_report import compute_avg_day, format_summary_text
+from src.utils import phrases
 from src.utils.helpers import period_dates, period_total_days
 
 
@@ -67,3 +69,36 @@ class TestAvgDayActivePeriod:
     def test_zero_spent(self):
         start, days = _period("2026-09", 1)
         assert compute_avg_day(0.0, start, days, True, datetime(2026, 9, 5)) == 0.0
+
+
+def _summary_data(total_spent: float = 80000.0) -> dict:
+    return {
+        "budget": SimpleNamespace(
+            total_income=100000.0,
+            daily_limit=3000.0,
+            mandatory_payments=10000.0,
+        ),
+        "active": False,
+        "period_start": datetime(2026, 9, 1),
+        "period_end": datetime(2026, 9, 30, 23, 59, 59),
+        "breakdown": [],
+        "total_spent": total_spent,
+        "avg_day": 0.0,
+        "zone_label": phrases.MONTHLY_ZONE_GREEN,
+        "top_cat_name": "—",
+        "totem_name": "Чебурашка",
+        "totem_phrase": "—",
+        "totem_emoji": "🍊",
+        "period_label": "1 сен – 30 сен 2026",
+    }
+
+
+class TestDetailsSuffix:
+    def test_last_code_tag_stays_closed(self):
+        text = format_summary_text(_summary_data())
+        assert "</code>\n</details>" in text
+        assert "</code\n" not in text
+
+    def test_details_end_with_mandatory_line(self):
+        text = format_summary_text(_summary_data())
+        assert text.endswith("Обязательные платежи: <code>10,000 ₽</code>\n</details>")
