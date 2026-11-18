@@ -49,6 +49,7 @@ class Budget(Base):
     month: Mapped[str] = mapped_column(String(7))
 
     total_income: Mapped[float] = mapped_column(Float, default=0)
+    added_income: Mapped[float] = mapped_column(Float, default=0)
     mandatory_payments: Mapped[float] = mapped_column(Float, default=0)
     black_day_fund: Mapped[float] = mapped_column(Float, default=0)
     wishlist_name: Mapped[str] = mapped_column(String(255), default="Хотелка")

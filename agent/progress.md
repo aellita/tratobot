@@ -7,8 +7,8 @@
 ## Текущий статус и фокус
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (kill-switch off)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B22** (Bug Audit 2026-11-06 + визуал и утренний отчёт).  
-**Активно:** месячный отчёт — **M1, M2** готовы (560 тестов); дальше M3 → M4 → M5 → M6 → G1.  
-**Ближайшее:** M3 — сортировка категорий до добавления «Без категории»; M6 — тесты `build_summary_data` + интеграционная связка с `compute_avg_day`; затем **G1** — график трат по дням в нативном виджете + Tier 1 (тап по столбцу). G2 (снапшоты дневных лимитов), G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
+**Активно:** месячный отчёт — **M1–M4** готовы (594 теста); дальше M5 → M6 → G1.  
+**Ближайшее:** B23/B24 (тон финиша периода и сообщение после добавки дохода), «Конверты» (обязательные как отдельный конверт), затем M5/M6 и **G1** — график трат по дням в нативном виджете + Tier 1. G2 (снапшоты дневных лимитов, в т.ч. в утренней строке «Вчера»), G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
 **В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям.  
 
 ---
@@ -173,6 +173,32 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 **Тесты:** `tests/test_monthly_report.py` (+3: `test_closed_period_no_category_top_totem_variant_a`, `test_active_period_no_category_top_egg_variant_a`, `test_zero_expenses_shows_empty`). `pytest 563 passed`, `ruff check .`, `ruff format --check .`.
 
 **Файлы:** `src/services/monthly_report.py`, `src/utils/phrases.py`, `tests/test_monthly_report.py`.
+
+### ✅ M4: месячный отчёт — «Сэкономлено» от доступного лимита (2026-11-18)
+
+**Проблема:** отчёт показывал ярлык «Зона: Зелёная/…», а «Сэкономлено» считал от `total_income − потрачено`, игнорируя обязательные платежи и кубышку. При доходе 100 000, обязательных 10 000 и тратах 80 000 отчёт писал «Сэкономлено 20 000», хотя реально доступно было 90 000. Добавленный доход в отчёте не отражался.
+
+**Решение:**
+- База отчёта: `available = total_income − mandatory_payments − black_day_fund` (без клампа в ноль для расчёта, кламп только для решения «нет лимита»).
+- `compute_saved_state(available, spent) -> (saved_rounded, tier)`:
+  - `available <= 0` → `no_limit` — цифру не рисуем, показываем причину `MONTHLY_NO_LIMIT` (при `black_day_fund > 0` — `MONTHLY_NO_LIMIT_FUND` про «обязательные платежи и кубышку»).
+  - `saved_rounded = round(available − spent)` считается **до** выбора ветки: иначе при остатке 49 999.60 ₽ получалось «Сэкономлено 0 ₽» + тон «впритык».
+  - `saved_rounded > 0`: `≤70%` → `green`, `≤90%` → `blue`, иначе `yellow` (только при `saved_rounded ≥ 1 ₽`).
+  - `saved_rounded == 0` → `zero` («Снайперский расчет»), `< 0` → `overrun`.
+- Ярлык «Зона: …» удалён из отчёта; зоновые эмодзи в месячном отчёте не рисуются.
+- Новые строки: `💵 Доход: X ₽` всегда; `➕ Из них добавлено: +X ₽` при `added_income > 0`.
+- `Budget.added_income` — счётчик добавленного дохода. Растёт в обеих ветках `add_income` (`free_money > 0` и рост `total_income`), потому что при `free_money > 0` добавка не попадает в `total_income`. Обнуляется в `save_budget` (онбординг, rollover, новый период), правки `mandatory`/`black_day` через `update_budget_field` его не трогают.
+- Миграция `budgets.added_income REAL/FLOAT NOT NULL DEFAULT 0` + `ALLOWED_COLUMNS` (NOT NULL, чтобы `schema_audit` не ловил дрейф с `Mapped[float]`).
+- В деталях отчёта при `black_day_fund > 0` появляется строка `• Кубышка: X ₽`.
+- `menu.py:save_add_income` больше не дублирует арифметику: вызывает `budget_service.add_income` и обрабатывает `NoActiveBudgetError`. Сервис импортируется локально как `add_income_to_budget`, потому что имя `add_income` уже занято callback-хендлером.
+
+**Тексты (утверждены пользователем):** 6 фраз в `phrases.py` — `MONTHLY_SAVED_GREEN/BLUE/YELLOW/ZERO`, `MONTHLY_OVERRUN`, `MONTHLY_NO_LIMIT(_FUND)`. Удалены мёртвые `MONTHLY_ZONE_*`, `MONTHLY_SAVED`, `MONTHLY_BUDGET_LABEL`, `MONTHLY_NO_DATA`.
+
+**Тесты:** `test_monthly_report.py` (+24 unit +4 интеграционных `build_summary_data`: границы 70/90/100, округление, `available ≤ 0`, все тона, добавленный доход, кубышка); `test_b18_monthly.py` (новые ожидания от доступной базы); `test_b19_visuals.py` (нет «Зоны»); `test_add_income.py` (+3: накопление счётчика, сброс в `save_budget`, сохранение при правке `mandatory`/`black_day`). `pytest 594 passed`, `ruff check .`, `ruff format .` чистые.
+
+**Файлы:** `src/db/models/models.py`, `src/db/database.py`, `src/services/budget_service.py`, `src/services/monthly_report.py`, `src/bot/handlers/menu.py`, `src/utils/phrases.py`, `tests/test_monthly_report.py`, `tests/test_b18_monthly.py`, `tests/test_b19_visuals.py`, `tests/test_add_income.py`.
+
+**Известное ограничение:** при `free_money > 0` месячный отчёт всё ещё считает от `total_income`, а не от фактического остатка. Отдельная задача в `SESSION_PLAN.md`.
 
 ### Бот мужского пола: фикс всех фраз (2026-09-01)
 **Проблема:** бот обращался к себе в женском роде («я сама разберусь», «не поняла», «если забыла внести», «посмотрела»). Грамматический род не совпадал с мужским персонажем.

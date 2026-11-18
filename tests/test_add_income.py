@@ -2,7 +2,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.bot.handlers.menu import save_add_income
 from src.db.models.models import Budget, User
-from src.services.budget_service import get_active_budget
+from src.services.budget_service import (
+    add_income,
+    get_active_budget,
+    month_for_period_start,
+    save_budget,
+    update_budget_field,
+)
 from src.utils import phrases
 from src.utils.helpers import get_msk_now
 
@@ -47,6 +53,51 @@ async def _run(msg, state):
         await save_add_income(msg, state)
 
 
+class TestAddedIncomeCounter:
+    async def test_add_income_accumulates(self, db_session):
+        db_session.add(User(telegram_id=1001))
+        db_session.add(_seed_budget(db_session))
+        await db_session.commit()
+
+        await add_income(1001, 10000)
+        await add_income(1001, 5000)
+
+        budget = await get_active_budget(1001)
+        assert budget.added_income == 15000.0
+        assert budget.total_income == 115000.0
+
+    async def test_save_budget_resets_added_income(self, db_session):
+        db_session.add(User(telegram_id=1001))
+        db_session.add(_seed_budget(db_session))
+        await db_session.commit()
+
+        await add_income(1001, 10000)
+        await save_budget(
+            1001,
+            month_for_period_start(1),
+            income=100000.0,
+            mandatory=30000.0,
+            black_day=0.0,
+        )
+
+        budget = await get_active_budget(1001)
+        assert budget.added_income == 0.0
+
+    async def test_mandatory_and_fund_edits_keep_added_income(self, db_session):
+        db_session.add(User(telegram_id=1001))
+        db_session.add(_seed_budget(db_session))
+        await db_session.commit()
+
+        await add_income(1001, 10000)
+        await update_budget_field(1001, "mandatory_payments", 40000.0)
+        await update_budget_field(1001, "black_day_fund", 5000.0)
+
+        budget = await get_active_budget(1001)
+        assert budget.mandatory_payments == 40000.0
+        assert budget.black_day_fund == 5000.0
+        assert budget.added_income == 10000.0
+
+
 class TestAddIncome:
     async def test_adds_to_total_income_when_no_free_money(self, db_session):
         db_session.add(User(telegram_id=1001))
@@ -65,6 +116,7 @@ class TestAddIncome:
         budget = await get_active_budget(1001)
         assert budget.total_income == 110000.0
         assert budget.free_money == 0.0
+        assert budget.added_income == 10000.0
         state.clear.assert_awaited()
 
     async def test_adds_to_free_money_when_it_exists(self, db_session):
@@ -83,6 +135,7 @@ class TestAddIncome:
         budget = await get_active_budget(1001)
         assert budget.free_money == 15000.0
         assert budget.total_income == 100000.0
+        assert budget.added_income == 10000.0
 
     async def test_income_does_not_close_overrun(self, db_session):
         db_session.add(User(telegram_id=1001))

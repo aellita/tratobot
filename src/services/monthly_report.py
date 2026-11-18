@@ -220,21 +220,26 @@ async def get_period_label(budget: Budget) -> str:
     return f"{start_str} – {end_str}"
 
 
-def _zone_for_period(
-    total_spent: float, total_income: float, mandatory: float, black_day: float
-) -> str:
-    available = total_income - mandatory - black_day
+def compute_saved_state(available: float, spent: float) -> tuple[int, str]:
+    """Ветка «Сэкономлено/Перерасход» по доступной базе периода.
+
+    Округление считается до выбора ветки: иначе при 49 999.60 ₽ остатка
+    получилось бы «Сэкономлено 0 ₽» с тоном «впритык».
+    """
     if available <= 0:
-        return phrases.MONTHLY_NO_DATA
-    pct = total_spent / available * 100
-    if pct <= 70:
-        return phrases.MONTHLY_ZONE_GREEN
-    elif pct <= 90:
-        return phrases.MONTHLY_ZONE_BLUE
-    elif pct <= 100:
-        return phrases.MONTHLY_ZONE_YELLOW
-    else:
-        return phrases.MONTHLY_ZONE_RED
+        return 0, "no_limit"
+
+    saved = round(available - spent)
+    if saved > 0:
+        pct = spent / available * 100
+        if pct <= 70:
+            return saved, "green"
+        if pct <= 90:
+            return saved, "blue"
+        return saved, "yellow"
+    if saved == 0:
+        return 0, "zero"
+    return saved, "overrun"
 
 
 def _esc(text: str) -> str:
@@ -289,21 +294,36 @@ def format_summary_text(data: dict, label: str = "") -> str:
 
     parts.append("<hr>")
 
-    zone_str = phrases.MONTHLY_ZONE_TAG.format(zone_label=_esc(data["zone_label"]))
     _total = f"{data['total_spent']:,.0f}"
-    parts.append(
-        f"<p><b>💰 {phrases.MONTHLY_TOTAL_SPENT.format(amount=_total)}</b> ({zone_str})</p>"
-    )
+    parts.append(f"<p><b>💰 {phrases.MONTHLY_TOTAL_SPENT.format(amount=_total)}</b></p>")
 
-    saved = float(budget.total_income) - float(data["total_spent"])
-    if not active and round(saved, 2) != 0:
-        if saved > 0:
-            parts.append(f"<p>{phrases.MONTHLY_SAVED.format(amount=f'{saved:,.0f}')}</p>")
-        else:
-            parts.append(f"<p>{phrases.MONTHLY_OVERRUN.format(amount=f'{abs(saved):,.0f}')}</p>")
+    income = float(data.get("income", budget.total_income))
+    parts.append(f"<p>{_esc(phrases.MONTHLY_INCOME_LABEL.format(amount=f'{income:,.0f}'))}</p>")
 
-    budget_income = int(budget.total_income)
-    parts.append(f"<p>💵 {phrases.MONTHLY_BUDGET_LABEL.format(amount=f'{budget_income:,}')}</p>")
+    added_income = float(data.get("added_income", 0) or 0)
+    if added_income > 0:
+        added_line = phrases.MONTHLY_ADDED_INCOME.format(amount=f"{added_income:,.0f}")
+        parts.append(f"<p>{_esc(added_line)}</p>")
+
+    if not active:
+        saved = int(data.get("saved", 0))
+        tier = data.get("saved_tier")
+        if tier == "no_limit":
+            fund = float(getattr(budget, "black_day_fund", 0) or 0)
+            phrase = phrases.MONTHLY_NO_LIMIT_FUND if fund > 0 else phrases.MONTHLY_NO_LIMIT
+            parts.append(f"<p>{_esc(phrase)}</p>")
+        elif tier == "overrun":
+            overrun = phrases.MONTHLY_OVERRUN.format(amount=f"{abs(saved):,.0f}")
+            parts.append(f"<p>{_esc(overrun)}</p>")
+        elif tier == "zero":
+            parts.append(f"<p>{_esc(phrases.MONTHLY_SAVED_ZERO)}</p>")
+        elif tier in ("green", "blue", "yellow"):
+            template = {
+                "green": phrases.MONTHLY_SAVED_GREEN,
+                "blue": phrases.MONTHLY_SAVED_BLUE,
+                "yellow": phrases.MONTHLY_SAVED_YELLOW,
+            }[tier]
+            parts.append(f"<p>{_esc(template.format(amount=f'{saved:,.0f}'))}</p>")
 
     avg_line = phrases.MONTHLY_AVG_DAY.format(avg=data["avg_day"])
     parts.append(f"<p>{_esc(avg_line)}</p>")
@@ -334,6 +354,9 @@ def format_summary_text(data: dict, label: str = "") -> str:
         daily_limit=int(budget.daily_limit),
         mandatory=int(budget.mandatory_payments),
     )
+    black_day = float(getattr(budget, "black_day_fund", 0) or 0)
+    if black_day > 0:
+        details += "\n" + phrases.MONTHLY_DETAILS_FUND.format(amount=black_day)
 
     det_html = ""
     for det_line in details.strip().split("\n"):
@@ -371,9 +394,13 @@ async def build_summary_data(telegram_id: int, budget: Budget) -> dict:
     total_days = period_total_days(budget.month, budget.period_start_day or 1)
     avg_day = compute_avg_day(total_spent, period_start, total_days, active, get_msk_now())
 
-    zone_label = _zone_for_period(
-        total_spent, budget.total_income, budget.mandatory_payments, budget.black_day_fund
+    available = max(
+        float(budget.total_income)
+        - float(budget.mandatory_payments)
+        - float(budget.black_day_fund),
+        0.0,
     )
+    saved, saved_tier = compute_saved_state(available, total_spent)
 
     top_cat_name = breakdown[0][0] if breakdown else "—"
     totem_name, totem_phrase, totem_emoji = get_totem(top_cat_name or phrases.DEFAULT_CATEGORY[1])
@@ -396,7 +423,11 @@ async def build_summary_data(telegram_id: int, budget: Budget) -> dict:
         "breakdown": breakdown,
         "total_spent": total_spent,
         "avg_day": avg_day,
-        "zone_label": zone_label,
+        "available": available,
+        "saved": saved,
+        "saved_tier": saved_tier,
+        "income": float(budget.total_income),
+        "added_income": float(getattr(budget, "added_income", 0) or 0),
         "top_cat_name": top_cat_name or "—",
         "totem_name": totem_name,
         "totem_phrase": totem_phrase,

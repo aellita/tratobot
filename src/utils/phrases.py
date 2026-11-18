@@ -572,14 +572,11 @@ MONTHLY_EGG_TOTEM = (
     "Сейчас ты лидируешь в категории «{top_cat}».\n"
     "Если продолжишь в том же духе, вылупится {totem_name}!"
 )
-MONTHLY_TABLE_HDR = "{:<16} | {:>9} | {:>10}"
-MONTHLY_TABLE_ROW = "{:<16} | {:>9} | {:>10,} ₽"
-MONTHLY_TOTAL = "─" * 42 + "\n{:<16}   {:>9}   {:>10,} ₽"
-MONTHLY_ZONE_TAG = "Зона: {zone_label}"
 MONTHLY_AVG_DAY = "В день в среднем: {avg:,.0f} ₽"
 MONTHLY_DETAILS = (
     "• Финальный дневной лимит: {daily_limit:,.0f} ₽\n• Обязательные платежи: {mandatory:,.0f} ₽"
 )
+MONTHLY_DETAILS_FUND = "• Кубышка: {amount:,.0f} ₽"
 MONTHLY_EMPTY = "📭 За этот период пока нет трат. Начни записывать — я покажу отчёт!"
 
 MONTHLY_TOTEM_TRAVEL = (
@@ -630,22 +627,41 @@ MONTHLY_TOTEM_NO_CATEGORY = (
     "Больше всего бюджета ушло в «Без категории»: "
     "пока не раскидаешь эти траты, мне не понять, что ты за зверь."
 )
-MONTHLY_NO_DATA = "Нет данных"
-MONTHLY_ZONE_GREEN = "Зелёная"
-MONTHLY_ZONE_BLUE = "Синяя"
-MONTHLY_ZONE_YELLOW = "Жёлтая"
-MONTHLY_ZONE_RED = "Красная"
 MONTHLY_TOTAL_SPENT = "Всего потрачено: {amount} ₽"
-MONTHLY_SAVED = "Сэкономлено: {amount} ₽"
-MONTHLY_OVERRUN = "Перерасход: {amount} ₽"
-MONTHLY_BUDGET_LABEL = "Бюджет: {amount} ₽"
+MONTHLY_INCOME_LABEL = "💵 Доход: {amount} ₽"
+MONTHLY_ADDED_INCOME = "➕ Из них добавлено: +{amount} ₽"
+MONTHLY_SAVED_GREEN = (
+    "💰 Сэкономлено {amount} ₽. Красиво вышло, бро — закрыли месяц с жирным запасом."
+)
+MONTHLY_SAVED_BLUE = (
+    "💰 Сэкономлено {amount} ₽. Основное пустили в ход, но в красную зону не попали — "
+    "нормальный плюсик к карме и бюджету."
+)
+MONTHLY_SAVED_YELLOW = (
+    "💰 Сэкономлено {amount} ₽. Выжали лимит почти до капли, но в минус не улетели."
+)
+MONTHLY_SAVED_ZERO = (
+    "💰 Сэкономлено 0 ₽. Снайперский расчет, бро: закрыли доступный лимит ровно в ноль — "
+    "ни запаса, ни долгов."
+)
+MONTHLY_OVERRUN = (
+    "⚠️ Перерасход {amount} ₽. В этом месяце шиканули сверх лимита — запас собрать не вышло. "
+    "Ладно, в следующем отыграемся."
+)
+MONTHLY_NO_LIMIT = (
+    "📌 Доступного лимита нет: обязательные платежи съели весь доход подчистую. "
+    "Загляни в настройки бюджета, бро."
+)
+MONTHLY_NO_LIMIT_FUND = (
+    "📌 Доступного лимита нет: обязательные платежи и кубышка съели весь доход подчистую. "
+    "Загляни в настройки бюджета, бро."
+)
 MONTHLY_TOP_HEADER = "Топ расходов по категориям:"
 MONTHLY_TABLE_CAPTION = "Распределение трат за период"
 MONTHLY_TABLE_COL_CATEGORY = "Категория"
 MONTHLY_TABLE_COL_COUNT = "Операций"
 MONTHLY_TABLE_COL_AMOUNT = "Сумма"
 MONTHLY_TOTAL_LABEL = "Итого: {amount} ₽"
-MONTHLY_ROUNDING_LABEL = "Округления за период: +{amount} ₽"
 MONTHLY_PERIOD_LABEL = "Период: {label}"
 MONTHLY_DETAILS_SUMMARY = "Детали расчёта"
 

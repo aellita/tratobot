@@ -116,6 +116,7 @@ async def save_budget(
 
         if budget:
             budget.total_income = income
+            budget.added_income = 0
             budget.mandatory_payments = mandatory
             budget.black_day_fund = black_day
             budget.wishlist_name = wishlist_name or phrases.DEFAULT_WISHLIST_NAME
@@ -128,6 +129,7 @@ async def save_budget(
                 telegram_id=telegram_id,
                 month=month,
                 total_income=income,
+                added_income=0,
                 mandatory_payments=mandatory,
                 black_day_fund=black_day,
                 wishlist_name=wishlist_name or phrases.DEFAULT_WISHLIST_NAME,
@@ -142,6 +144,35 @@ async def save_budget(
             session.add(budget)
 
         await session.commit()
+
+
+async def add_income(telegram_id: int, amount: float) -> Budget:
+    """Добавить доход в активный период и запомнить сумму добавки."""
+    active = await get_active_budget(telegram_id)
+    if not active:
+        raise NoActiveBudgetError(f"No active budget for {telegram_id}")
+
+    async with async_session_maker() as session:
+        budget = await session.get(Budget, active.id)
+        if budget is None:
+            raise NoActiveBudgetError(f"No active budget for {telegram_id}")
+
+        if float(budget.free_money or 0) > 0:
+            budget.free_money = float(budget.free_money) + amount
+        else:
+            budget.total_income = float(budget.total_income) + amount
+            budget.base_daily_limit = await _compute_base_limit(
+                budget.total_income,
+                budget.mandatory_payments,
+                budget.black_day_fund,
+                budget.period_start_day or 1,
+                budget.month,
+            )
+        budget.added_income = float(budget.added_income or 0) + amount
+
+        await session.commit()
+        await session.refresh(budget)
+        return budget
 
 
 ALLOWED_FIELDS = {

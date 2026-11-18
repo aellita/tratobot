@@ -37,6 +37,7 @@ ALLOWED_COLUMNS = {
     "report_type",
     "sent_date",
     "base_daily_limit",
+    "added_income",
     "budget_id",
     "status",
     "completion_reason",
@@ -253,6 +254,17 @@ async def migrate_schema():
                     text("ALTER TABLE budgets ADD COLUMN base_daily_limit REAL DEFAULT NULL")
                 )
             logger.info("Migrated budgets: added base_daily_limit")
+
+        if not await _has_column(conn, "budgets", "added_income"):
+            if is_postgres:
+                await conn.execute(
+                    text("ALTER TABLE budgets ADD COLUMN added_income FLOAT NOT NULL DEFAULT 0")
+                )
+            else:
+                await conn.execute(
+                    text("ALTER TABLE budgets ADD COLUMN added_income REAL NOT NULL DEFAULT 0")
+                )
+            logger.info("Migrated budgets: added added_income")
 
         if not await _has_column(conn, "budgets", "spent_at_recalc"):
             if is_postgres:

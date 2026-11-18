@@ -15,6 +15,7 @@ import src.services.categorization as _cat
 import src.services.category_service as _cat_svc
 import src.services.expense_service as _es
 import src.services.goal_service as _gs
+import src.services.monthly_report as _mr
 import src.services.recovery_service as _rs
 from src.db.models.models import Base, Budget, Expense, User, UserSettings, Wishlist
 from src.utils.helpers import get_msk_now
@@ -45,7 +46,7 @@ async def session_maker(engine):
 
 @pytest_asyncio.fixture(autouse=True)
 async def _patch_session_maker(session_maker, monkeypatch):
-    for module in [_db, _bs, _cat, _gs, _es, _cat_svc, _menu_h, _hist_h, _eve_h, _cat_h, _rs]:
+    for module in [_db, _bs, _cat, _gs, _es, _cat_svc, _menu_h, _hist_h, _eve_h, _cat_h, _rs, _mr]:
         monkeypatch.setattr(module, "async_session_maker", session_maker)
     _cat._seeded_users.clear()
 

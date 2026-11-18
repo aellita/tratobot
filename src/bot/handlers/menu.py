@@ -2316,17 +2316,12 @@ async def save_add_income(message: Message, state: FSMContext):
         )
         return
 
-    budget = await get_budget_or_none(message.from_user.id)
-    if not budget:
-        await message.answer(phrases.ERR_NO_BUDGET)
-        await state.clear()
-        return
+    try:
+        from ...services.budget_service import add_income as add_income_to_budget
 
-    if budget.free_money > 0:
-        updated = await _apply_budget_update(message, "free_money", budget.free_money + amount)
-    else:
-        updated = await _apply_budget_update(message, "total_income", budget.total_income + amount)
-    if updated is None:
+        updated = await add_income_to_budget(message.from_user.id, amount)
+    except NoActiveBudgetError:
+        await message.answer(phrases.ERR_NO_BUDGET)
         await state.clear()
         return
 
