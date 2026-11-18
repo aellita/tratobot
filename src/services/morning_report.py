@@ -12,6 +12,7 @@ from ..db.database import async_session_maker
 from ..db.models.models import DailyReportsLog, User, UserSettings
 from ..utils import phrases
 from ..utils.helpers import get_msk_now
+from .budget_service import get_plan_today
 from .expense_service import get_today_expenses_sum, get_yesterday_expenses_sum
 from .status_zones import (
     PRESSURE_GREEN_MIN,
@@ -51,8 +52,6 @@ def _yesterday_plan(
     ``spent_today_at_recalc`` сюда передавать нельзя: снапшот уже вычтен
     из ``money_for_life_raw``.
     """
-    from .budget_service import get_plan_today
-
     return get_plan_today(money_for_life_raw, yesterday_spent + spent_today, days_left + 1)
 
 
@@ -87,7 +86,15 @@ def _select_morning_zone(
             return "END_EMPTY"
         if overrun_today > 0:
             return "END_OVER"
-        return "END_OK"
+        # B23: новая логика для последних 3 дней
+        # Используем округлённое значение (как в отображении) для консистентности 70%
+        plan_today_rounded = int(round(plan_today))
+        plan_ratio_ok = base_daily_limit > 0 and plan_today_rounded >= 0.7 * base_daily_limit - 1e-9
+        if yesterday_ok and plan_ratio_ok:
+            return "END_OK"
+        if not yesterday_ok:
+            return "END_YESTERDAY_OVERRUN"
+        return "END_PLAN_SAGGED"
     if overrun_today > 0:
         return "OVER"
     if free_today <= 0:
@@ -265,6 +272,7 @@ async def send_morning_reports(bot: Bot):
                 btn_type = "FRESH_START" if zone in {"END_EMPTY", "RED_DEAD"} else "REGULAR"
 
                 days_text = f"{days_left} {_plural_days(days_left)}"
+                plan_today_int = int(round(dl_pred))
                 if zone == "END_EMPTY":
                     zone_text = random.choice(
                         [
@@ -280,15 +288,22 @@ async def send_morning_reports(bot: Bot):
                         ]
                     )
                 elif zone == "END_OK":
-                    zone_text = random.choice(
-                        [
-                            phrases.ZONE_END_OK_1.format(
-                                days_text=days_text, money=int(money_for_life)
-                            ),
-                            phrases.ZONE_END_OK_2.format(
-                                days_text=days_text, money=int(money_for_life)
-                            ),
-                        ]
+                    zone_text = phrases.END_OK.format(
+                        days=days_left, days_word=_plural_days(days_left)
+                    )
+                elif zone == "END_YESTERDAY_OVERRUN":
+                    overrun_yesterday = int(round(max(yesterday_spent - plan_yesterday, 0)))
+                    zone_text = phrases.END_YESTERDAY_OVERRUN.format(
+                        overrun=overrun_yesterday,
+                        days=days_left,
+                        days_word=_plural_days(days_left),
+                        plan=plan_today_int,
+                    )
+                elif zone == "END_PLAN_SAGGED":
+                    zone_text = phrases.END_PLAN_SAGGED.format(
+                        plan=plan_today_int,
+                        days=days_left,
+                        days_word=_plural_days(days_left),
                     )
                 elif zone == "OVER":
                     zone_text = random.choice(

@@ -200,6 +200,28 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 
 **Известное ограничение:** при `free_money > 0` месячный отчёт всё ещё считает от `total_income`, а не от фактического остатка. Отдельная задача в `SESSION_PLAN.md`.
 
+### ✅ B23: тон последних 3 дней периода (2026-11-18)
+
+**Проблема:** в последние 3 дня периода утренний отчёт всегда показывал бодрый `END_OK` («Красиво заходим на финиш»), даже если вчера был перебор или план просел ниже 70% базы.
+
+**Решение:** новая логика в `_select_morning_zone` (при `end_of_period=True`):
+1. `END_EMPTY` — `money_for_life <= 0` (приоритет 1)
+2. `END_OVER` — `overrun_today > 0` (перебор сегодня, приоритет 2)
+3. `END_OK` — вчера уложился **И** план ≥ 70% базового лимита
+4. `END_YESTERDAY_OVERRUN` — вчера был перебор (`yesterday_ok=False`)
+5. `END_PLAN_SAGGED` — вчера уложился, НО план < 70% базы
+
+Float-безопасное сравнение 70% через округлённое значение (как в отображении): `plan_today_rounded = int(round(plan_today))`, затем `plan_today_rounded >= 0.7 * base_daily_limit`.
+
+**Новые фразы в `phrases.py`:**
+- `END_OK` — позитивный финиш
+- `END_YESTERDAY_OVERRUN` — «Вчера не уложился — перебор X ₽. План сжимается до Y ₽/день»
+- `END_PLAN_SAGGED` — «Финиш близко, заходим на тонком запасе — X ₽/день»
+
+**Тесты:** `test_b23_end_of_period.py` — 9 тестов: все 3 ветки, границы 70% (float precision), приоритеты `END_EMPTY`/`END_OVER`, `base_daily_limit = 0`. `pytest 603 passed`, `ruff` чистый.
+
+**Файлы:** `src/services/morning_report.py`, `src/utils/phrases.py`, `tests/test_b23_end_of_period.py`.
+
 ### Бот мужского пола: фикс всех фраз (2026-09-01)
 **Проблема:** бот обращался к себе в женском роде («я сама разберусь», «не поняла», «если забыла внести», «посмотрела»). Грамматический род не совпадал с мужским персонажем.
 
