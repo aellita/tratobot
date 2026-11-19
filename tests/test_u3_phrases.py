@@ -17,6 +17,33 @@ class TestEndOkVariants:
         assert not hasattr(phrases, "ZONE_END_OK_2")
 
 
+class TestEndOkCallSite:
+    @pytest.mark.parametrize("index", [0, 1, 2])
+    def test_every_variant_is_reachable(self, monkeypatch, index):
+        from src.services import morning_report
+
+        captured = []
+
+        def fake_choice(options):
+            captured.append(len(options))
+            return options[index]
+
+        monkeypatch.setattr(morning_report.random, "choice", fake_choice)
+        text = morning_report._end_ok_text(days_left=2, money_for_life=2918.0)
+
+        expected = [
+            phrases.END_OK,
+            phrases.END_OK_1,
+            phrases.END_OK_2,
+        ][index].format(
+            days=2,
+            days_word=morning_report._plural_days(2),
+            money=2918.0,
+        )
+        assert text == expected
+        assert captured == [3]
+
+
 class TestFooterVariants:
     @staticmethod
     def _footer(monkeypatch, *, plan_today: float):

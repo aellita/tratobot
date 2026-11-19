@@ -110,6 +110,18 @@ def _select_morning_zone(
     return "RED_DEAD"
 
 
+def _end_ok_text(days_left: int, money_for_life: float) -> str:
+    """Финишный текст: один из трёх вариантов, сумма — где она уместна."""
+    days_word = _plural_days(days_left)
+    return random.choice(
+        [
+            phrases.END_OK.format(days=days_left, days_word=days_word),
+            phrases.END_OK_1.format(days=days_left, days_word=days_word, money=money_for_life),
+            phrases.END_OK_2.format(days=days_left, days_word=days_word, money=money_for_life),
+        ]
+    )
+
+
 def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup | None:
     has_reply_kb = settings.EXPENSE_SIMPLE_CHECK
     base: list[list[InlineKeyboardButton]] = []
@@ -282,25 +294,7 @@ async def send_morning_reports(bot: Bot):
                         ]
                     )
                 elif zone == "END_OK":
-                    zone_text = random.choice(
-                        [
-                            phrases.END_OK.format(
-                                days=days_left,
-                                days_word=_plural_days(days_left),
-                                money=money_for_life,
-                            ),
-                            phrases.END_OK_1.format(
-                                days=days_left,
-                                days_word=_plural_days(days_left),
-                                money=money_for_life,
-                            ),
-                            phrases.END_OK_2.format(
-                                days=days_left,
-                                days_word=_plural_days(days_left),
-                                money=money_for_life,
-                            ),
-                        ]
-                    )
+                    zone_text = _end_ok_text(days_left, money_for_life)
                 elif zone == "END_YESTERDAY_OVERRUN":
                     overrun_yesterday = int(round(max(yesterday_spent - plan_yesterday, 0)))
                     zone_text = phrases.END_YESTERDAY_OVERRUN.format(

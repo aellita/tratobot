@@ -16,7 +16,7 @@ Python 3.12 · aiogram 3.x · SQLAlchemy 2.0 async · PostgreSQL (prod) / SQLite
 ## Команды
 
 ```bash
-pytest -q                       # 638 тестов, in-memory SQLite
+pytest -q                       # 641 тест, in-memory SQLite
 python -m src.db.schema_audit   # сверка моделей с реальной БД (read-only, exit 1 critical / 2 read error)
 ruff check --select F .         # линтер
 ```
