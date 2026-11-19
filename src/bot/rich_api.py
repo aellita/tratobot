@@ -5,6 +5,7 @@ so that ``KeyboardCleanupMiddleware`` can clean it up on the next
 user action — see agent/RULES.md § 12.2.4.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -13,6 +14,42 @@ import aiohttp
 from .middleware import _get_lock, _last_keyboard
 
 logger = logging.getLogger(__name__)
+
+# Shared aiohttp session for connection reuse
+_http_session: aiohttp.ClientSession | None = None
+_http_session_lock = asyncio.Lock()
+
+
+async def _get_http_session() -> aiohttp.ClientSession:
+    """Get or create shared HTTP session."""
+    global _http_session
+    async with _http_session_lock:
+        if _http_session is None or _http_session.closed:
+            _http_session = aiohttp.ClientSession()
+        return _http_session
+
+
+async def _post_with_retry(url: str, payload: dict, max_retries: int = 3) -> dict | None:
+    """POST with exponential backoff retry for transient errors."""
+    session = await _get_http_session()
+    for attempt in range(max_retries):
+        try:
+            async with session.post(url, json=payload) as resp:
+                data = await resp.json()
+                if data.get("ok"):
+                    return data["result"]
+                # Don't retry client errors (4xx)
+                if resp.status < 500:
+                    logger.warning("API error (no retry): %s", data)
+                    return None
+        except Exception as e:
+            logger.warning("Request failed (attempt %d/%d): %s", attempt + 1, max_retries, e)
+
+        if attempt < max_retries - 1:
+            await asyncio.sleep(0.5 * (2 ** attempt))  # 0.5s, 1s, 2s
+
+    logger.error("All retries exhausted for %s", url)
+    return None
 
 
 async def send_widget(
@@ -35,19 +72,11 @@ async def send_widget(
         },
         "disable_notification": True,
     }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as resp:
-                data = await resp.json()
-                if not data.get("ok"):
-                    logger.warning("sendWidget error: %s", data)
-                    return None
-                msg_id = data["result"].get("message_id")
-                logger.debug("sendWidget ok for %s, message_id=%s", chat_id, msg_id)
-                return data["result"]
-    except Exception as e:
-        logger.warning("sendWidget request failed: %s", e)
-        return None
+    result = await _post_with_retry(url, payload)
+    if result:
+        msg_id = result.get("message_id")
+        logger.debug("sendWidget ok for %s, message_id=%s", chat_id, msg_id)
+    return result
 
 
 async def edit_widget_data(
@@ -67,18 +96,10 @@ async def edit_widget_data(
         "message_id": message_id,
         "data": state_json,
     }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as resp:
-                data = await resp.json()
-                if not data.get("ok"):
-                    logger.warning("editMessageWidgetData error: %s", data)
-                    return None
-                logger.debug("editMessageWidgetData ok for %s, message_id=%s", chat_id, message_id)
-                return data["result"]
-    except Exception as e:
-        logger.warning("editMessageWidgetData request failed: %s", e)
-        return None
+    result = await _post_with_retry(url, payload)
+    if result:
+        logger.debug("editMessageWidgetData ok for %s, message_id=%s", chat_id, message_id)
+    return result
 
 
 async def edit_rich_message(

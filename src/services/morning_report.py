@@ -175,9 +175,9 @@ async def send_morning_reports(bot: Bot):
 
                 import json
 
-                from ..bot.handlers.monthly_summary import _set_widget_msg
                 from ..bot.keyboards import get_rollover_keyboard
                 from ..bot.rich_api import send_rich_message, send_widget
+                from ..bot.widget_cache import set_widget_msg
                 from ..db.models.models import Budget as BudgetModel
                 from ..utils import phrases
                 from .monthly_chart import (
@@ -216,7 +216,7 @@ async def send_morning_reports(bot: Bot):
                                         bot, tg_id, CHART_WIDGET_HTML, state_json
                                     )
                                     if widget_result and widget_result.get("message_id"):
-                                        _set_widget_msg(tg_id, tg_id, widget_result["message_id"])
+                                        set_widget_msg(tg_id, tg_id, widget_result["message_id"])
                                         logger.debug("Rollover monthly widget sent for %s", tg_id)
                             except Exception as e:
                                 logger.warning("Rollover widget send failed for %s: %s", tg_id, e)

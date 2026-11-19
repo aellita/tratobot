@@ -174,6 +174,7 @@ if (!widget) { document.body.innerHTML = '<p style="padding:20px;text-align:cent
 
 let state = {m: "", s: "", d: [], lim: 0, a: false};
 let selectedIndex = -1;
+let layout = { w: 300, innerH: 160, padding: { top: 10, right: 10, bottom: 20, left: 30 }, n: 0, days: [], baseLimit: 0, barHeights: [] };
 const svg = document.getElementById('chart');
 const tooltip = document.getElementById('tooltip');
 const caption = document.getElementById('caption');
@@ -208,6 +209,9 @@ function render() {
   const yScale = v => padding.top + innerH * (1 - v / maxVal);
   const xScale = i => padding.left + i * (innerW / n) + (innerW / n - barW) / 2;
 
+  // Store layout for tooltip
+  layout = { w, innerH, padding, n, days, baseLimit, barHeights: [] };
+
   // Build SVG
   let svgHTML = '';
   // Y axis
@@ -225,6 +229,7 @@ function render() {
     const spent = days[i];
     const x = xScale(i);
     const barH = innerH * (spent / maxVal);
+    layout.barHeights[i] = barH;
     const y = yScale(spent);
     const cls = spent > baseLimit && baseLimit > 0 ? 'bar bar-over' : 'bar bar-ok';
     const sel = i === selectedIndex ? ' selected' : '';
@@ -274,11 +279,11 @@ function formatDate(idx) {
 }
 
 function showTooltip(idx) {
-  const spent = state.d[idx];
-  const diff = spent - state.lim;
+  const spent = layout.days[idx];
+  const diff = spent - layout.baseLimit;
   const dateStr = formatDate(idx);
   const spentStr = fmt(spent);
-  const limitStr = fmt(state.lim);
+  const limitStr = fmt(layout.baseLimit);
   const diffStr = diff >= 0 ? '+' + fmt(diff) : fmt(diff);
   const diffColor = diff > 0 ? 'var(--tg-theme-destructive-text-color, #ff3b30)' : 'var(--tg-theme-text-color, #000000)';
   tooltip.innerHTML = `<b>${dateStr}</b><br>Потрачено: ${spentStr} ₽<br>Лимит: ${limitStr} ₽<br><span style="color:${diffColor}">Разница: ${diffStr} ₽</span>`;
@@ -292,11 +297,11 @@ function showTooltip(idx) {
     let top = barRect.top - svgRect.top - 4;
 
     // Clamp horizontal: keep tooltip within [55, w - 55]
-    left = Math.max(55, Math.min(w - 55, left));
+    left = Math.max(55, Math.min(layout.w - 55, left));
 
     // Clamp vertical: if bar is tall and tooltip would be cut off at top, show below bar
     if (top < 42) {
-      top = barRect.top - svgRect.top + barH + 8;
+      top = barRect.top - svgRect.top + layout.barHeights[idx] + 8;
     }
 
     tooltip.style.left = left + 'px';

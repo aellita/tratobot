@@ -20,14 +20,13 @@ from ...services.monthly_report import (
 from ...utils import phrases
 from ..keyboards import get_main_menu_keyboard, get_monthly_nav_keyboard
 from ..rich_api import edit_rich_message, edit_widget_data, send_widget
+from ..widget_cache import clear_widget_msg
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
 _user_index: dict[int, int] = {}
-# Widget cache: telegram_id -> (chat_id, widget_message_id)
-_widget_cache: dict[int, tuple[int, int]] = {}
 
 
 def _set_index(telegram_id: int, idx: int):
@@ -36,51 +35,6 @@ def _set_index(telegram_id: int, idx: int):
 
 def _get_index(telegram_id: int) -> int:
     return _user_index.get(telegram_id, 0)
-
-
-def _set_widget_msg(telegram_id: int, chat_id: int, msg_id: int):
-    _widget_cache[telegram_id] = (chat_id, msg_id)
-
-
-def _get_widget_msg(telegram_id: int) -> tuple[int, int] | None:
-    return _widget_cache.get(telegram_id)
-
-
-def _clear_widget_msg(telegram_id: int):
-    _widget_cache.pop(telegram_id, None)
-
-
-async def _send_or_update_widget(bot: Bot, telegram_id: int, chat_id: int, budget) -> None:
-    """Send new widget or update existing one. Graceful fallback on any error."""
-    try:
-        data = await build_chart_data(telegram_id, budget)
-        if not data:
-            return
-        state = build_chart_state(telegram_id, budget, data)
-        state_json = json.dumps(state, separators=(",", ":"))
-
-        cached = _get_widget_msg(telegram_id)
-        if cached:
-            cached_chat_id, cached_msg_id = cached
-            if cached_chat_id == chat_id:
-                # Try to edit existing widget
-                result = await edit_widget_data(bot, chat_id, cached_msg_id, state_json)
-                if result is not None:
-                    logger.debug("Widget updated for %s", telegram_id)
-                    return
-                # Fallback: edit failed (message deleted, etc.) -> send new
-                logger.warning("edit_widget_data failed for %s, sending new widget", telegram_id)
-
-        # Send new widget
-        result = await send_widget(bot, chat_id, CHART_WIDGET_HTML, state_json)
-        if result and result.get("message_id"):
-            _set_widget_msg(telegram_id, chat_id, result["message_id"])
-            logger.debug("Widget sent for %s", telegram_id)
-        else:
-            logger.warning("send_widget failed for %s", telegram_id)
-
-    except Exception as e:
-        logger.warning("Widget send/update error for %s: %s", telegram_id, e)
 
 
 async def _build_report_text(telegram_id: int, budget_idx: int) -> tuple[str, bool, bool, str, str]:
@@ -149,12 +103,36 @@ async def cmd_monthly_report(callback: CallbackQuery, state: FSMContext, bot: Bo
         )
 
         # Clear widget cache so a fresh widget is sent as a new message at the bottom
-        _clear_widget_msg(tg_id)
+        clear_widget_msg(tg_id, callback.message.chat.id)
         # Send widget after successful report render
         await _send_or_update_widget(bot, tg_id, callback.message.chat.id, budgets[active_idx])
 
     except Exception as e:
         logger.error(f"Monthly report error: {e}", exc_info=True)
+
+
+async def _send_or_update_widget(bot: Bot, telegram_id: int, chat_id: int, budget) -> None:
+    """Send new widget or update existing one. Graceful fallback on any error."""
+    try:
+        data = await build_chart_data(telegram_id, budget)
+        if not data:
+            return
+        state = build_chart_state(telegram_id, budget, data)
+        state_json = json.dumps(state, separators=(",", ":"))
+
+        from ..widget_cache import send_or_update_widget as _send_or_update_widget_cache
+        await _send_or_update_widget_cache(
+            bot,
+            telegram_id,
+            chat_id,
+            CHART_WIDGET_HTML,
+            state_json,
+            send_widget,
+            edit_widget_data,
+        )
+
+    except Exception as e:
+        logger.warning("Widget send/update error for %s: %s", telegram_id, e)
 
 
 @router.callback_query(F.data == "monthly_refresh")
