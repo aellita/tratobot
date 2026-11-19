@@ -2171,7 +2171,11 @@ async def _render_settings(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]
         else phrases.SETTINGS_PERIOD_WHOLE
     )
     if budget.free_money > 0:
-        money_line = phrases.SETTINGS_MONEY_FREE.format(amount=f"{budget.free_money:,.0f}")
+        from ...services.budget_service import get_money_for_life, get_period_spent
+
+        spent_period = await get_period_spent(telegram_id, budget)
+        money_for_life = get_money_for_life(budget, spent_period)
+        money_line = phrases.SETTINGS_MONEY_REMAINING.format(amount=f"{money_for_life:,.0f}")
     else:
         money_line = phrases.SETTINGS_MONEY_INCOME.format(amount=f"{budget.total_income:,.0f}")
     text = phrases.SETTINGS_BUDGET_TITLE.format(money=money_line, period=period_info)
