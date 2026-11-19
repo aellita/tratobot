@@ -574,6 +574,9 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     else:
         today_line = phrases.STATUS_REMAINING_ZERO
 
+    if overrun_today > 0:
+        today_line += " · " + phrases.STATUS_OVERRUN.format(amount=f"{int(overrun_today):,}")
+
     spent_line = phrases.STATUS_SPENT.format(amount=f"{int(spent_today):,}")
     if overrun_today > 0:
         spent_line += " ⚠️"

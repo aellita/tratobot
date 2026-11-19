@@ -457,8 +457,8 @@ class TestStatusRendering:
         assert "полегче" not in text
         assert phrases.STATUS_FOOTER_GREEN_2 not in text
         assert "⚠️" in text
-        # В строке дня нет цифры перерасхода — только «Свободно 0 ₽» и «⚠️».
-        assert "Перерасход 15,000 ₽" not in text
+        # Сумма перерасхода видна рядом с «Свободно 0 ₽» и «⚠️».
+        assert "Перерасход 14,411 ₽" in text
 
     async def test_last_three_days_use_final_phrases_without_forecast(
         self, db_session, monkeypatch

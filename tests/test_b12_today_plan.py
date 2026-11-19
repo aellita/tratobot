@@ -119,7 +119,7 @@ class TestStatusPlan:
         assert "Лимит на завтра 9,361 ₽/день" in text
         assert "План на сегодня" not in text
 
-    async def test_overrun_shown_by_warning_not_number(self, db_session, monkeypatch):
+    async def test_overrun_shown_with_number_and_warning(self, db_session, monkeypatch):
         text = await self._status(
             db_session,
             monkeypatch,
@@ -128,8 +128,8 @@ class TestStatusPlan:
             spent_today=18343,
         )
         assert "Свободно 0 ₽" in text
+        assert "Перерасход 8,982 ₽" in text
         assert "Потрачено 18,343 ₽ ⚠️" in text
-        assert "Перерасход 8,982 ₽" not in text
         assert "План на сегодня" not in text
         # перерасход не меняет зону: план 9 361 при базе 5 305 — это «В норме»
         assert phrases.STATUS_ZONE_NORM in text
@@ -284,7 +284,7 @@ class TestStatusInvariant:
         text, _ = await _build_status(1001)
         assert "Идём идеально" not in text
         assert phrases.STATUS_ZONE_NORM in text
-        assert "Перерасход 8,982 ₽" not in text
+        assert "Перерасход 8,982 ₽" in text
         assert (
             phrases.STATUS_FOOTER_RED_NO_NUM_1 in text or phrases.STATUS_FOOTER_RED_NO_NUM_2 in text
         )
