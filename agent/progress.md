@@ -6,7 +6,7 @@
 
 ## Текущий статус и фокус
 
-**Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (kill-switch off)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B24, U1–U3** (Bug Audit 2026-11-06 + визуал, утренний отчёт и UX-статус).  
+**Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (включён с 2026-09-05, `RECOVERY_ENABLED=True`)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B24, U1–U3** (Bug Audit 2026-11-06 + визуал, утренний отчёт и UX-статус).  
 **Активно:** месячный отчёт — **M1–M4** готовы (638 тестов); дальше M5 → M6 → G1.  
 **Ближайшее:** «Конверты» (обязательные как отдельный конверт), затем M5/M6 и **G1** — график трат по дням в нативном виджете + Tier 1. G2 (снапшоты дневных лимитов, в т.ч. в утренней строке «Вчера»), G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
 **В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям.  
@@ -489,12 +489,12 @@ history.py 1, evening_flow.py 2) теперь вызывают её одной �
 - `_build_status`: `<blockquote>` вокруг expense_lines
 - `_shared.py`: единый `handle_invalid_input()`
 
-### Recovery v1-infra (2026-09-05) — kill-switch off
+### Recovery v1-infra (2026-09-05) — флаг включён
 **Проблема:** нужен временный режим поверх `Budget.daily_limit` для возврата к замороженному `B` без изменения бюджета, с выбором 60/70/80% и вечерним пересчётом длительности.
 **Решение:**
 - `Budget.base_daily_limit` frozen при `save_budget()`/`resolve_frozen_baseline()` (атомарно `WHERE base_daily_limit IS NULL`), `recovery_states` (история, `initial_*` immutable, `total_days` mutable) + `recovery_offer_state` (`dismissed/last_offer_at/deficit`), миграция `database.py` (`ALLOWED_TABLES/COLUMNS`, SQLite `REAL`/`INTEGER` vs PostgreSQL `NUMERIC`/`BOOLEAN`).
 - `recovery_service.py` чистая математика `Decimal`: `trigger 0.85, fast 0.60/balanced 0.70/soft 0.80, success 0.90, replan 0.90, small 1.10, tail 7, cooldown 3, min 1000` + `calculate_recovery_options/days, should_offer, check_success, is_small_overspend, should_repeat_offer` + DB-helpers `get_active_recovery/create_recovery/stop/complete/update_days/expire` (все `get_msk_now()` tz-aware, `UPSERT` offer).
-- Оркестрация за `RECOVERY_ENABLED=false`: `menu.py:_build_status` рендер (скрытие нулевых резервов, `🧘 день 3 из 10 / 7000·10дн / После этого — 10000 ещё 7дн`), коллбэки `recovery:choose:fast|balanced|soft` (re-validate `B*days- money`, `days+7<=remaining`), `dismiss/stop/show_options`, бюджет-хуки `add_income/recalc/mandatory/black_day/period_start` (не `saving_today`, отдельный flow), `morning_report` (active/success/offer), `evening_report` (факт `saving_today=max(0,target-spent)`, `10→8` честно, прогноз только `+`), `rollover` + `period_end` → `expired(period_end)`.
+- Оркестрация за `RECOVERY_ENABLED` (включён в `19755f0`, 2026-09-05): `menu.py:_build_status` рендер (скрытие нулевых резервов, `🧘 день 3 из 10 / 7000·10дн / После этого — 10000 ещё 7дн`), коллбэки `recovery:choose:fast|balanced|soft` (re-validate `B*days- money`, `days+7<=remaining`), `dismiss/stop/show_options`, бюджет-хуки `add_income/recalc/mandatory/black_day/period_start` (не `saving_today`, отдельный flow), `morning_report` (active/success/offer), `evening_report` (факт `saving_today=max(0,target-spent)`, `10→8` честно, прогноз только `+`), `rollover` + `period_end` → `expired(period_end)`.
 - `phrases.py` 16 групп (`BTN_RECOVERY_*`, `RECOVERY_*`), `keyboards.py` 3 клавиатуры, `get_user_now()` обёртка, `pyproject.toml` `ignore E712`.
 **Файлы:** `models.py:58,159`, `database.py:13,204`, `config.py:18`, `helpers.py:224`, `recovery_service.py`, `budget_service.py:36`, `menu.py:76,590,854`, `keyboards.py:233`, `morning_report.py:343`, `evening_report.py:240`, `phrases.py:664`.
 **P1a-c:** `phrases.py:762,788,806` — `STATUS_*`/`MORNING_*`/`ROLLOVER_*` 45 ключей → `menu.py` статусы/ролловер/настройки полностью на `phrases.*` (`ade2696`, `efb058e`, `8fd4f45`).
