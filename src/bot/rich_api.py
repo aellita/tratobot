@@ -66,10 +66,8 @@ async def send_widget(
     url = f"https://api.telegram.org/bot{bot.token}/sendWidget"
     payload: dict[str, Any] = {
         "chat_id": chat_id,
-        "widget": {
-            "html": html,
-            "data": state_json,
-        },
+        "html": html,
+        "data": state_json,
         "disable_notification": True,
     }
     result = await _post_with_retry(url, payload)
