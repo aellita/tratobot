@@ -173,10 +173,18 @@ async def send_morning_reports(bot: Bot):
                     if user_settings and not user_settings.notifications_enabled:
                         continue
 
+                import json
+
+                from ..bot.handlers.monthly_summary import _set_widget_msg
                 from ..bot.keyboards import get_rollover_keyboard
-                from ..bot.rich_api import send_rich_message
+                from ..bot.rich_api import send_rich_message, send_widget
                 from ..db.models.models import Budget as BudgetModel
                 from ..utils import phrases
+                from .monthly_chart import (
+                    CHART_WIDGET_HTML,
+                    build_chart_data,
+                    build_chart_state,
+                )
                 from .monthly_report import (
                     build_summary_data,
                     format_summary_text,
@@ -197,6 +205,21 @@ async def send_morning_reports(bot: Bot):
                             data = await build_summary_data(tg_id, b)
                             msg = format_summary_text(data)
                             await send_rich_message(bot, tg_id, msg)
+
+                            # Send chart widget for the monthly report
+                            try:
+                                chart_data = await build_chart_data(tg_id, b)
+                                if chart_data:
+                                    chart_state = build_chart_state(tg_id, b, chart_data)
+                                    state_json = json.dumps(chart_state, separators=(",", ":"))
+                                    widget_result = await send_widget(
+                                        bot, tg_id, CHART_WIDGET_HTML, state_json
+                                    )
+                                    if widget_result and widget_result.get("message_id"):
+                                        _set_widget_msg(tg_id, tg_id, widget_result["message_id"])
+                                        logger.debug("Rollover monthly widget sent for %s", tg_id)
+                            except Exception as e:
+                                logger.warning("Rollover widget send failed for %s: %s", tg_id, e)
 
                             avg = await get_average_expenses(tg_id)
                             offer = phrases.ROLLOVER_OFFER.format(

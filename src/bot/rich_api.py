@@ -1,4 +1,4 @@
-"""Raw Telegram Bot API calls for Rich Messages (Bot API 10.1+).
+"""Raw Telegram Bot API calls for Rich Messages (Bot API 10.1+) and Widgets (Bot API 10.4+).
 
 Every outgoing inline keyboard must be tracked in ``_last_keyboard``
 so that ``KeyboardCleanupMiddleware`` can clean it up on the next
@@ -13,6 +13,72 @@ import aiohttp
 from .middleware import _get_lock, _last_keyboard
 
 logger = logging.getLogger(__name__)
+
+
+async def send_widget(
+    bot: Any,
+    chat_id: int,
+    html: str,
+    state_json: str,
+) -> dict | None:
+    """Send a widget message (sendWidget).
+
+    Returns message dict with message_id on success, None on failure.
+    Errors are logged but don't raise — caller should handle gracefully.
+    """
+    url = f"https://api.telegram.org/bot{bot.token}/sendWidget"
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "widget": {
+            "html": html,
+            "data": state_json,
+        },
+        "disable_notification": True,
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as resp:
+                data = await resp.json()
+                if not data.get("ok"):
+                    logger.warning("sendWidget error: %s", data)
+                    return None
+                msg_id = data["result"].get("message_id")
+                logger.debug("sendWidget ok for %s, message_id=%s", chat_id, msg_id)
+                return data["result"]
+    except Exception as e:
+        logger.warning("sendWidget request failed: %s", e)
+        return None
+
+
+async def edit_widget_data(
+    bot: Any,
+    chat_id: int,
+    message_id: int,
+    state_json: str,
+) -> dict | None:
+    """Edit widget data (editMessageWidgetData).
+
+    Returns result dict on success, None on failure.
+    Errors are logged but don't raise — caller should fallback to send_widget.
+    """
+    url = f"https://api.telegram.org/bot{bot.token}/editMessageWidgetData"
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "data": state_json,
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as resp:
+                data = await resp.json()
+                if not data.get("ok"):
+                    logger.warning("editMessageWidgetData error: %s", data)
+                    return None
+                logger.debug("editMessageWidgetData ok for %s, message_id=%s", chat_id, message_id)
+                return data["result"]
+    except Exception as e:
+        logger.warning("editMessageWidgetData request failed: %s", e)
+        return None
 
 
 async def edit_rich_message(
