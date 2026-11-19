@@ -154,7 +154,9 @@ class TestAddIncome:
         await _run(msg, state)
 
         text = msg.answer.call_args.kwargs["text"]
-        assert text == phrases.INCOME_ADDED_EMPTY.format(amount="5,000")
+        assert text == phrases.INCOME_ADDED.format(
+            amount="5,000", remaining="0", free_today="0", per_day="0"
+        )
 
     async def test_no_budget_shows_honest_error(self, db_session):
         db_session.add(User(telegram_id=1001))

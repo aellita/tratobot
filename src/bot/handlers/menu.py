@@ -2334,27 +2334,36 @@ async def save_add_income(message: Message, state: FSMContext):
         await state.clear()
         return
 
-    from ...services.budget_service import get_money_for_life, get_period_spent
+    from ...services.budget_service import (
+        get_free_today,
+        get_money_for_life,
+        get_money_for_life_raw,
+        get_period_spent,
+        get_plan_today,
+        get_spent_today_at_recalc,
+    )
     from ...services.status_zones import tomorrow_plan
 
+    spent_today = await get_today_expenses_sum(message.from_user.id)
     spent_period = await get_period_spent(message.from_user.id, updated)
+    money_for_life_raw = get_money_for_life_raw(updated, spent_period)
     money_for_life = get_money_for_life(updated, spent_period)
-    days_left = max(updated.days_remaining, 1)
+    days_left = updated.days_remaining
+    plan_today = get_plan_today(
+        money_for_life_raw,
+        spent_today,
+        days_left,
+        get_spent_today_at_recalc(updated),
+    )
+    free_today = get_free_today(plan_today, spent_today)
     per_day = tomorrow_plan(money_for_life, days_left)
 
-    if money_for_life <= 0:
-        text = phrases.INCOME_ADDED_EMPTY.format(amount=f"{amount:,.0f}")
-    elif days_left <= 1:
-        text = phrases.INCOME_ADDED_LAST_DAY.format(
-            amount=f"{amount:,.0f}",
-            remaining=f"{money_for_life:,.0f}",
-        )
-    else:
-        text = phrases.INCOME_ADDED.format(
-            amount=f"{amount:,.0f}",
-            remaining=f"{money_for_life:,.0f}",
-            per_day=f"{per_day:,.0f}",
-        )
+    text = phrases.INCOME_ADDED.format(
+        amount=f"{amount:,.0f}",
+        remaining=f"{money_for_life:,.0f}",
+        free_today=f"{int(free_today):,}",
+        per_day=f"{per_day:,.0f}",
+    )
 
     await message.answer(
         text=text,

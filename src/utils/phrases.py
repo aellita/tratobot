@@ -216,10 +216,11 @@ PERIOD_EDIT_PROMPT = (
 )
 
 INCOME_ADDED = (
-    "✅ Добавлено {amount} ₽\n💰 Остаток: {remaining} ₽\n📅 Лимит на завтра: {per_day} ₽/день"
+    "✅ Добавлено {amount} ₽\n"
+    "💰 Остаток: {remaining} ₽\n"
+    "Сегодня свободно: {free_today} ₽\n"
+    "Завтра: {per_day} ₽/день"
 )
-INCOME_ADDED_LAST_DAY = "✅ Добавлено {amount} ₽\n💰 Остаток: {remaining} ₽"
-INCOME_ADDED_EMPTY = "✅ Добавлено {amount} ₽\n💰 Остаток: 0 ₽"
 MANDATORY_UPDATED = "✅ Готово! Обязательные: {amount}₽"
 SAVINGS_UPDATED = "✅ Готово! Кубышка: {amount}₽"
 

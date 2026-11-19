@@ -115,7 +115,7 @@ MANDATORY_EDIT_PROMPT,settings_budget,message,message,settings / advanced / mand
 SAVINGS_EDIT_PROMPT,settings_budget,message,message,settings / advanced / mandatory / savings / wishlist,settings_budget,,conditional (if/elif),USED,257,"""🏦 Введи новую сумму кубышки:"""
 WISHLIST_EDIT_PROMPT,settings_budget,message,message,settings / advanced / mandatory / savings / wishlist,settings_budget,,conditional (if/elif),USED,258,"""🎯 Введи название и сумму хотелки:\nНапример: Ноутбук 50000"""
 PERIOD_EDIT_PROMPT,onboarding,message,message,BudgetSetup FSM / /start,onboarding,,conditional (if/elif),USED,259,"""📅 А какого числа у тебя начинается финансовый месяц?\n(Когда приходит основная зарплата)"""
-INCOME_ADDED,onboarding,message,message,BudgetSetup FSM / /start,onboarding,,conditional (if/elif),USED,263,"""✅ Готово! Доход увеличен на {amount}₽\n💰 Текущий доход: {total}₽"""
+INCOME_ADDED,settings_budget,message,message,EditBudget.waiting_for_add_income / save_add_income,income_added,,conditional (if/elif),USED,218,"""✅ Добавлено {amount} ₽\n💰 Остаток: {remaining} ₽\nСегодня свободно: {free_today} ₽\nЗавтра: {per_day} ₽/день"""
 MANDATORY_UPDATED,settings_budget,message,message,settings / advanced / mandatory / savings / wishlist,settings_budget,,conditional (if/elif),USED,264,"""✅ Готово! Обязательные: {amount}₽"""
 SAVINGS_UPDATED,settings_budget,message,message,settings / advanced / mandatory / savings / wishlist,settings_budget,,conditional (if/elif),USED,265,"""✅ Готово! Кубышка: {amount}₽"""
 ROUNDING_SETTINGS,settings_budget,message,message,settings / advanced / mandatory / savings / wishlist,settings_budget,,conditional (if/elif),USED,267,"""🐖 Сейчас округление: <b>{label}</b>\n\n""\n    ""Мне округлять твои траты; а сдачу закидывать в копилку?"""
