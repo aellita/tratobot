@@ -67,7 +67,7 @@ async def send_widget(
     payload: dict[str, Any] = {
         "chat_id": chat_id,
         "html": html,
-        "data": state_json,
+        "chat_data": state_json,
         "disable_notification": True,
     }
     result = await _post_with_retry(url, payload)
@@ -92,7 +92,7 @@ async def edit_widget_data(
     payload: dict[str, Any] = {
         "chat_id": chat_id,
         "message_id": message_id,
-        "data": state_json,
+        "chat_data": state_json,
     }
     result = await _post_with_retry(url, payload)
     if result:
