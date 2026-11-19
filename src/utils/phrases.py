@@ -3,7 +3,6 @@ from __future__ import annotations
 # ── Button labels ──────────────────────────────────────────
 BTN_BACK_MAIN = "⬅️ В главное меню"
 BTN_RECALC_LIMIT = "🔄 Пересчитать лимит"
-BTN_ECONOMIZE = "💪 Буду экономить"
 BTN_CANCEL = "⬅️ Отмена"
 BTN_BACK = "⬅️ Назад"
 BTN_SKIP = "⏭️ Пропустить"
@@ -22,14 +21,12 @@ BTN_CHANGE_BUDGET_RECALC = "💳 Остаток на карте"
 
 BTN_DAILY_LIMIT = "💰 Дневной лимит"
 BTN_ADD_EXPENSE = "💸 Добавить трату"
-BTN_STATUS = "📊 Статус"
 BTN_HISTORY = "📜 История"
 BTN_SETTINGS = "⚙️ Настройки"
 BTN_HELP = "📋 Помощь"
 
 BTN_MANDATORY = "📌 Обязательные"
 BTN_PERIOD_START = "📅 День старта"
-BTN_ROUNDING = "🐖 Округление"
 BTN_ADVANCED_PLANNING = "🧾 Дополнительное планирование"
 
 BTN_TODAY = "📅 Сегодня ({day}-е)"
@@ -126,23 +123,12 @@ WELCOME_BACK = (
 )
 
 NO_BUDGET = "👋 Привет!\n\nУ тебя нет бюджета на этот месяц. Нажми /start!"
-NO_BUDGET_SHORT = "👋 У тебя пока нет бюджета. Нажми /start!"
-NO_BUDGET_MONTH = "👋 Нет бюджета на этот месяц. Нажми /start!"
 NO_BUDGET_SETTINGS = "👋 Привет!\nТы ещё не настраивал бюджет. Нажми /start!"
-
-STATUS_REMAINING_OK = "<b>Осталось на сегодня:</b> {amount} ₽"
-STATUS_REMAINING_STOP = "🛑 <b>Осталось на сегодня:</b> 0 ₽ (Траты на сегодня стоп!)"
-STATUS_SPENT_TODAY = "📉 <b>Потрачено сегодня:</b> {amount} ₽"
-STATUS_BIG_SPEND = " 🚨 (Ого, мощный расход!)"
-STATUS_PERIOD_NEGATIVE = "💵 <b>Остаток на жизнь:</b> {amount} ₽ 💸"
-STATUS_PERIOD_POSITIVE = "💵 <b>Остаток на жизнь:</b> {amount} ₽"
-STATUS_PERIOD_ZERO = "💵 <b>Остаток на жизнь:</b> 0 ₽ 💸"
 
 EXPENSE_SAVED_LINE = "💰 {amount}₽ — {desc} {emoji}{cat}"
 EXPENSE_SAVED_ALL = "✅ Записано!\n\n{lines}{round_up}"
 CATEGORY_CHANGED = "✅ Категория изменена!\n\n💰 {amount}₽ — {desc}\n{emoji} {cat}"
 BACK_NAV = "\u200b"
-CANCEL_RECALC = "❌ Отменено. Возвращаю в меню."
 NEW_CATEGORY_PROMPT = "✏️ Напиши название новой категории:\n\nНапример: Книги, Алкоголь, Животные"
 CATEGORY_CREATED = (
     "✅ Новая категория «{name}» создана!\nЯ запомнил слово «{desc}» для этой категории."
@@ -175,7 +161,6 @@ REDUCE_LIMIT_ACCEPTED = (
 )
 
 COVERED_FROM_WISHLIST = "🎯 Покрыли {amount}₽ из Хотелки! Остаток: {remain}₽"
-TAKEN_FROM_SAVINGS = "🆘 Взяли из Кубышки! Остаток в заначке: {amount}₽"
 
 ADD_EXPENSE_PROMPT = "💸 Добавить трату!\n\nВведи сумму и описание:\nНапример: 500 кофе"
 
@@ -204,17 +189,6 @@ ONBOARDING_ROUNDING_PROMPT = (
     "До какого шага округляем?"
 )
 
-BUDGET_COMPLETE = (
-    "🎉 <b>Готово!</b>\n\n"
-    "📊 Бюджет на {month}:\n"
-    "• Общий доход: {income}₽\n"
-    "• Обязательные: {mandatory}₽\n"
-    "• Кубышка: {black_day}₽\n"
-    "• Хотелка: {wishlist}₽\n"
-    "{period_note}"
-    "💰 <b>Дневной лимит: {daily_limit}₽</b>"
-)
-
 ONBOARDING_HINT_SETTINGS = (
     "💡 Если захочешь — дополнительные настройки бюджета есть в ⚙️ Настройках."
 )
@@ -229,14 +203,7 @@ FSM_INTERRUPT_PERIOD = (
     "или нажми «Отмена», если передумал."
 )
 
-INCOME_SAVED_PERIOD = (
-    "✅ Запомнил!\n\n"
-    "Теперь отсечем всё лишнее: аренду, счета и прочую бытовую рутину.\n"
-    "Сколько у нас уходит на обязательные платежи?"
-)
-
 PERIOD_UPDATED = "✅ Готово! Период обновлён — с {day}-го числа."
-PERIOD_SET_PERIOD = "✅ Запомнил!\n\n{mandatory_prompt}"
 
 ROUNDING_LABEL_OFF = "выключено"
 ROUNDING_SAVED = "✅ Готово! Округление: <b>{label}</b>"
@@ -262,10 +229,6 @@ ROUNDING_SETTINGS = (
 )
 
 UNRECOGNIZED = "👋 Воспользуйся кнопками в меню!"
-
-UNRECOGNIZED_TEXT = (
-    '👋 Не понял...\n\nНапиши сумму и описание, например:\n"500 кофе" или нажми кнопку в меню'
-)
 
 HISTORY_EMPTY = (
     "📜 <b>История трат</b>\n\n"
@@ -327,6 +290,8 @@ ZONE_END_OVER_2 = "🏁 Финиш через {days_text}, а сегодня в�
 
 # B23: новые фразы для последних 3 дней
 END_OK = "🏁 Бро, мы красиво заходим на финиш! Осталось {days} {days_word} — дотянем."
+END_OK_1 = "🥳 Ещё {days} {days_word}, а у тебя {money:,.0f} ₽. Бро, вот это запас!"
+END_OK_2 = "🥳 {money:,.0f} ₽ на последние {days} {days_word}. Бро, мы красиво заходим на финиш."
 END_YESTERDAY_OVERRUN = (
     "📉 Вчера не уложился — перебор {overrun:,.0f} ₽. "
     "На финише осталось {days} {days_word}, план сжимается до {plan:,.0f} ₽/день."
@@ -336,8 +301,6 @@ END_PLAN_SAGGED = (
     "Осталось {days} {days_word}, без лишних движений, бро."
 )
 
-ZONE_END_OK_1 = "🥳 Ещё {days_text}, а у тебя {money} ₽. Бро, вот это запас!"
-ZONE_END_OK_2 = "🥳 {money} ₽ на последние {days_text}. Бро, мы красиво заходим на финиш."
 ZONE_GREEN_1 = "Бро, ты машина. Прогноз — {limit} ₽/день. Держим курс."
 ZONE_GREEN_2 = "Красиво. Прогноз — {limit} ₽/день. Так и едем."
 ZONE_YELLOW_LIGHT_1 = "📉 Бро, слегка разогнались. Прогноз — {limit} ₽/день. Сегодня чуть полегче."
@@ -434,11 +397,6 @@ AUTO_CLOSE = (
     "🌙 <b>23:30 — День закрыт, подводим итоги</b>\n\n"
     "Твой финальный счёт за сегодня: <b>{total} ₽</b>.\n"
     "Переворачиваем календарь. Завтра жду твои новые траты! 🚀",
-)
-
-# ── Round-up ───────────────────────────────────────────────
-ROUND_UP = (
-    "\n\n🐖 Я округлил чек и закинул <b>{amount}₽</b> в «{goal}». Там уже <b>{total}₽</b>! 🚀"
 )
 
 # ── Greetings ──────────────────────────────────────────────
@@ -538,9 +496,6 @@ BTN_CATEGORY_DELETE_HARD = "💣 Удалить насовсем"
 BTN_CATEGORY_DELETE_CONFIRM = "✅ Да, удалить всё"
 BTN_CATEGORY_BACK_TO_LIST = "⬅️ К списку категорий"
 
-CATEGORY_MANAGEMENT_TITLE = "🗂 Настройка категорий (Страница {page} из {total})"
-CATEGORY_LIST_ACTIVE_HEADER = "\nАктивные категории (нажми для изменения):"
-CATEGORY_LIST_ARCHIVED_HEADER = "\n------- 🗄 Архивированные категории:"
 CATEGORY_LIST_ARCHIVED_SUFFIX = " (Архив)"
 CATEGORY_LIST_EMPTY = "У тебя пока нет категорий."
 
@@ -783,7 +738,6 @@ STATUS_REMAINING_FREE = "Свободно {amount} ₽"
 STATUS_REMAINING_ZERO = "Свободно 0 ₽"
 STATUS_SPENT = "Потрачено {amount} ₽"
 STATUS_OVERRUN = "Перерасход {amount} ₽"
-STATUS_PLAN_TODAY = "План на сегодня: {amount} ₽"
 STATUS_RESERVES_HEADER = "Резервы под охраной"
 STATUS_BALANCE_TITLE = "БАЛАНС"
 STATUS_TODAY_TITLE = "Сегодня"

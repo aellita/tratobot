@@ -1,6 +1,6 @@
 # Карта фраз Тратобота — техническая карта системы сообщений
 
-> Источник: `tratobot/src/utils/phrases.py` (786 строк, 342 Assign, 341 уникальная константа, 1 дубль `NEW_CATEGORY_PROMPT` на 148 и 173) + 15 точек импорта `phrases.` в `src/bot/handlers/*.py` и `src/services/*.py`. Не меняет код и тексты — только фиксирует, когда и как каждая фраза показывается.
+> Источник: `tratobot/src/utils/phrases.py` (808 строк, 348 Assign, 347 уникальных констант, 1 дубль `NEW_CATEGORY_PROMPT` на 148 и 173) + точки импорта `phrases.` в `src/bot/handlers/*.py` и `src/services/*.py`. Не меняет код и тексты — только фиксирует, когда и как каждая фраза показывается.
 > Таблица-снимок: `docs/PHRASE_TABLE.csv` (фильтр по `scenario`, `status`, `user_facing`); источник истины — `phrases.py`. Колонка `line` историческая и может отставать.
 
 ---
@@ -11,14 +11,14 @@
 - **Сценарий:** свободный ввод `500 кофе`, `500+300 такси`, мультилайн, FSM `AddExpense.waiting_for_amount`, вечерний `EveningState.filling`.
 - **Вход:** `@router.message()` `handle_text` / `process_expense` / `handle_evening_expense`, `parse_multi_expense_text()` → `ExpenseParseReport`.
 - **Условия:** `is_valid`, `was_corrected` (скобки/хвостовой знак), `MATH_ERROR`, `spent_today > dl_pred`, `duplicateMiddleware` (`new/warn/silent`).
-- **Фразы:** `EXPENSE_SAVED_LINE`, `EXPENSE_SAVED_ALL`, `ERR_MATH_CORRECTED`, `ERR_MATH_ERROR` (`ERR_NEGATIVE_RESULT/ZERO_RESULT/DIV_BY_ZERO`), `STATUS_BIG_SPEND`, `FALLBACK_DESC`, `DEFAULT_CATEGORY`, `DUP_*`, `EVENING_SAVED/LINE_*`.
+- **Фразы:** `EXPENSE_SAVED_LINE`, `EXPENSE_SAVED_ALL`, `ERR_MATH_CORRECTED`, `ERR_MATH_ERROR` (`ERR_NEGATIVE_RESULT/ZERO_RESULT/DIV_BY_ZERO`), `FALLBACK_DESC`, `DEFAULT_CATEGORY`, `DUP_*`, `EVENING_SAVED/LINE_*`.
 - **Ветки:** `was_corrected → SAVED_LINE + CORRECTED + BTN_FIX_AMOUNT`; `MATH_ERROR → ERR_MATH_ERROR + retry`; `big_spend → " 🚨"`; `duplicate warn → DUP_WARNING + BTN_DUP_*`, `silent → drop`, `confirm → DUP_CONFIRMED`, `del → DUP_DELETED`.
 
 ### 2. Утренний отчёт (08:00 MSK, `send_morning_reports`)
 - **Вход:** `cron[08:00 MSK]` → `for tg_id` → `UserSettings.notifications_enabled` → `Monthly Summary` ветка (period_end+1) → `get_active_budget` → `money_for_life/dl_pred/pct_*`.
 - **Условия:** `today == period_end+1 → rollover`, `budget==None → skip`, `end_of_period (days<=3)`, `money_for_life`, `pct_pred >80 / >=51 / >=26`, `pct_sim >80 / >=51 / >=26`, `yesterday_spent <= dl_pred`, `RECOVERY_ENABLED`.
-- **Фразы:** `MORNING_GREETING`, `MORNING_TODAY_PLAN`, `YESTERDAY_OK/OVER`, `ZONE_END_EMPTY_1/2`, `ZONE_END_OK_1/2`, `ZONE_GREEN_1/2`, `ZONE_YELLOW_LIGHT_1/2`, `MORNING_YELLOW_SIM_GREEN_1/2`, `MORNING_YELLOW_SIM_BLUE_1/2`, `MORNING_YELLOW_SIM_NONE_1/2`, `MORNING_RED_SIM_GREEN_1/2`, `MORNING_RED_SIM_BLUE_1/2`, `MORNING_RED_SIM_YELLOW_1/2`, `MORNING_RED_DEAD_1/2`, `ROLLOVER_OFFER`, плюс Recovery `RECOVERY_SUCCESS/DAILY_ACTIVE/DAILY_OFFER` + `BTN_RECOVERY_*`.
-- **Ветки:** см. дерево MORNING ниже. Выбор `random.choice(2)` в каждой зоне, `BTN_RECALC_LIMIT` vs `USE_SAVINGS_*` vs `FRESH_START` по `zone`.
+- **Фразы:** `MORNING_GREETING`, `MORNING_TODAY_PLAN`, `YESTERDAY_OK/OVER`, `ZONE_END_EMPTY_1/2`, `END_OK/END_OK_1/2`, `END_YESTERDAY_OVERRUN`, `END_PLAN_SAGGED`, `ZONE_GREEN_1/2`, `ZONE_YELLOW_LIGHT_1/2`, `MORNING_YELLOW_SIM_GREEN_1/2`, `MORNING_YELLOW_SIM_BLUE_1/2`, `MORNING_YELLOW_SIM_NONE_1/2`, `MORNING_RED_SIM_GREEN_1/2`, `MORNING_RED_SIM_BLUE_1/2`, `MORNING_RED_SIM_YELLOW_1/2`, `MORNING_RED_DEAD_1/2`, `ROLLOVER_OFFER`, плюс Recovery `RECOVERY_SUCCESS/DAILY_ACTIVE/DAILY_OFFER` + `BTN_RECOVERY_*`.
+- **Ветки:** см. дерево MORNING ниже. Выбор `random.choice(2–3)` в каждой зоне, `BTN_RECALC_LIMIT` vs `USE_SAVINGS_*` vs `FRESH_START` по `zone`.
 
 ### 3. Вечерний отчёт (22:00 teaser, 23:30 auto-close, `get_evening_message` + `evening_flow.finalize`)
 - **Вход:** `limit = available_cash/days_left`, `spent = today_sum`, `available_cash = total_available - period_spent`.
@@ -29,7 +29,7 @@
 ### 4. Статус / Daily Limit (`_build_status`)
 - **Вход:** `menu_status` callback / `BTN_DAILY_LIMIT` reply → `_build_status` → `days_left`, `dl_pred/dl_simulated`, `pct_pred/sim`, `remaining_today`, `spent_today`, `Recovery` блок.
 - **Условия:** `budget==None → NO_BUDGET`, `end_of_period`, `pct_pred >80/>=51/>=26`, `pct_sim`, `remaining_today>0`, `spent_today>dl_pred`, `budget.mandatory/savings/wishlist_amount` (скрытие нулей), `RECOVERY_ENABLED`.
-- **Фразы:** `STATUS_ZONE_ATAS/FINISH/IN_LIMIT/CAN_MORE/ON_EDGE/CRITICAL`, `STATUS_REMAINING_FREE/ZERO`, `STATUS_SPENT`, `STATUS_RESERVES_HEADER`, `STATUS_BALANCE_TITLE/TODAY_TITLE/PERIOD_TITLE/REMAINING_PERIOD`, `STATUS_FOOTER_END_EMPTY_1-3`, `END_OK_1-3`, `GREEN_1-3`, `YELLOW_LIGHT_1-3`, `YELLOW_CUBBY_GREEN/BLUE`, `YELLOW_NONE_1-3`, `RED_CUBBY_GREEN/BLUE/YELLOW`, `RED_DEAD_1-3`, плюс Recovery `RECOVERY_DAILY_ACTIVE/OFFER`.
+- **Фразы:** `STATUS_ZONE_ATAS/FINISH/IN_LIMIT/CAN_MORE/ON_EDGE/CRITICAL`, `STATUS_REMAINING_FREE/ZERO`, `STATUS_OVERRUN`, `STATUS_SPENT`, `STATUS_RESERVES_HEADER`, `STATUS_BALANCE_TITLE/TODAY_TITLE/PERIOD_TITLE/REMAINING_PERIOD`, `STATUS_FOOTER_END_EMPTY_1-3`, `END_OK_1-3`, `GREEN_1-3`, `YELLOW_LIGHT_1-3`, `YELLOW_CUBBY_GREEN/BLUE`, `YELLOW_NONE_1-3`, `RED_CUBBY_GREEN/BLUE/YELLOW`, `RED_DEAD_1-3`, плюс Recovery `RECOVERY_DAILY_ACTIVE/OFFER`.
 - **Ветки:** зеркало утренней, но `footer` 3 варианта + `sim` ветки.
 
 ### 5. Recovery (временный режим поверх `Budget.daily_limit`)
@@ -51,7 +51,7 @@
 
 ### 8. Onboarding (`BudgetSetup` 2 шага)
 - **Вход:** `/start` → `not user → seed categories + ONBOARDING_START` / `user → WELCOME_BACK + RESTART`, `BudgetSetup.waiting_for_income → waiting_for_period_start → _finish_onboarding`.
-- **Фразы:** `ONBOARDING_START/RESTART`, `PERIOD_START_CHOICE/CUSTOM_PROMPT`, `ONBOARDING_PERIOD_DONE/MANDATORY_PROMPT/WISHLIST_PROMPT/ROUNDING_PROMPT`, `BUDGET_COMPLETE/STATUS_BUDGET_COMPLETE`, `ONBOARDING_HINT_SETTINGS`, `ONBOARDING_INCOME_ACCEPTED`, `PERIOD_UPDATED`, `GREETINGS` (3), `WELCOME_MENU/BACK`, `ERR_INVALID_NUMBER/TOO_MANY_RETRIES`, `BTN_SKIP/CANCEL/BACK`.
+- **Фразы:** `ONBOARDING_START/RESTART`, `PERIOD_START_CHOICE/CUSTOM_PROMPT`, `ONBOARDING_PERIOD_DONE/MANDATORY_PROMPT/WISHLIST_PROMPT/ROUNDING_PROMPT`, `STATUS_BUDGET_COMPLETE`, `ONBOARDING_HINT_SETTINGS`, `ONBOARDING_INCOME_ACCEPTED`, `PERIOD_UPDATED`, `GREETINGS` (3), `WELCOME_MENU/BACK`, `ERR_INVALID_NUMBER/TOO_MANY_RETRIES`, `BTN_SKIP/CANCEL/BACK`.
 - **Ветки:** FSM `income → period (Today/1-е/Другое → 1-31 clamp) → _finish_onboarding (saves budget + UserSettings rounding)`. `REPLY_MENU_COMMANDS` interrupt → `FSM_INTERRUPT_PERIOD`.
 
 ### 9. Rollover (`period_end+1` morning + `NewPeriodSetup`)
@@ -64,7 +64,7 @@
 - **Ветки:** `try parse_amount → ERR_INVALID_NUMBER + check_retry(3) → ERR_TOO_MANY_RETRIES + state.clear + get_main_menu_keyboard`, `MATH_ERROR → detail + 3 retry`, `was_corrected → ERR_MATH_CORRECTED + BTN_FIX_AMOUNT`.
 
 ### 11. Категории
-- **Фразы:** `CATEGORY_MANAGEMENT_TITLE/LIST_ACTIVE/ARCHIVED/EMPTY/DETAIL_HEADER/ARCHIVED_NOTE`, `CATEGORY_RENAME_PROMPT/RENAMED/ARCHIVED/UNARCHIVED`, `CATEGORY_DELETE_WARNING/MOVE_PROMPT/DELETED_MOVED/HARD/CONFIRM_PROMPT`, `CATEGORY_NOT_FOUND`, `CATEGORY_PICKER/CHANGED/CREATED`, `BTN_CATEGORY_RENAME/ARCHIVE/UNARCHIVE/DELETE/*`, `BTN_MANAGE_CATEGORIES`, `DEFAULT_CATEGORY`, `ERR_CATEGORY_*`, `NEW_CATEGORY_PROMPT`.
+- **Фразы:** `CATEGORY_LIST_EMPTY/DETAIL_HEADER/ARCHIVED_NOTE`, `CATEGORY_RENAME_PROMPT/RENAMED/ARCHIVED/UNARCHIVED`, `CATEGORY_DELETE_WARNING/MOVE_PROMPT/DELETED_MOVED/HARD/CONFIRM_PROMPT`, `CATEGORY_NOT_FOUND`, `CATEGORY_PICKER/CHANGED/CREATED`, `BTN_CATEGORY_RENAME/ARCHIVE/UNARCHIVE/DELETE/*`, `BTN_MANAGE_CATEGORIES`, `DEFAULT_CATEGORY`, `ERR_CATEGORY_*`, `NEW_CATEGORY_PROMPT`.
 - **Ветки:** `list → active/archived + is_archived suffix`, `detail → archived note if is_archived`, `rename → build_category_name + duplicate/len check`, `archive toggle`, `delete → 0 count → hard? else warning → move/hard/confirm`.
 
 ---
@@ -86,7 +86,10 @@ send_morning_reports (cron 08:00 MSK)
 │   │   └── else → YESTERDAY_OVER {spent,limit,over}
 │   ├── zone / btn_type:
 │   │   ├── if end_of_period and money<=0 → END_EMPTY (ZONE_END_EMPTY_1/2 random) → FRESH_START [RECALC_LIMIT]
-│   │   ├── elif end_of_period → END_OK (ZONE_END_OK_1/2) → REGULAR
+│   │   ├── elif end_of_period and overrun_today>0 → END_OVER (ZONE_END_OVER_1/2 random) → REGULAR
+│   │   ├── elif end_of_period and yesterday_ok and plan>=70% base → END_OK (END_OK/END_OK_1/2 random) → REGULAR
+│   │   ├── elif end_of_period and not yesterday_ok → END_YESTERDAY_OVERRUN → REGULAR
+│   │   ├── elif end_of_period → END_PLAN_SAGGED → REGULAR
 │   │   ├── elif pct_pred >80 → GREEN (ZONE_GREEN_1/2) → REGULAR
 │   │   ├── elif pct_pred >=51 → YELLOW_LIGHT (ZONE_YELLOW_LIGHT_1/2) → REGULAR
 │   │   ├── elif pct_pred >=26 → YELLOW_SIM_NONE (MORNING_YELLOW_SIM_NONE_1/2 + MORNING_YELLOW_BUDGET_NERVOUS) → REGULAR
@@ -197,14 +200,14 @@ check(amount,desc, message_id):
 
 - **Дубли:** `NEW_CATEGORY_PROMPT` 2 определения (строки 148 и 173) — одинаковый текст, мёртвая строка 173 (перезаписывает 148, без эффекта).
 - **Почти одинаковые тексты:** `EVENING_GREEN_1` vs `EVENING_GREEN_3` (оба `лимит {limit}, факт {spent}`) — разные сценарии, один смысл, стоит унифицировать тон.
-- **Мёртвые фразы (UNUSED 32):** `STATUS_PERIOD_NEGATIVE/POSITIVE/ZERO`, `STATUS_REMAINING_OK/STOP` (заменены на `REMAINING_FREE/ZERO + SPENT`), `ROUND_UP` (legacy округление, флаг off), `HINT_JUNK_CHARS` (не используется — только 4 других HINT), `BTN_ROUNDING_*` (UI скрыт), `PERIOD_SET_PERIOD` (не вызывается).
+- **Мёртвые фразы (UNUSED 4, резерв Recovery):** `BTN_RECOVERY_CHOOSE`, `RECOVERY_TAIL_LINE`, `RECOVERY_NEED_REPLAN`, `RECOVERY_BUDGET_REPLAN` — фича за флагом `RECOVERY_ENABLED`, код жив, поэтому тексты оставлены. Устаревшие 23 фразы удалены в U3 (2026-11-19).
 - **Одна фраза — много сценариев:** `BTN_BACK_MAIN` используется в 8 местах (morning, evening, status, categories), `ERR_INVALID_DATA` в 6, `NO_BUDGET` в 3 — нормально, но усложняет A/B тест.
 - **Выбор альтернативы:** везде `random.choice(list)` без весов, не `по условию` — равновероятно, не зависит от `pct` внутри зоны.
 
 ## Что нужно будет сделать на следующем этапе (без правок сейчас)
 
 1. **Удалить дубль** `NEW_CATEGORY_PROMPT` (оставить 1, проверить `categories.py:223` и `menu.py:1497` оба используют один).
-2. **Пометить UNUSED как deprecated** — `STATUS_PERIOD_*` 3, `ROUND_UP`, `HINT_JUNK_CHARS` — удалить или скрыть из CSV `user_facing=internal`.
+2. **UNUSED-фразы** — чистка выполнена в U3: 23 устаревшие удалены, 4 Recovery-фразы оставлены как резерв.
 3. **Унифицировать footers** — `STATUS_FOOTER_YELLOW_CUBBY_*` vs `MORNING_YELLOW_SIM_*` — вынести общий `CUBBY_GREEN_1/2` или оставить как 2 сценария с разным контекстом (утро vs статус) — решить.
 4. **Добавить весовые `random`** — если нужна вариативность не 50/50 (например, `EVENING_GREEN_1` чаще), заменить `random.choice` на `random.choices(weights)`.
 5. **Подготовить редакторский бэклог** — для каждой `STATUS_FOOTER_*` (3 варианта) и `MORNING_*` (2) собрать 3–5 вариантов tone-of-voice без изменения условий (как в ТЗ Recovery A-P уже 1 строка → расширить).

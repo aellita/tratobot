@@ -867,6 +867,7 @@ def _pick_status_footer(
                 random.choice(
                     [
                         phrases.STATUS_FOOTER_YELLOW_NONE_1.format(limit=f"{forecast:,}"),
+                        phrases.STATUS_FOOTER_YELLOW_NONE_2.format(limit=f"{forecast:,}"),
                         phrases.STATUS_FOOTER_YELLOW_NONE_3.format(limit=f"{forecast:,}"),
                     ]
                 ),
@@ -880,6 +881,7 @@ def _pick_status_footer(
             random.choice(
                 [
                     phrases.STATUS_FOOTER_RED_NONE_1.format(limit=f"{forecast:,}"),
+                    phrases.STATUS_FOOTER_RED_NONE_2.format(limit=f"{forecast:,}"),
                     phrases.STATUS_FOOTER_RED_NONE_3.format(limit=f"{forecast:,}"),
                 ]
             ),

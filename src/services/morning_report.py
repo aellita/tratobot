@@ -110,12 +110,6 @@ def _select_morning_zone(
     return "RED_DEAD"
 
 
-def _build_recovery_morning_extra(tg_id: int) -> list[list[InlineKeyboardButton]] | None:
-    if not settings.RECOVERY_ENABLED:
-        return None
-    return None
-
-
 def _build_morning_keyboard(btn_type: str) -> InlineKeyboardMarkup | None:
     has_reply_kb = settings.EXPENSE_SIMPLE_CHECK
     base: list[list[InlineKeyboardButton]] = []
@@ -288,8 +282,24 @@ async def send_morning_reports(bot: Bot):
                         ]
                     )
                 elif zone == "END_OK":
-                    zone_text = phrases.END_OK.format(
-                        days=days_left, days_word=_plural_days(days_left)
+                    zone_text = random.choice(
+                        [
+                            phrases.END_OK.format(
+                                days=days_left,
+                                days_word=_plural_days(days_left),
+                                money=money_for_life,
+                            ),
+                            phrases.END_OK_1.format(
+                                days=days_left,
+                                days_word=_plural_days(days_left),
+                                money=money_for_life,
+                            ),
+                            phrases.END_OK_2.format(
+                                days=days_left,
+                                days_word=_plural_days(days_left),
+                                money=money_for_life,
+                            ),
+                        ]
                     )
                 elif zone == "END_YESTERDAY_OVERRUN":
                     overrun_yesterday = int(round(max(yesterday_spent - plan_yesterday, 0)))
