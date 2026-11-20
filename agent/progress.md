@@ -7,7 +7,7 @@
 ## Текущий статус и фокус
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (включён с 2026-09-05, `RECOVERY_ENABLED=True`)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B24, U1–U3** (Bug Audit 2026-11-06 + визуал, утренний отчёт и UX-статус).  
-**Готово:** **G1** — график трат по дням в нативном виджете + Tier 1 (641 тест).  
+**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED` (684 теста).  
 **Активно:** месячный отчёт — **M1–M4** готовы; дальше M5 → M6.  
 **Ближайшее:** «Конверты» (обязательные как отдельный конверт), затем M5/M6. G2 (снапшоты дневных лимитов, в т.ч. в утренней строке «Вчера»), G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
 **В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям.  
@@ -768,25 +768,29 @@ parse_expr → parse_term → parse_factor
 
 ---
 
-### ✅ G1: График «Траты по дням» в месячном отчёте (2026-11-19) — ✅ Готово
+### ✅ G1: График «Траты по дням» в месячном отчёте (2026-11-20) — ✅ Готово
 
-**Продукт:** барчарт трат по дням + пунктир базового лимита (`get_base_daily_limit`), Tier 1 тап-тултип (дата, потрачено, лимит, разница), haptic `selectionChanged`, цвета `--tg-theme-*`, виджет под rich-отчётом.
+**Продукт:** PNG-карточка «Financial Bro» как основной путь доставки; нативный виджет (барчарт + Tier 1 тап-тултип) остаётся за флагом `MONTHLY_WIDGET_ENABLED=False` до возврата виджетов. В активном периоде — только прошедшие дни включая сегодня; закрытый период — все 28–31 день. PNG не отправляет суммы третьим лицам и работает без Telegram Widget API.
 
 **Реализация:**
-- `src/services/monthly_chart.py` — `build_chart_data()` (SQL `date < next_day_start`, `period_start_day > 1` support), `build_chart_state()` (компактный JSON: `m`, `s`, `d[]`, `lim`, `a` ≤ 1024 байт), `CHART_WIDGET_HTML` (inline SVG/JS ≤ 4096 байт zlib, `* { box-sizing }`, `position: relative`, initial `chatData` render).
-- `src/bot/rich_api.py` — `send_widget()` / `edit_widget_data()` с retry+backoff (3 попытки, 0.5/1/2s), shared aiohttp session, `disable_notification: true`, debug-логи на успех.
-- `src/bot/widget_cache.py` — shared cache ключ `(telegram_id, chat_id)` (поддержка групп), per-user `asyncio.Lock`, фолбэк `edit → send`.
-- `src/bot/handlers/monthly_summary.py` — `_clear_widget_msg(tg_id, chat_id)` в `cmd_monthly_report` (свежий виджет внизу), `edit_widget_data` только для навигации стрелками.
-- `src/services/morning_report.py` — виджет при авто-ролловере, использует `widget_cache.set_widget_msg` (layer separation, не импортирует handlers).
+- `src/services/monthly_chart.py` — единая нормализация дат на границе сервиса (`date`), `_chart_window()`, `build_chart_data()`, `build_chart_state()` (компактный JSON ≤ 1024 байт), `build_monthly_card_input()` (реальные расходы, прошлый период, лимит), PNG-рендер 900×620, `CHART_WIDGET_HTML` (≤ 4096 байт zlib) за флагом.
+- `src/bot/chart_delivery.py` — единая доставка: PNG через `send_or_update_photo` (edit вместо спама), виджет только при `MONTHLY_WIDGET_ENABLED`; fallback widget → PNG.
+- `src/bot/handlers/monthly_summary.py` — без ручного `passed_days`/`date - datetime`; навигация обновляет существующее фото, `menu_monthly_report` — свежее внизу.
+- `src/services/morning_report.py` — авто-ролловер использует тот же `send_monthly_chart`.
+- `src/bot/rich_api.py` — нормализованный контракт, shared aiohttp session с закрытием на shutdown, обработка 429.
+- `src/bot/widget_cache.py` — `send_or_update_photo(..., force_new=...)`, per-user lock, edit → send fallback.
+- `src/core/config.py` / `.env.example` — `MONTHLY_WIDGET_ENABLED` (default `False`).
 
-**Критичные фиксы (review):**
-1. HTML: `* { box-sizing: border-box }`, `body { position: relative }`
-2. SQL: `Expense.date < next_day_start` (включает траты последнего дня с любым временем)
-3. State: поле `s` = `period_start.strftime("%Y-%m-%d")` для корректных дат при `period_start_day > 1`
-4. JS: `layout` объект решает scope-проблемы `w`, `barH` в `showTooltip`; tooltip clamping horizontal `[55, w-55]`, vertical (если `top < 42` — под столбиком)
-5. Retry: exponential backoff + shared session в `rich_api.py`
-6. Cache key: `(telegram_id, chat_id)` вместо `tg_id` только
+**Критичные фиксы (review G1):**
+1. `date - datetime` в хендлерах → нормализация дат на границе сервиса.
+2. `float(async get_base_daily_limit(...))` → `await`.
+3. `datetime.isoformat()` → `date.fromisoformat()` → `_date_str()` / `_parse_date()`.
+4. dict-контракт виджета → нормализованный `message_id`.
+5. `expenses` dict vs ORM → единый `CardExpense` (dict) во всём рендере.
+6. JS scope `w`/`barH` в `showTooltip` → локальные `svgW`/`barRect.height`.
+7. `passed_days = min(30, ...)` → `len(daily_spent)` из сервиса.
+8. Кэш писался, но не читался → `send_or_update_photo` / `edit_widget_data` подключены.
 
-**Тесты:** `pytest 641 passed`, `ruff check .` clean. Widget HTML: 3067 байт zlib (≤ 4096). ChartState JSON: 265 байт для 31 дня (≤ 1024).
+**Тесты:** `pytest 684 passed`, `ruff check .` clean. PNG 900×620, пустой/одиночный/31-дневный период, непустые `expenses` и прошлый период, интеграция `build_monthly_card_input` → рендер, PNG-primary/widget-flag/fallback, кэш фото, `close_http_session`.
 
-**Файлы:** `src/services/monthly_chart.py`, `src/bot/rich_api.py`, `src/bot/widget_cache.py`, `src/bot/handlers/monthly_summary.py`, `src/services/morning_report.py`.
+**Известные некритичные (отложены):** слоистость `morning_report → bot.chart_delivery`; `is_period_active` vs `_chart_window` при `period_start_day=31` в коротких месяцах (2 дня); ручная проверка виджета после возврата; `_user_index` без `chat_id`; дерево проекта в README без `src/assets/fonts/`.

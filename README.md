@@ -91,6 +91,7 @@ Docker: `python:3.12-slim`, `CMD ["python", "-m", "src.bot.main"]`. Деплой
 | `ADMIN_CHAT_ID` | — | Telegram ID админа для traceback'ов и `user_id` при ошибках |
 | `EXPENSE_SIMPLE_CHECK` | `True` | Reply-меню внизу чата вместо inline-меню |
 | `RECOVERY_ENABLED` | `True` | Kill-switch режима восстановления лимита |
+| `MONTHLY_WIDGET_ENABLED` | `False` | Нативные Telegram-виджеты откатаны; PNG — основной путь. `True` возвращает виджет |
 
 ### Аудит схемы перед деплоем
 
@@ -107,7 +108,7 @@ echo $?   # 0 — чисто, 1 — есть critical, 2 — не удалось
 
 ## Тесты и качество
 
-**641 тест** (pytest + pytest-asyncio, hermetic in-memory SQLite).
+**684 теста** (pytest + pytest-asyncio, hermetic in-memory SQLite).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -133,10 +134,14 @@ tratobot/
 │   │   ├── handlers/   # menu.py, history.py, categories.py, evening_flow.py
 │   │   ├── keyboards.py
 │   │   ├── middleware.py
+│   │   ├── chart_delivery.py
+│   │   ├── rich_api.py
+│   │   ├── widget_cache.py
 │   │   ├── scheduler.py
 │   │   └── main.py
+│   ├── assets/fonts/   # Nunito (variable TTF) для PNG-карточки
 │   ├── services/        # budget, expense, categorization, category, morning/evening report,
-│   │                    # monthly_report, recovery, goal, user
+│   │                    # monthly_report, monthly_chart, recovery, goal, user
 │   ├── db/
 │   │   ├── models/
 │   │   └── database.py
@@ -144,7 +149,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 641 тест
+├── tests/               # 684 теста
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile

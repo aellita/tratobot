@@ -83,6 +83,9 @@ async def on_shutdown():
     stop_scheduler()
     await close_db()
     await bot.session.close()
+    from .rich_api import close_http_session
+
+    await close_http_session()
 
 
 async def main():

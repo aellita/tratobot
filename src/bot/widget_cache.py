@@ -34,6 +34,7 @@ def _cache_key(telegram_id: int, chat_id: int) -> tuple[int, int]:
 
 # ─── Widget cache (legacy) ───
 
+
 def set_widget_msg(telegram_id: int, chat_id: int, msg_id: int) -> None:
     """Store widget message_id for user in specific chat."""
     _widget_cache[_cache_key(telegram_id, chat_id)] = msg_id
@@ -52,6 +53,7 @@ def clear_widget_msg(telegram_id: int, chat_id: int) -> None:
 
 
 # ─── Photo cache (PNG card) ───
+
 
 def set_photo_msg(telegram_id: int, chat_id: int, msg_id: int) -> None:
     """Store photo message_id for user in specific chat."""
@@ -75,6 +77,7 @@ async def send_or_update_photo(
     telegram_id: int,
     chat_id: int,
     png_bytes: bytes,
+    force_new: bool = False,
 ) -> int | None:
     """Send new photo or update existing one with proper locking and fallback.
 
@@ -83,12 +86,15 @@ async def send_or_update_photo(
         telegram_id: User ID
         chat_id: Chat ID
         png_bytes: PNG image bytes
+        force_new: Ignore the cached message and send a fresh photo
 
     Returns:
         message_id of sent/updated photo, or None on failure
     """
     lock = _get_lock(telegram_id)
     async with lock:
+        if force_new:
+            _photo_cache.pop((telegram_id, chat_id), None)
         cached_msg_id = get_photo_msg(telegram_id, chat_id)
         if cached_msg_id:
             try:
@@ -97,18 +103,15 @@ async def send_or_update_photo(
                     message_id=cached_msg_id,
                     media=InputMediaPhoto(
                         media=BufferedInputFile(png_bytes, filename="report.png")
-                    )
+                    ),
                 )
                 logger.debug("Photo updated for %s in chat %s", telegram_id, chat_id)
                 return cached_msg_id
             except TelegramBadRequest as e:
                 if "message is not modified" in str(e):
                     return cached_msg_id
-                if "message to edit not found" in str(e) or "can't parse" in str(e):
-                    logger.warning("Photo edit failed (message deleted?), clearing cache: %s", e)
-                    _photo_cache.pop((telegram_id, chat_id), None)
-                else:
-                    raise
+                logger.warning("Photo edit failed, sending a new one: %s", e)
+                _photo_cache.pop((telegram_id, chat_id), None)
         # Send new photo
         msg = await bot.send_photo(
             chat_id=chat_id,

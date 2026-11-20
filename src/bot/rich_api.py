@@ -29,6 +29,15 @@ async def _get_http_session() -> aiohttp.ClientSession:
         return _http_session
 
 
+async def close_http_session() -> None:
+    """Close the shared HTTP session (call on bot shutdown)."""
+    global _http_session
+    async with _http_session_lock:
+        if _http_session is not None and not _http_session.closed:
+            await _http_session.close()
+        _http_session = None
+
+
 async def _post_with_retry(url: str, payload: dict, max_retries: int = 3) -> dict | None:
     """POST with exponential backoff retry for transient errors."""
     session = await _get_http_session()
@@ -38,17 +47,27 @@ async def _post_with_retry(url: str, payload: dict, max_retries: int = 3) -> dic
                 data = await resp.json()
                 if data.get("ok"):
                     return data["result"]
+                if resp.status == 429:
+                    retry_after = data.get("parameters", {}).get("retry_after", 1)
+                    logger.warning("Rate limited, retrying after %ss", retry_after)
+                    await asyncio.sleep(retry_after)
+                    continue
                 # Don't retry client errors (4xx)
                 if resp.status < 500:
                     logger.warning("API error (no retry): %s", data)
                     return None
         except Exception as e:
-            logger.warning("Request failed (attempt %d/%d): %s", attempt + 1, max_retries, e)
+            logger.warning(
+                "Request failed (attempt %d/%d): %s",
+                attempt + 1,
+                max_retries,
+                type(e).__name__,
+            )
 
         if attempt < max_retries - 1:
-            await asyncio.sleep(0.5 * (2 ** attempt))  # 0.5s, 1s, 2s
+            await asyncio.sleep(0.5 * (2**attempt))  # 0.5s, 1s, 2s
 
-    logger.error("All retries exhausted for %s", url)
+    logger.error("All retries exhausted for %s", url.rsplit("/", 1)[-1])
     return None
 
 
@@ -98,42 +117,6 @@ async def edit_widget_data(
     if result:
         logger.debug("editMessageWidgetData ok for %s, message_id=%s", chat_id, message_id)
     return result
-
-
-async def send_widget_or_fallback(
-    bot: Any,
-    chat_id: int,
-    html: str,
-    state_json: str,
-    png_bytes: bytes,
-) -> tuple[str, Any | None]:
-    """Try sendWidget, fallback to PNG photo on failure.
-
-    Returns:
-        ("widget", message) if widget succeeded
-        ("png", message) if fell back to PNG
-        ("error", None) if both failed
-    """
-    # Try widget first
-    widget_result = await send_widget(bot, chat_id, html, state_json)
-    if widget_result:
-        return "widget", widget_result
-
-    # Fallback to PNG
-    from aiogram import Bot as BotType
-    from aiogram.types import BufferedInputFile
-    if isinstance(bot, BotType):
-        try:
-            msg = await bot.send_photo(
-                chat_id=chat_id,
-                photo=BufferedInputFile(png_bytes, filename="report.png"),
-                disable_notification=True,
-            )
-            logger.warning("Widget blocked, fallback to PNG for %s", chat_id)
-            return "png", msg
-        except Exception as e:
-            logger.error("PNG fallback also failed for %s: %s", chat_id, e)
-    return "error", None
 
 
 async def edit_rich_message(
@@ -228,13 +211,13 @@ def _has_inline_keyboard(reply_markup: Any) -> bool:
 
 async def _post(url: str, payload: dict) -> dict | None:
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as resp:
-                data = await resp.json()
-                if not data.get("ok"):
-                    logger.warning("Rich API error: %s", data)
-                    return None
-                return data["result"]
+        session = await _get_http_session()
+        async with session.post(url, json=payload) as resp:
+            data = await resp.json()
+            if not data.get("ok"):
+                logger.warning("Rich API error: %s", data)
+                return None
+            return data["result"]
     except Exception as e:
-        logger.error("Rich API request failed: %s", e, exc_info=True)
+        logger.error("Rich API request failed: %s", type(e).__name__, exc_info=True)
         return None

@@ -173,20 +173,11 @@ async def send_morning_reports(bot: Bot):
                     if user_settings and not user_settings.notifications_enabled:
                         continue
 
-                import json
-
+                from ..bot.chart_delivery import send_monthly_chart
                 from ..bot.keyboards import get_rollover_keyboard
-                from ..bot.rich_api import send_rich_message, send_widget_or_fallback
-                from ..bot.widget_cache import set_photo_msg, set_widget_msg
+                from ..bot.rich_api import send_rich_message
                 from ..db.models.models import Budget as BudgetModel
                 from ..utils import phrases
-                from .monthly_chart import (
-                    CHART_WIDGET_HTML,
-                    MonthlyCardInput,
-                    build_chart_data,
-                    build_chart_state,
-                    render_monthly_card_png,
-                )
                 from .monthly_report import (
                     build_summary_data,
                     format_summary_text,
@@ -201,68 +192,38 @@ async def send_morning_reports(bot: Bot):
                     result = await session.execute(
                         select(BudgetModel).where(BudgetModel.telegram_id == tg_id)
                     )
-                    for b in result.scalars().all():
-                        _, pe = get_period_dates(b)
-                        if today == pe.date() + timedelta(days=1):
-                            data = await build_summary_data(tg_id, b)
-                            msg = format_summary_text(data)
-                            await send_rich_message(bot, tg_id, msg)
+                    budgets = list(result.scalars().all())
 
-                            # Send chart with fallback (widget → PNG)
-                            try:
-                                chart_data = await build_chart_data(tg_id, b)
-                                if chart_data:
-                                    chart_state = build_chart_state(tg_id, b, chart_data)
-                                    state_json = json.dumps(chart_state, separators=(",", ":"))
+                for b in budgets:
+                    _, pe = get_period_dates(b)
+                    if today != pe.date() + timedelta(days=1):
+                        continue
 
-                                    # Render PNG for fallback
-                                    period_start, period_end = get_period_dates(b)
-                                    current_income = float(b.total_income + b.added_income)
+                    data = await build_summary_data(tg_id, b)
+                    msg = format_summary_text(data)
+                    await send_rich_message(bot, tg_id, msg)
 
-                                    input_data = MonthlyCardInput(
-                                        period_start=period_start,
-                                        period_end=period_end,
-                                        period_start_day=b.period_start_day or 1,
-                                        daily_spent=[round(d["spent"], 2) for d in chart_data],
-                                        daily_limit=0.0,  # will be computed in render
-                                        total_spent=sum(d["spent"] for d in chart_data),
-                                        expenses=[],  # not needed for rollover
-                                        expenses_count=0,
-                                        current_income=current_income,
-                                        prev_income=0.0,
-                                    )
-                                    png_bytes = await asyncio.to_thread(
-        render_monthly_card_png, input_data
-    )
+                    # Send chart (PNG primary, widget behind flag)
+                    try:
+                        await send_monthly_chart(bot, tg_id, tg_id, b, force_new=True)
+                    except Exception as e:
+                        logger.warning("Rollover chart send failed for %s: %s", tg_id, e)
 
-                                    # Try widget → fallback to PNG
-                                    method, msg = await send_widget_or_fallback(
-                                        bot, tg_id, CHART_WIDGET_HTML, state_json, png_bytes
-                                    )
-                                    if method == "widget" and msg:
-                                        set_widget_msg(tg_id, tg_id, msg.message_id)
-                                        logger.debug("Rollover monthly widget sent for %s", tg_id)
-                                    elif method == "png" and msg:
-                                        set_photo_msg(tg_id, tg_id, msg.message_id)
-                                        logger.debug("Rollover monthly PNG sent for %s", tg_id)
-                            except Exception as e:
-                                logger.warning("Rollover chart send failed for %s: %s", tg_id, e)
-
-                            avg = await get_average_expenses(tg_id)
-                            offer = phrases.ROLLOVER_OFFER.format(
-                                old_date=b.period_start_day or 1,
-                                avg=int(avg) if avg > 0 else 0,
-                                old_income=int(b.total_income),
-                            )
-                            await bot.send_message(
-                                tg_id,
-                                offer,
-                                reply_markup=get_rollover_keyboard(b.id),
-                            )
-                            budget_id_to_expire = b.id
-                            logger.info(f"Ежемесячный отчёт и rollover отправлены {tg_id}")
-                            sent_summary = True
-                            break
+                    avg = await get_average_expenses(tg_id)
+                    offer = phrases.ROLLOVER_OFFER.format(
+                        old_date=b.period_start_day or 1,
+                        avg=int(avg) if avg > 0 else 0,
+                        old_income=int(b.total_income),
+                    )
+                    await bot.send_message(
+                        tg_id,
+                        offer,
+                        reply_markup=get_rollover_keyboard(b.id),
+                    )
+                    budget_id_to_expire = b.id
+                    logger.info(f"Ежемесячный отчёт и rollover отправлены {tg_id}")
+                    sent_summary = True
+                    break
 
                 if sent_summary:
                     if settings.RECOVERY_ENABLED and budget_id_to_expire is not None:

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     ADMIN_CHAT_ID: int | None = None
     EXPENSE_SIMPLE_CHECK: bool = True
     RECOVERY_ENABLED: bool = True
+    # Native Telegram widgets are rolled back for security reasons.
+    # PNG is the primary delivery path; set to True to re-enable widgets.
+    MONTHLY_WIDGET_ENABLED: bool = False
 
     RECOVERY_TRIGGER: float = 0.85
     RECOVERY_FAST: float = 0.60

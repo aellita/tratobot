@@ -557,7 +557,7 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 - [x] ✅ **M4** — «Сэкономлено/Перерасход» от доступного лимита, без ярлыка «Зона». База `available = total_income − mandatory_payments − black_day_fund`; `compute_saved_state()` округляет остаток до выбора тона (70/90/100), `available ≤ 0` → причина без цифры. Строки `💵 Доход` и `➕ Из них добавлено`. Новый счётчик `Budget.added_income` + миграция; `save_budget` обнуляет, правки обязательных/кубышки — нет. 6 утверждённых фраз, старые `MONTHLY_ZONE_*`/`MONTHLY_BUDGET_LABEL` удалены. Тесты: 594 passed.
 - [ ] ⏳ **M5** — убрать дублирующий `get_period_label()`.
 - [ ] ⏳ **M6** — тесты на `build_summary_data`: `avg_day`, зона, тотем, порядок категорий. Сюда же — интеграционная связка `build_summary_data` → `compute_avg_day` (review M1, 2026-11-16): нужен патч `src.services.monthly_report.async_session_maker` в `tests/conftest.py`.
-- [ ] ⏳ **G1** — график в месячном отчёте + Tier 1 (см. раздел «График в месячном отчёте» ниже).
+- [x] ✅ **G1** — график в месячном отчёте: PNG-карточка (основной путь) + Tier 1 виджет за `MONTHLY_WIDGET_ENABLED` (см. раздел «График в месячном отчёте» ниже).
 
 ### Утренние фразы, конверты и остаток `free_money`
 
@@ -582,29 +582,38 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 
 > UX-решения зафиксированы 2026-11-16: траты по дням + пунктир базового лимита, нативный HTML-виджет, отдельное сообщение под rich-отчётом, Tier 1 — сразу в G1.
 
-### ✅ G1: график «Траты по дням» + Tier 1 (нативный виджет) — ✅ Готово
+### ✅ G1: график «Траты по дням» + Tier 1 (PNG основной, виджет за флагом) — ✅ Готово
 
-**Продукт:** столбики трат по дням периода и пунктир базового дневного лимита (`get_base_daily_limit`). Дни выше лимита — акцентным цветом темы. В активном периоде — только прошедшие дни включая сегодня. Внешняя ссылка и PNG не используются: QuickChart отдаёт суммы третьей стороне, PNG требует зависимостей и не адаптируется к теме.
+**Продукт:** PNG-карточка «Financial Bro» (900×620) как основной путь: столбики трат по дням, пунктир базового дневного лимита (`get_base_daily_limit`), дни выше лимита — акцентным цветом, инсайты (пик, серия в лимите, топ-3 дня, ночной дожор и т.п.). В активном периоде — только прошедшие дни включая сегодня; закрытый — все 28–31 день. Нативный HTML-виджет + Tier 1 тап-тултип сохранён в коде, но выключен флагом `MONTHLY_WIDGET_ENABLED=False` до возврата виджетов. PNG не отправляет суммы третьим лицам.
 
 **Реализация:**
-- `src/services/monthly_chart.py` — `build_chart_data()` (агрегация трат по дням в Python, без диалектных `date()`), `build_chart_state()` (JSON ≤ 1024 байт, компактный формат: `m`, `s`, `d[]`, `lim`, `a`), `CHART_WIDGET_HTML` (inline SVG/JS, читает `TelegramWidget.chatData`, перерисовка по `chatDataChanged`).
-- `src/bot/rich_api.py` — `send_widget()` / `edit_widget_data()` поверх raw HTTP с **retry + backoff** (3 попытки), shared aiohttp session, `disable_notification: true`; ошибки логируются (WARNING) и не ломают отчёт; debug-логи на успех.
-- `src/bot/widget_cache.py` — shared widget cache **ключ `(telegram_id, chat_id)`** (поддержка групп), per-user `asyncio.Lock` для предотвращения race condition, фолбэк `edit → send` при ошибке.
-- `monthly_summary.py` — `_clear_widget_msg(tg_id, chat_id)` в `cmd_monthly_report` (свежий виджет внизу чата), `edit_widget_data` только для навигации стрелками (`monthly_prev/next/refresh`).
-- `morning_report.py` — виджет после авто-ролловера, использует `widget_cache.set_widget_msg` (layer separation, не импортирует handlers).
-- Цвета только из `--tg-theme-*`, высота ~230 px, подпись `📊 Траты по дням · 1–30 сен`, лимит 4 КБ после zlib (3067 байт).
+- `src/services/monthly_chart.py` — `_chart_window()`, `build_chart_data()` (агрегация по дням), `build_chart_state()` (JSON ≤ 1024 байт: `m`, `s`, `d[]`, `lim`, `a`), `build_monthly_card_input()` (реальные расходы, прошлый период, лимит), `render_monthly_card_png()`, `CHART_WIDGET_HTML` (inline SVG/JS ≤ 4096 байт zlib).
+- `src/bot/chart_delivery.py` — единая доставка: PNG через `send_or_update_photo` (edit вместо спама), виджет только при флаге; fallback widget → PNG.
+- `src/bot/rich_api.py` — `send_widget()` / `edit_widget_data()` с retry+backoff, shared aiohttp session (закрывается на shutdown), обработка 429.
+- `src/bot/widget_cache.py` — shared cache ключ `(telegram_id, chat_id)`, per-user `asyncio.Lock`, `send_or_update_photo(..., force_new=...)`.
+- `monthly_summary.py` — без ручного `passed_days` и `date - datetime`; навигация обновляет существующее фото, `menu_monthly_report` — свежее внизу.
+- `morning_report.py` — авто-ролловер использует тот же `send_monthly_chart`.
+- `src/core/config.py` / `.env.example` — `MONTHLY_WIDGET_ENABLED` (default `False`).
 
-**Tier 1 (входит в G1):** тап по столбику показывает тултип — дата, потрачено, лимит, разница; выбранный столбик подсвечен, повторный тап снимает выбор. Невидимые зоны тапа на всю высоту, haptic `selectionChanged`, подсказка «нажми на день». Tooltip clamping: horizontal `[55, w-55]`, vertical (если `top < 42` — показываем под столбиком). Всё локально в виджете, без `allow_queries`.
+**Tier 1 (виджет, за флагом):** тап по столбику показывает тултип — дата, потрачено, лимит, разница; выбранный столбик подсвечен, повторный тап снимает выбор. Tooltip clamping: horizontal `[55, svgW-55]`, vertical (если `top < 42` — под столбиком). Всё локально, без `allow_queries`.
 
-**Критичные фиксы (review):**
-1. HTML: `* { box-sizing: border-box }`, `position: relative` на body
-2. SQL: фильтр `Expense.date < next_day_start` (включает траты последнего дня с любым временем)
-3. State: поле `s` (period_start date) для корректных дат при `period_start_day > 1`
-4. JS: `layout` объект решает scope-проблемы `w`, `barH` в `showTooltip`
-5. Retry: exponential backoff (0.5s/1s/2s) + shared session в `rich_api.py`
-6. Cache key: `(telegram_id, chat_id)` вместо `tg_id` только
+**Критичные фиксы (review G1):**
+1. `date - datetime` в хендлерах → нормализация дат на границе сервиса.
+2. `float(async get_base_daily_limit(...))` → `await`.
+3. `datetime.isoformat()` → `date.fromisoformat()` → `_date_str()` / `_parse_date()`.
+4. dict-контракт виджета → нормализованный `message_id`.
+5. `expenses` dict vs ORM → единый `CardExpense` (dict) во всём рендере.
+6. JS scope `w`/`barH` в `showTooltip` → локальные `svgW`/`barRect.height`.
+7. `passed_days = min(30, ...)` → `len(daily_spent)` из сервиса.
+8. Кэш писался, но не читался → `send_or_update_photo` / `edit_widget_data` подключены.
 
-**Тесты:** агрегация по дням (несколько трат, пустые дни, `is_deleted`, границы периода), активный период и кэп, `limit <= 0`, ноль трат, `over_days`; состояние ≤ 1024 байт (265 байт для 31 дня); HTML ≤ 4096 байт после zlib (3067 байт); payload `sendWidget`/`editMessageWidgetData`; интеграция «send → edit» в `monthly_summary`. Ручная проверка: светлая/тёмная тема, высота, тап по дню. `pytest 641 passed`, `ruff check .` clean.
+**Известные некритичные замечания (G1, не блокируют релиз):**
+- Слоистость: `morning_report` (сервис) импортирует `..bot.chart_delivery` (транспорт) — ленивый импорт работает, но нарушает направление зависимостей `bot → services`. Отложить до отдельного рефакторинга.
+- `is_period_active` vs `_chart_window` расходятся при `period_start_day=31` в коротких месяцах (2 дня в месяц: первый и последний день «схлопнутого» периода). Исправить через `period_dates` в `is_period_active`.
+- Нативный виджет откатан флагом `MONTHLY_WIDGET_ENABLED=False`; ручная проверка в Telegram (iOS/Android/Desktop/Web, тултипы, haptic, 4 КБ zlib) — после возврата виджетов.
+- Утренняя рассылка держит DB-сессию во время I/O — вынесено (фикс применён); остаточные места держать под наблюдением.
+- `_user_index` в `monthly_summary` keyed только по `telegram_id` (без `chat_id`) — предсуществующее, для лички не проявляется.
+- `README.md` дерево проекта не перечисляет `src/assets/fonts/` (runtime-зависимость PNG) — можно добавить при следующем обновлении доков.
 
 ### G2: хранить дневные лимиты каждого дня
 
