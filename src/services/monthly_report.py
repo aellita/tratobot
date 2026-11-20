@@ -14,6 +14,33 @@ from ..db.models.models import (
 from ..utils import phrases
 from ..utils.helpers import get_msk_now, period_total_days
 
+# ─── Russian month helpers ───
+_RUS_MONTHS = [
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря"
+]
+_RUS_MONTHS_GENITIVE = [
+    "январь", "февраль", "март", "апрель", "май", "июнь",
+    "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"
+]
+
+
+def _format_rus_month(dt: datetime) -> str:
+    """Return month name in genitive case (января, февраля...)."""
+    return _RUS_MONTHS[dt.month - 1]
+
+
+def _format_rus_month_nominative(dt: datetime) -> str:
+    """Return month name in nominative case (январь, февраль...)."""
+    return _RUS_MONTHS_GENITIVE[dt.month - 1]
+
+
+def _format_rus_period(start: datetime, end: datetime, start_day: int) -> str:
+    """Format period in Russian."""
+    if start_day == 1:
+        return f"{_format_rus_month_nominative(start)} {start.year}"
+    return f"{start.day} {_format_rus_month(start)} — {end.day} {_format_rus_month(end)} {end.year}"
+
 TOTEM_MAP: list[tuple[list[str], str, str, str]] = [
     (
         ["транспорт", "активности", "такси", "билеты"],
@@ -253,11 +280,13 @@ def format_summary_text(data: dict, label: str = "") -> str:
     period_start = data["period_start"]
     active = data["active"]
 
-    month_str = period_start.strftime("%B %Y").lower()
-    header_text = label or month_str.capitalize()
+    period_label = _format_rus_period(
+        period_start, data["period_end"], budget.period_start_day or 1
+    )
+    header_text = label or period_label
     if active:
         header_text += phrases.MONTHLY_IN_PROGRESS.format(
-            period=period_start.strftime("%B").lower()
+            period=_format_rus_month(period_start)
         )
 
     parts: list[str] = [f"<h2>{phrases.MONTHLY_HEADER.format(period_label=_esc(header_text))}</h2>"]
@@ -273,11 +302,11 @@ def format_summary_text(data: dict, label: str = "") -> str:
         if active:
             if is_no_category_top:
                 egg = phrases.MONTHLY_EGG_TOTEM_NO_CATEGORY.format(
-                    period=period_start.strftime("%B").lower()
+                    period=_format_rus_month(period_start)
                 )
             else:
                 egg = phrases.MONTHLY_EGG_TOTEM.format(
-                    period=period_start.strftime("%B").lower(),
+                    period=_format_rus_month(period_start),
                     top_cat=top_cat,
                     totem_name=data["totem_name"],
                 )

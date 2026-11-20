@@ -100,6 +100,42 @@ async def edit_widget_data(
     return result
 
 
+async def send_widget_or_fallback(
+    bot: Any,
+    chat_id: int,
+    html: str,
+    state_json: str,
+    png_bytes: bytes,
+) -> tuple[str, Any | None]:
+    """Try sendWidget, fallback to PNG photo on failure.
+
+    Returns:
+        ("widget", message) if widget succeeded
+        ("png", message) if fell back to PNG
+        ("error", None) if both failed
+    """
+    # Try widget first
+    widget_result = await send_widget(bot, chat_id, html, state_json)
+    if widget_result:
+        return "widget", widget_result
+
+    # Fallback to PNG
+    from aiogram import Bot as BotType
+    from aiogram.types import BufferedInputFile
+    if isinstance(bot, BotType):
+        try:
+            msg = await bot.send_photo(
+                chat_id=chat_id,
+                photo=BufferedInputFile(png_bytes, filename="report.png"),
+                disable_notification=True,
+            )
+            logger.warning("Widget blocked, fallback to PNG for %s", chat_id)
+            return "png", msg
+        except Exception as e:
+            logger.error("PNG fallback also failed for %s: %s", chat_id, e)
+    return "error", None
+
+
 async def edit_rich_message(
     bot: Any,
     chat_id: int,

@@ -84,6 +84,7 @@ def _summary_data(total_spent: float = 80000.0) -> dict:
             daily_limit=3000.0,
             mandatory_payments=10000.0,
             black_day_fund=0.0,
+            period_start_day=1,
         ),
         "active": False,
         "period_start": datetime(2026, 9, 1),
@@ -266,7 +267,7 @@ class TestM3NoCategorySorting:
             }
         )
         text = format_summary_text(data)
-        assert "Твой тотем за september ещё зреет" in text
+        assert "Твой тотем за сентября ещё зреет" in text
         assert "Пока там в топе «Без категории»" in text
         assert "Разбери эти траты, бро — и тотем вылупится точным" in text
         assert "лидируешь в категории" not in text  # old template not used

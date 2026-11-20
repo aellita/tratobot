@@ -16,6 +16,7 @@ def _data() -> dict:
             daily_limit=3000.0,
             mandatory_payments=0.0,
             black_day_fund=0.0,
+            period_start_day=1,
         ),
         "active": False,
         "period_start": datetime(2026, 9, 1),

@@ -1,8 +1,10 @@
-"""Monthly chart widget: compact data aggregation, state JSON, and inline SVG/JS widget HTML."""
+"""Monthly chart: PNG card rendering (Financial Bro style) + Widget state/HTML."""
 
+import functools
 import json
 import zlib
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from typing import TypedDict
 
 from sqlalchemy import func, select
@@ -11,33 +13,23 @@ from ..db.database import async_session_maker
 from ..db.models.models import Budget, Expense
 from ..utils.helpers import get_msk_now, period_dates, period_total_days
 
+# ──────────────────────────────────────────────────────────────────────
+# Widget state / HTML (kept for fallback compatibility)
+# ──────────────────────────────────────────────────────────────────────
 
 class ChartDayData(TypedDict):
-    """Compact day data: spent amount only (limit is constant per period)."""
     spent: float
 
 
 class ChartState(TypedDict):
-    """Compact widget state (≤ 1024 bytes).
-
-    Structure:
-    {
-        "m": "2026-11",      # month prefix
-        "s": "2026-11-10",   # period start date (for periods not starting on 1st)
-        "d": [0, 1200, 450], # spent per day (float)
-        "lim": 5000.0,       # base daily limit
-        "a": true            # active period
-    }
-    """
-    m: str      # month prefix "YYYY-MM"
-    s: str      # period start date "YYYY-MM-DD"
-    d: list[float]  # spent per day
-    lim: float    # base daily limit
-    a: bool     # active period
+    m: str
+    s: str
+    d: list[float]
+    lim: float
+    a: bool
 
 
 def _compute_base_daily_limit(budget: Budget) -> float:
-    """Base daily limit = (income - mandatory - black_day_fund) / total_days_in_period."""
     available = (
         float(budget.total_income)
         - float(budget.mandatory_payments)
@@ -50,15 +42,9 @@ def _compute_base_daily_limit(budget: Budget) -> float:
 
 
 async def build_chart_data(telegram_id: int, budget: Budget) -> list[ChartDayData]:
-    """Aggregate daily spending for the budget period.
-
-    Returns list of ChartDayData for every day in period (including zero-spend days).
-    For active period: includes today and past days only.
-    """
     period_start, period_end = period_dates(budget.month, budget.period_start_day or 1)
     today = get_msk_now().date()
 
-    # For active period, cap at today
     is_active = budget.month in {
         today.strftime("%Y-%m"),
         (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m"),
@@ -68,8 +54,6 @@ async def build_chart_data(telegram_id: int, budget: Budget) -> list[ChartDayDat
     else:
         end_date = period_end.date()
 
-    # Fetch expenses grouped by date
-    # Use < next_day_start to include expenses on end_date with any time
     next_day_start = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
 
     async with async_session_maker() as session:
@@ -90,7 +74,6 @@ async def build_chart_data(telegram_id: int, budget: Budget) -> list[ChartDayDat
         str(row.expense_date): float(row.total_spent) for row in rows
     }
 
-    # Build array for every day in period (capped at today if active)
     data: list[ChartDayData] = []
     current = period_start.date()
     while current <= end_date:
@@ -104,7 +87,6 @@ async def build_chart_data(telegram_id: int, budget: Budget) -> list[ChartDayDat
 
 
 def build_chart_state(telegram_id: int, budget: Budget, data: list[ChartDayData]) -> ChartState:
-    """Build compact chart state JSON for widget (≤ 1024 bytes)."""
     today = get_msk_now().date()
     is_active = budget.month in {
         today.strftime("%Y-%m"),
@@ -114,8 +96,7 @@ def build_chart_state(telegram_id: int, budget: Budget, data: list[ChartDayData]
     period_start, _ = period_dates(budget.month, budget.period_start_day or 1)
     period_start_str = period_start.strftime("%Y-%m-%d")
 
-    # Compact: month prefix + period start + flat array of spent values
-    month_prefix = budget.month  # "YYYY-MM"
+    month_prefix = budget.month
     spent_array = [round(d["spent"], 2) for d in data]
     base_limit = _compute_base_daily_limit(budget)
 
@@ -127,7 +108,6 @@ def build_chart_state(telegram_id: int, budget: Budget, data: list[ChartDayData]
         a=is_active,
     )
 
-    # Validate size
     json_str = json.dumps(state, separators=(",", ":"))
     if len(json_str.encode("utf-8")) > 1024:
         raise ValueError(f"Chart state exceeds 1024 bytes: {len(json_str)}")
@@ -135,7 +115,505 @@ def build_chart_state(telegram_id: int, budget: Budget, data: list[ChartDayData]
     return state
 
 
-# Inline SVG/JS widget HTML (≤ 4096 bytes after zlib)
+# ──────────────────────────────────────────────────────────────────────
+# PNG Card Rendering (Financial Bro style)
+# ──────────────────────────────────────────────────────────────────────
+
+@dataclass
+class MonthlyCardInput:
+    period_start: date
+    period_end: date
+    period_start_day: int
+    daily_spent: list[float]
+    daily_limit: float
+    total_spent: float
+    expenses: list[Expense]
+    expenses_count: int
+    prev_expenses: list[Expense] | None = None
+    prev_period_start: date | None = None
+    prev_period_end: date | None = None
+    current_income: float = 0.0
+    prev_income: float = 0.0
+
+
+def _load_font(weight: str, size: int):
+    import os
+
+    from PIL import ImageFont
+
+    font_dir = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "fonts")
+    font_map = {
+        "regular": "Nunito-Regular.ttf",
+        "semibold": "Nunito-SemiBold.ttf",
+        "bold": "Nunito-Bold.ttf",
+    }
+    font_path = os.path.join(font_dir, font_map.get(weight, "Nunito-Regular.ttf"))
+    if not os.path.exists(font_path):
+        fallback_map = {
+            "regular": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "semibold": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "bold": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        }
+        font_path = fallback_map.get(weight, fallback_map["regular"])
+    try:
+        return ImageFont.truetype(font_path, size)
+    except Exception:
+        return ImageFont.load_default()
+
+
+def _format_rus_month(d: date) -> str:
+    months = [
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря"
+    ]
+    return months[d.month - 1]
+
+
+def _format_rus_period(start: date, end: date, start_day: int) -> str:
+    if start_day == 1:
+        return f"{_format_rus_month(start)} {start.year}"
+    return f"{start.day} {_format_rus_month(start)} — {end.day} {_format_rus_month(end)} {end.year}"
+
+
+def _plural_ru(n: int, forms: tuple[str, str, str]) -> str:
+    n = abs(n) % 100
+    n1 = n % 10
+    if 11 <= n <= 14:
+        return forms[2]
+    if n1 == 1:
+        return forms[0]
+    if 2 <= n1 <= 4:
+        return forms[1]
+    return forms[2]
+
+
+def _wrap_text(draw, text: str, font, max_width: int) -> list[str]:
+    words = text.split()
+    lines = []
+    current = []
+    for word in words:
+        test = " ".join(current + [word])
+        if draw.textlength(test, font=font) <= max_width:
+            current.append(word)
+        else:
+            lines.append(" ".join(current))
+            current = [word]
+    if current:
+        lines.append(" ".join(current))
+    return lines
+
+
+def _input_to_json(input: MonthlyCardInput) -> str:
+    return json.dumps({
+        "period_start": input.period_start.isoformat(),
+        "period_end": input.period_end.isoformat(),
+        "period_start_day": input.period_start_day,
+        "daily_spent": [round(s, 2) for s in input.daily_spent],
+        "daily_limit": round(input.daily_limit, 2),
+        "total_spent": round(input.total_spent, 2),
+        "expenses_count": input.expenses_count,
+        "expenses": [
+            {"date": e.date.isoformat(), "amount": round(e.amount, 2)}
+            for e in input.expenses
+        ],
+        "prev_expenses": [
+            {"date": e.date.isoformat(), "amount": round(e.amount, 2)}
+            for e in (input.prev_expenses or [])
+        ],
+        "prev_period_start": input.prev_period_start.isoformat() if input.prev_period_start else None,
+        "prev_period_end": input.prev_period_end.isoformat() if input.prev_period_end else None,
+        "current_income": round(input.current_income, 2),
+        "prev_income": round(input.prev_income, 2),
+    }, separators=(",", ":"), sort_keys=True)
+
+
+@functools.lru_cache(maxsize=128)
+def _cached_render(input_json: str) -> bytes:
+    input_data = json.loads(input_json)
+    return _render_monthly_card_png_from_dict(input_data)
+
+
+def _render_monthly_card_png_from_dict(data: dict) -> bytes:
+    from PIL import Image, ImageDraw
+
+    # ─── Palette (Financial Bro Dark) ───
+    # ruff: noqa: N806
+    bg_canvas = "#17212B"
+    text_secondary = "#8A99A8"
+    accent_blue = "#3390EC"
+    accent_coral = "#E56B6F"
+    accent_green = "#4CC38A"
+    accent_amber = "#EAB308"
+    accent_purple = "#A78BFA"
+    accent_pink = "#F472B6"
+    limit_amber = "#FBBF24"
+    text_primary = "#F5F5F5"
+
+    # ─── Canvas ───
+    w, h = 900, 620
+    img = Image.new("RGB", (w, h), bg_canvas)
+    draw = ImageDraw.Draw(img)
+
+    # ─── Fonts ───
+    font_title = _load_font("bold", 26)
+    font_sub = _load_font("regular", 16)
+    font_metric = _load_font("bold", 26)
+    font_chip = _load_font("semibold", 15)
+    font_axis = _load_font("regular", 11)
+    font_tooltip = _load_font("semibold", 13)
+
+    # ─── Unpack data ───
+    daily_spent = data["daily_spent"]
+    total_spent = data["total_spent"]
+    expenses_count = data["expenses_count"]
+    expenses = data.get("expenses", [])
+    prev_expenses = data.get("prev_expenses", [])
+    current_income = data["current_income"]
+    prev_income = data["prev_income"]
+
+    passed_days = len(daily_spent)
+
+    # ─── Helpers ───
+    def fmt_money(v: float) -> str:
+        return f"{int(round(v)):,}".replace(",", " ")
+
+    def fmt_pct(v: float) -> str:
+        return f"{int(round(v))}%"
+
+    # ─── Card drawing helpers ───
+    def draw_rounded_rect(xy, radius, fill, outline=None, width=1):
+        x1, y1, x2, y2 = xy
+        draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
+
+    # ════════════════════════════════════════════════════════════════════
+    # 1. HEADER (y: 32..96)
+    # ════════════════════════════════════════════════════════════════════
+    header_y = 32
+    period_text = _format_rus_period(
+        date.fromisoformat(data["period_start"]),
+        date.fromisoformat(data["period_end"]),
+        data["period_start_day"]
+    )
+
+    # Period title
+    draw.text((36, header_y), f"Траты · {period_text}", font=font_title, fill=text_primary)
+
+    # Subtitle
+    draw.text((36, header_y + 34), f"Всего потрачено: {fmt_money(total_spent)} ₽ · {expenses_count} покупок", font=font_sub, fill=text_secondary)
+
+    # Limit badge (right side)
+    if data["daily_limit"] > 0:
+        badge_text = f"Лимит: {fmt_money(data['daily_limit'])} ₽/день"
+        badge_w = draw.textlength(badge_text, font=font_chip) + 24
+        badge_x = w - 36 - badge_w
+        badge_y = header_y - 2
+        draw_rounded_rect((badge_x, badge_y, badge_x + badge_w, badge_y + 38), 19, "#1E222D", "#323746", 1)
+        draw.text((badge_x + 12, badge_y + 8), badge_text, font=font_chip, fill=limit_amber)
+
+    # ════════════════════════════════════════════════════════════════════
+    # 2. CHART AREA (y: 112..416)
+    # ═══════════════════════════════════════════════════════════════════
+    chart_x = 36
+    chart_y = 112
+    chart_w = 828
+    chart_h = 304
+    padding_chart = {"left": 68, "right": 28, "top": 36, "bottom": 42}
+
+    inner_x = chart_x + padding_chart["left"]
+    inner_y = chart_y + padding_chart["top"]
+    inner_w = chart_w - padding_chart["left"] - padding_chart["right"]
+    inner_h = chart_h - padding_chart["top"] - padding_chart["bottom"]
+
+    # Chart card background
+    draw_rounded_rect((chart_x, chart_y, chart_x + chart_w, chart_y + chart_h), 24, "#171920", "#262934", 1)
+
+    # Grid lines
+    max_spent = max(daily_spent) if daily_spent else 1
+    max_y = max(max_spent, data["daily_limit"]) if data["daily_limit"] > 0 else max_spent
+    max_y = max(max_y, 1) * 1.15
+
+    # Horizontal grid lines (3 lines)
+    for i in range(4):
+        gy = inner_y + inner_h * i / 3
+        draw.line([(inner_x, gy), (inner_x + inner_w, gy)], fill="#222530", width=1)
+
+    # Y-axis labels
+    for i in range(4):
+        val = max_y * (3 - i) / 3
+        label = fmt_money(val) if val >= 1000 else f"{int(val):,}"
+        draw.text((inner_x - 60, inner_y + inner_h * i / 3 - 7), label, font=font_axis, fill=text_secondary, anchor="ra")
+
+    # Limit line
+    if data["daily_limit"] > 0 and data["daily_limit"] <= max_y * 1.3:
+        lim_y = inner_y + inner_h * (1 - data["daily_limit"] / max_y)
+        # Dashed line
+        dash_len = 8
+        gap_len = 6
+        x = inner_x
+        while x < inner_x + inner_w:
+            end_x = min(x + dash_len, inner_x + inner_w)
+            draw.line([(x, lim_y), (end_x, lim_y)], fill=limit_amber + "A0", width=1)
+            x += dash_len + gap_len
+        # "лимит" label
+        draw.text((inner_x + inner_w + 8, lim_y - 7), "лимит", font=font_axis, fill=limit_amber + "A0", anchor="la")
+
+    # Data line (polyline)
+    n = len(daily_spent)
+    if n > 1:
+        step_x = inner_w / (n - 1)
+        points = []
+        for i, spent in enumerate(daily_spent):
+            x = inner_x + i * step_x
+            y = inner_y + inner_h * (1 - spent / max_y)
+            points.append((x, y))
+
+        # Fill area under line (polygon)
+        fill_points = points + [(inner_x + inner_w, inner_y + inner_h), (inner_x, inner_y + inner_h)]
+        fill_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        fill_draw = ImageDraw.Draw(fill_img)
+        fill_draw.polygon(fill_points, fill=(51, 144, 236, 90))
+        img = Image.alpha_composite(img.convert("RGBA"), fill_img).convert("RGB")
+        draw = ImageDraw.Draw(img)
+
+        # Line
+        for i in range(len(points) - 1):
+            draw.line([points[i], points[i + 1]], fill=accent_blue, width=3, joint="curve")
+
+        # Peak dots (over limit)
+        if data["daily_limit"] > 0:
+            for i, spent in enumerate(daily_spent):
+                if spent > data["daily_limit"]:
+                    x, y = points[i]
+                    draw.ellipse([x - 6, y - 6, x + 6, y + 6], fill=accent_coral, outline=bg_canvas, width=2)
+
+        # Tooltip for max peak
+        if daily_spent:
+            max_idx = max(range(len(daily_spent)), key=lambda i: daily_spent[i])
+            max_spent = daily_spent[max_idx]
+            mx, my = points[max_idx]
+            date_str = (date.fromisoformat(data["period_start"]) + timedelta(days=max_idx)).strftime("%d %b")
+            tooltip_text = f"{date_str} · {fmt_money(max_spent)} ₽"
+            tw = draw.textlength(tooltip_text, font=font_tooltip)
+            pad_x, pad_y = 10, 6
+            tx = mx - tw / 2 - pad_x
+            ty = my - 40 - pad_y * 2
+            # Clamp
+            tx = max(chart_x + 10, min(tx, chart_x + chart_w - tw - 2 * pad_x - 10))
+            ty = max(chart_y + 10, ty)
+            # Tooltip background
+            draw_rounded_rect(
+                (tx - pad_x, ty - pad_y, tx + tw + 2 * pad_x, ty + 2 * pad_y + font_tooltip.size),
+                6, "#131C26", accent_coral, 1
+            )
+            draw.text((tx, ty + pad_y), tooltip_text, font=font_tooltip, fill=text_primary)
+
+    # X-axis labels (5-6 labels)
+    if n > 1:
+        step = max(1, (n - 1) // 5)
+        for i in range(0, n, step):
+            x = inner_x + i * step_x
+            d = date.fromisoformat(data["period_start"]) + timedelta(days=i)
+            label = f"{d.day} {_format_rus_month(d)[:3]}"
+            draw.text((x, inner_y + inner_h + 8), label, font=font_axis, fill=text_secondary, anchor="ma")
+        # Last day
+        if (n - 1) % step != 0:
+            x = inner_x + (n - 1) * step_x
+            d = date.fromisoformat(data["period_start"]) + timedelta(days=n - 1)
+            label = f"{d.day} {_format_rus_month(d)[:3]}"
+            draw.text((x, inner_y + inner_h + 8), label, font=font_axis, fill=text_secondary, anchor="ma")
+
+    # Empty state
+    if not daily_spent or max(daily_spent) == 0:
+        draw.text(
+            (w / 2, chart_y + chart_h / 2),
+            "За этот период трат пока нет",
+            font=font_sub, fill=text_secondary, anchor="mm"
+        )
+
+    # ════════════════════════════════════════════════════════════════════
+    # 3. INSIGHTS ROW (y: 436..584)
+    # ═══════════════════════════════════════════════════════════════════
+    insight_y = 436
+    insight_h = 148
+    gap = 18
+    card_w = (w - 36 * 2 - gap * 2) // 3
+
+    # ─── Compute insights ───
+    passed_days = len(daily_spent)
+
+    # Slot 1: peak_day
+    peak_idx = max(range(len(daily_spent)), key=lambda i: daily_spent[i]) if daily_spent else 0
+    peak_day = daily_spent[peak_idx]
+    peak_date = date.fromisoformat(data["period_start"]) + timedelta(days=peak_idx)
+    peak_sub = f"{peak_date.day} {_format_rus_month(peak_date)} · максимум периода" if total_spent > 0 else "пока без трат"
+
+    # Slot 2: limit_streak or avg_check
+    if data["daily_limit"] > 0 and passed_days > 0:
+        # limit_streak
+        best_streak = 0
+        current_streak = 0
+        for spent in daily_spent[:passed_days]:
+            if spent <= data["daily_limit"]:
+                current_streak += 1
+                best_streak = max(best_streak, current_streak)
+            else:
+                current_streak = 0
+        streak_days = best_streak
+        slot2 = {
+            "id": "limit_streak",
+            "color": accent_green,
+            "title": "СЕРИЯ В ЛИМИТЕ",
+            "value": f"{streak_days} {_plural_ru(streak_days, ('день подряд', 'дня подряд', 'дней подряд'))}",
+            "subtitle": "без пробоя дневного плана",
+        }
+    else:
+        # avg_check
+        slot2 = {
+            "id": "avg_check",
+            "color": accent_blue,
+            "title": "СРЕДНИЙ ЧЕК",
+            "value": f"{fmt_money(total_spent / max(expenses_count, 1))} ₽",
+            "subtitle": "за одну покупку",
+        }
+
+    # Slot 3: candidates
+    used_ids = {"peak_day", slot2["id"]}
+    slot3 = None
+
+    # Compute metrics for candidates
+    cur_spent_weekday = sum(
+        spent for i, spent in enumerate(daily_spent[:passed_days])
+        if (date.fromisoformat(data["period_start"]) + timedelta(days=i)).weekday() < 5
+    )
+    cur_days_weekday = sum(
+        1 for i in range(passed_days)
+        if (date.fromisoformat(data["period_start"]) + timedelta(days=i)).weekday() < 5
+    )
+
+    prev_spent_weekday = 0.0
+    prev_days_weekday = 0
+    if prev_expenses and data.get("prev_period_start"):
+        prev_start = date.fromisoformat(data["prev_period_start"])
+        prev_by_offset = {}
+        for e in prev_expenses:
+            offset = (date.fromisoformat(e["date"]) - prev_start).days
+            if 0 <= offset < passed_days:
+                if (prev_start + timedelta(days=offset)).weekday() < 5:
+                    prev_by_offset[offset] = prev_by_offset.get(offset, 0.0) + e["amount"]
+
+        prev_spent_weekday = sum(prev_by_offset.values())
+        prev_days_weekday = sum(
+            1 for i in range(passed_days)
+            if (date.fromisoformat(data["prev_period_start"]) + timedelta(days=i)).weekday() < 5
+        )
+
+    # Simplified: just pick first available candidate
+    candidates = [
+        ("top3_days", total_spent > 0 and passed_days >= 5, {
+            "id": "top3_days", "color": accent_amber, "title": "3 ДНЯ СДЕЛАЛИ КАССУ",
+            "value": f"{int(sum(sorted(daily_spent, reverse=True)[:3]) / max(total_spent, 1) * 100)}%",
+            "subtitle": f"остальные {passed_days - 3} дн. прошли ровно" if passed_days >= 5 else ""
+        }),
+        ("weekend_tax", total_spent > 0, {
+            "id": "weekend_tax", "color": accent_purple, "title": "НАЛОГ НА ВЫХОДНЫЕ",
+            "value": f"{int(sum(s for i, s in enumerate(daily_spent) if (date.fromisoformat(data['period_start']) + timedelta(days=i)).weekday() >= 5) / max(total_spent, 1) * 100)}%",
+            "subtitle": "ушло в субботу и воскресенье"
+        }),
+        ("night_food", len(expenses) > 0, {
+            "id": "night_food", "color": accent_blue, "title": "НОЧНОЙ ДОЖОР",
+            "value": f"{fmt_money(sum(e.amount for e in expenses if e.date.hour >= 21 or e.date.hour < 5))} ₽",
+            "subtitle": "куплено после 21:00"
+        }),
+        ("latte_effect", expenses_count >= 5, {
+            "id": "latte_effect", "color": accent_pink, "title": "ЭФФЕКТ ЛАТТЕ",
+            "value": f"{fmt_money(sum(e.amount for e in expenses if e.amount <= 1000))} ₽",
+            "subtitle": "мелочёвка чеками до 1 000 ₽"
+        }),
+        ("weekday_saving", total_spent > 0 and cur_days_weekday > 0 and prev_days_weekday > 0 and prev_income > 0, {
+            "id": "weekday_saving", "color": accent_green, "title": "ЭНЕРГОСБЕРЕЖЕНИЕ",
+            "value": f"−{int((1 - (cur_spent_weekday / cur_days_weekday) / (prev_spent_weekday / prev_days_weekday)) * 100)}% в будни" if prev_days_weekday > 0 else "",
+            "subtitle": "тише прошлого цикла"
+        }),
+        ("month_pace", total_spent > 0 and prev_income > 0 and current_income > 0, {
+            "id": "month_pace", "color": accent_blue, "title": "ТЕМП МЕСЯЦА",
+            "value": f"{int((total_spent / current_income) / (sum(p['amount'] for p in prev_expenses) / prev_income) * 100)}%",
+            "subtitle": "быстрее прошлого цикла" if (total_spent / current_income) > (sum(p['amount'] for p in prev_expenses) / prev_income) else "спокойнее прошлого цикла"
+        }),
+        ("avg_check", total_spent > 0, {
+            "id": "avg_check", "color": accent_blue, "title": "СРЕДНИЙ ЧЕК",
+            "value": f"{fmt_money(total_spent / max(expenses_count, 1))} ₽",
+            "subtitle": "за один подход"
+        }),
+        ("black_friday", total_spent > 0, {
+            "id": "black_friday", "color": accent_coral, "title": "ЧЁРНАЯ ПЯТНИЦА",
+            "value": "Пятница",
+            "subtitle": "в среднем 0 ₽ за день"
+        }),
+        ("quiet_mode", True, {
+            "id": "quiet_mode", "color": "#8A99A8", "title": "РЕЖИМ ТИШИНЫ",
+            "value": "0 покупок",
+            "subtitle": "кошелёк полностью отдыхает"
+        }),
+    ]
+
+    for cand_id, cond, cand in candidates:
+        if cand_id not in used_ids and cond:
+            slot3 = cand
+            break
+
+    if slot3 is None:
+        slot3 = {
+            "id": "quiet_mode", "color": "#8A99A8", "title": "РЕЖИМ ТИШИНЫ",
+            "value": "0 покупок", "subtitle": "кошелёк полностью отдыхает"
+        }
+
+    insights = [
+        {"color": accent_coral, "title": "ДОРОГОЙ ДЕНЬ", "value": f"{fmt_money(peak_day)} ₽", "subtitle": peak_sub, "id": "peak_day"},
+        slot2,
+        slot3,
+    ]
+
+    # ─── Draw insight cards ───
+    for i, ins in enumerate(insights):
+        x = 36 + i * (card_w + gap)
+        y = insight_y
+        # Card background
+        draw_rounded_rect((x, y, x + card_w, y + insight_h), 20, "#131C26", "#242F3D", 1)
+
+        # Indicator dot
+        dot_x = x + 18
+        dot_y = y + 18
+        draw.ellipse([dot_x, dot_y, dot_x + 10, dot_y + 10], fill=ins["color"])
+
+        # Title
+        draw.text((dot_x + 16, dot_y - 2), ins["title"], font=font_sub, fill=text_secondary)
+
+        # Value
+        draw.text((x + 18, y + 52), ins["value"], font=font_metric, fill="#F5F5F5")
+
+        # Subtitle (with wrapping)
+        sub_lines = _wrap_text(draw, ins["subtitle"], _load_font("regular", 14), card_w - 36)
+        for li, line in enumerate(sub_lines[:2]):
+            draw.text((x + 18, y + 96 + li * 20), line, font=_load_font("regular", 14), fill=text_secondary)
+
+    # ════════════════════════════════════════════════════════════════════
+    # Save
+    # ═══════════════════════════════════════════════════════════════════
+    from io import BytesIO
+    buf = BytesIO()
+    img.save(buf, format="PNG", optimize=True, compress_level=6)
+    return buf.getvalue()
+
+
+def render_monthly_card_png(input: MonthlyCardInput) -> bytes:
+    input_json = _input_to_json(input)
+    return _cached_render(input_json)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Widget HTML (kept for fallback)
+# ──────────────────────────────────────────────────────────────────────
+
 # ruff: noqa: E501
 CHART_WIDGET_HTML = r"""
 <!DOCTYPE html>
@@ -174,7 +652,6 @@ if (!widget) { document.body.innerHTML = '<p style="padding:20px;text-align:cent
 
 let state = {m: "", s: "", d: [], lim: 0, a: false};
 let selectedIndex = -1;
-let layout = { w: 300, innerH: 160, padding: { top: 10, right: 10, bottom: 20, left: 30 }, n: 0, days: [], baseLimit: 0, barHeights: [] };
 const svg = document.getElementById('chart');
 const tooltip = document.getElementById('tooltip');
 const caption = document.getElementById('caption');
@@ -201,7 +678,6 @@ function render() {
   const innerH = h - padding.top - padding.bottom;
   const barW = Math.max(3, innerW / n - 1);
 
-  // Find max for Y scale
   let maxVal = baseLimit;
   for (const v of days) { if (v > maxVal) maxVal = v; }
   maxVal = Math.max(maxVal, 1) * 1.15;
@@ -209,42 +685,30 @@ function render() {
   const yScale = v => padding.top + innerH * (1 - v / maxVal);
   const xScale = i => padding.left + i * (innerW / n) + (innerW / n - barW) / 2;
 
-  // Store layout for tooltip
-  layout = { w, innerH, padding, n, days, baseLimit, barHeights: [] };
-
-  // Build SVG
   let svgHTML = '';
-  // Y axis
   svgHTML += `<line class="axis" x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + innerH}"/>`;
-  // X axis
   svgHTML += `<line class="axis" x1="${padding.left}" y1="${padding.top + innerH}" x2="${w - padding.right}" y2="${padding.top + innerH}"/>`;
-  // Limit line
   if (baseLimit > 0) {
     const ly = yScale(baseLimit);
     svgHTML += `<line class="limit-line" x1="${padding.left}" y1="${ly}" x2="${w - padding.right}" y2="${ly}"/>`;
     svgHTML += `<text x="${padding.left - 4}" y="${ly - 2}" text-anchor="end" font-size="8" fill="var(--tg-theme-hint-color, #999999)">${fmt(baseLimit)}</text>`;
   }
-  // Bars
   for (let i = 0; i < n; i++) {
     const spent = days[i];
     const x = xScale(i);
     const barH = innerH * (spent / maxVal);
-    layout.barHeights[i] = barH;
     const y = yScale(spent);
     const cls = spent > baseLimit && baseLimit > 0 ? 'bar bar-over' : 'bar bar-ok';
     const sel = i === selectedIndex ? ' selected' : '';
     svgHTML += `<rect class="${cls}${sel}" x="${x}" y="${y}" width="${barW}" height="${barH}" data-index="${i}" rx="1"/>`;
-    // Invisible tall hit area
     svgHTML += `<rect class="bar" fill="transparent" x="${x}" y="${padding.top}" width="${barW}" height="${innerH}" data-index="${i}"/>`;
   }
-  // X ticks (max 6 ticks)
   const step = Math.max(1, Math.ceil(n / 6));
   for (let i = 0; i < n; i += step) {
     const x = padding.left + (i + 0.5) * (innerW / n);
     const cls = i === selectedIndex ? 'tick selected-tick' : 'tick';
     svgHTML += `<g class="${cls}"><line x1="${x}" y1="${padding.top + innerH}" x2="${x}" y2="${padding.top + innerH + 4}"/><text x="${x}" y="${padding.top + innerH + 14}" text-anchor="middle">${formatDate(i)}</text></g>`;
   }
-  // Last day
   if (n - 1 > 0 && (n - 1) % step !== 0) {
     const x = padding.left + (n - 0.5) * (innerW / n);
     svgHTML += `<g class="tick"><line x1="${x}" y1="${padding.top + innerH}" x2="${x}" y2="${padding.top + innerH + 4}"/><text x="${x}" y="${padding.top + innerH + 14}" text-anchor="middle">${formatDate(n - 1)}</text></g>`;
@@ -253,7 +717,6 @@ function render() {
   svg.innerHTML = svgHTML;
   caption.textContent = `📊 Траты по дням · ${state.m} (${n} дн.)`;
 
-  // Tooltip handlers
   svg.querySelectorAll('[data-index]').forEach(el => {
     el.addEventListener('click', e => {
       const idx = parseInt(e.currentTarget.dataset.index, 10);
@@ -279,31 +742,24 @@ function formatDate(idx) {
 }
 
 function showTooltip(idx) {
-  const spent = layout.days[idx];
-  const diff = spent - layout.baseLimit;
+  const spent = state.d[idx];
+  const diff = spent - state.lim;
   const dateStr = formatDate(idx);
   const spentStr = fmt(spent);
-  const limitStr = fmt(layout.baseLimit);
+  const limitStr = fmt(state.lim);
   const diffStr = diff >= 0 ? '+' + fmt(diff) : fmt(diff);
   const diffColor = diff > 0 ? 'var(--tg-theme-destructive-text-color, #ff3b30)' : 'var(--tg-theme-text-color, #000000)';
   tooltip.innerHTML = `<b>${dateStr}</b><br>Потрачено: ${spentStr} ₽<br>Лимит: ${limitStr} ₽<br><span style="color:${diffColor}">Разница: ${diffStr} ₽</span>`;
-
-  // Position tooltip above bar with clamping
   const rect = svg.querySelector(`[data-index="${idx}"].bar-over, [data-index="${idx}"].bar-ok`);
   if (rect) {
     const svgRect = svg.getBoundingClientRect();
     const barRect = rect.getBoundingClientRect();
     let left = barRect.left - svgRect.left + rect.width.baseVal.value / 2;
     let top = barRect.top - svgRect.top - 4;
-
-    // Clamp horizontal: keep tooltip within [55, w - 55]
-    left = Math.max(55, Math.min(layout.w - 55, left));
-
-    // Clamp vertical: if bar is tall and tooltip would be cut off at top, show below bar
+    left = Math.max(55, Math.min(w - 55, left));
     if (top < 42) {
-      top = barRect.top - svgRect.top + layout.barHeights[idx] + 8;
+      top = barRect.top - svgRect.top + barH + 8;
     }
-
     tooltip.style.left = left + 'px';
     tooltip.style.top = top + 'px';
     tooltip.classList.add('visible');
@@ -315,7 +771,6 @@ function fmt(n) {
   return Math.round(n).toLocaleString('ru-RU');
 }
 
-// Load state from chatData
 widget.on('chatDataChanged', data => {
   if (data && data.d) {
     state = data;
@@ -326,16 +781,17 @@ widget.on('chatDataChanged', data => {
   }
 });
 
+widget.requestData?.();
+
 </script>
+</body>
 </html>
 """
 
 
 def validate_widget_html() -> bool:
-    """Validate widget HTML size constraint (≤ 4096 bytes after zlib)."""
     compressed = zlib.compress(CHART_WIDGET_HTML.encode("utf-8"))
     return len(compressed) <= 4096
 
 
-# Validate on import
 assert validate_widget_html(), "Widget HTML exceeds 4096 bytes after zlib compression"

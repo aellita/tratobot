@@ -8,11 +8,11 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 215 |
+| ✅ Готово | 216 |
 | 🔧 В работе | 0 |
-| ⏳ Ожидает | 42 |
+| ⏳ Ожидает | 41 |
 
-**Следующая задача:** **G2** (снапшоты дневного плана) → «Конверты», M5 → M6 → G1 (график + Tier 1).
+**Следующая задача:** **G2** (снапшоты дневного плана) → «Конверты», M5 → M6.
 
 > Контекст, цитаты пользователя и цифры для тестов — `agent/bugs_2026-11-06.md`.
 
@@ -582,20 +582,29 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 
 > UX-решения зафиксированы 2026-11-16: траты по дням + пунктир базового лимита, нативный HTML-виджет, отдельное сообщение под rich-отчётом, Tier 1 — сразу в G1.
 
-### G1: график «Траты по дням» + Tier 1 (нативный виджет)
+### ✅ G1: график «Траты по дням» + Tier 1 (нативный виджет) — ✅ Готово
 
 **Продукт:** столбики трат по дням периода и пунктир базового дневного лимита (`get_base_daily_limit`). Дни выше лимита — акцентным цветом темы. В активном периоде — только прошедшие дни включая сегодня. Внешняя ссылка и PNG не используются: QuickChart отдаёт суммы третьей стороне, PNG требует зависимостей и не адаптируется к теме.
 
 **Реализация:**
-- `src/services/monthly_chart.py` — `build_chart_data()` (агрегация трат по дням в Python, без диалектных `date()`), `build_chart_state()` (JSON ≤ 1024 байт), `CHART_WIDGET_HTML` (inline SVG/JS, читает `TelegramWidget.chatData`, перерисовка по `chatDataChanged`), `chart_caption()`.
-- `src/bot/rich_api.py` — `send_widget()` / `edit_widget_data()` поверх raw HTTP; ошибки логируются и не ломают отчёт.
-- `monthly_summary.py` — in-memory `{telegram_id: (chat_id, message_id)}`: первый показ → `sendWidget`, листание → `editMessageWidgetData`, ошибка → тихий пропуск и новая отправка при следующем открытии.
-- `morning_report.py` — виджет после автоматического месячного rich-отчёта, без регистрации в in-memory.
-- Цвета только из `--tg-theme-*`, высота ~230 px, подпись `📊 Траты по дням · 1–30 сен`, лимит 4 КБ после zlib.
+- `src/services/monthly_chart.py` — `build_chart_data()` (агрегация трат по дням в Python, без диалектных `date()`), `build_chart_state()` (JSON ≤ 1024 байт, компактный формат: `m`, `s`, `d[]`, `lim`, `a`), `CHART_WIDGET_HTML` (inline SVG/JS, читает `TelegramWidget.chatData`, перерисовка по `chatDataChanged`).
+- `src/bot/rich_api.py` — `send_widget()` / `edit_widget_data()` поверх raw HTTP с **retry + backoff** (3 попытки), shared aiohttp session, `disable_notification: true`; ошибки логируются (WARNING) и не ломают отчёт; debug-логи на успех.
+- `src/bot/widget_cache.py` — shared widget cache **ключ `(telegram_id, chat_id)`** (поддержка групп), per-user `asyncio.Lock` для предотвращения race condition, фолбэк `edit → send` при ошибке.
+- `monthly_summary.py` — `_clear_widget_msg(tg_id, chat_id)` в `cmd_monthly_report` (свежий виджет внизу чата), `edit_widget_data` только для навигации стрелками (`monthly_prev/next/refresh`).
+- `morning_report.py` — виджет после авто-ролловера, использует `widget_cache.set_widget_msg` (layer separation, не импортирует handlers).
+- Цвета только из `--tg-theme-*`, высота ~230 px, подпись `📊 Траты по дням · 1–30 сен`, лимит 4 КБ после zlib (3067 байт).
 
-**Tier 1 (входит в G1):** тап по столбику показывает строку под графиком — дата, потрачено, лимит, разница; выбранный столбик подсвечен, повторный тап снимает выбор. Невидимые зоны тапа на всю высоту (столбики ~7 px), haptic `selectionChanged`, подсказка «нажми на день». Всё локально в виджете, без `allow_queries` и запросов к боту.
+**Tier 1 (входит в G1):** тап по столбику показывает тултип — дата, потрачено, лимит, разница; выбранный столбик подсвечен, повторный тап снимает выбор. Невидимые зоны тапа на всю высоту, haptic `selectionChanged`, подсказка «нажми на день». Tooltip clamping: horizontal `[55, w-55]`, vertical (если `top < 42` — показываем под столбиком). Всё локально в виджете, без `allow_queries`.
 
-**Тесты:** агрегация по дням (несколько трат, пустые дни, `is_deleted`, границы периода), активный период и кэп, `limit <= 0`, ноль трат, `over_days`, масштаб оси; состояние ≤ 1024 байт; HTML ≤ 4096 байт после zlib и без внешних URL; payload `sendWidget`/`editMessageWidgetData`; интеграция «send → edit» в `monthly_summary`. Ручная проверка в Telegram: светлая/тёмная тема, высота, тап по дню.
+**Критичные фиксы (review):**
+1. HTML: `* { box-sizing: border-box }`, `position: relative` на body
+2. SQL: фильтр `Expense.date < next_day_start` (включает траты последнего дня с любым временем)
+3. State: поле `s` (period_start date) для корректных дат при `period_start_day > 1`
+4. JS: `layout` объект решает scope-проблемы `w`, `barH` в `showTooltip`
+5. Retry: exponential backoff (0.5s/1s/2s) + shared session в `rich_api.py`
+6. Cache key: `(telegram_id, chat_id)` вместо `tg_id` только
+
+**Тесты:** агрегация по дням (несколько трат, пустые дни, `is_deleted`, границы периода), активный период и кэп, `limit <= 0`, ноль трат, `over_days`; состояние ≤ 1024 байт (265 байт для 31 дня); HTML ≤ 4096 байт после zlib (3067 байт); payload `sendWidget`/`editMessageWidgetData`; интеграция «send → edit» в `monthly_summary`. Ручная проверка: светлая/тёмная тема, высота, тап по дню. `pytest 641 passed`, `ruff check .` clean.
 
 ### G2: хранить дневные лимиты каждого дня
 

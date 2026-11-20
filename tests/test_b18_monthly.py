@@ -14,6 +14,7 @@ def _data(*, total_spent: float, active: bool = False) -> dict:
             daily_limit=3000.0,
             mandatory_payments=10000.0,
             black_day_fund=0.0,
+            period_start_day=1,
         ),
         "active": active,
         "period_start": datetime(2026, 9, 1),

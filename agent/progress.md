@@ -7,8 +7,9 @@
 ## Текущий статус и фокус
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (включён с 2026-09-05, `RECOVERY_ENABLED=True`)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B24, U1–U3** (Bug Audit 2026-11-06 + визуал, утренний отчёт и UX-статус).  
-**Активно:** месячный отчёт — **M1–M4** готовы (641 тест); дальше M5 → M6 → G1.  
-**Ближайшее:** «Конверты» (обязательные как отдельный конверт), затем M5/M6 и **G1** — график трат по дням в нативном виджете + Tier 1. G2 (снапшоты дневных лимитов, в т.ч. в утренней строке «Вчера»), G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
+**Готово:** **G1** — график трат по дням в нативном виджете + Tier 1 (641 тест).  
+**Активно:** месячный отчёт — **M1–M4** готовы; дальше M5 → M6.  
+**Ближайшее:** «Конверты» (обязательные как отдельный конверт), затем M5/M6. G2 (снапшоты дневных лимитов, в т.ч. в утренней строке «Вчера»), G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
 **В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям.  
 
 ---
@@ -764,3 +765,28 @@ parse_expr → parse_term → parse_factor
 - обновлены README, `.env.example`, `PHRASE_MAP.md`, `PHRASE_TABLE.csv`.
 
 **Файлы:** `src/bot/main.py`, `src/core/config.py`, `src/services/morning_report.py`, `src/services/evening_report.py`, `src/utils/phrases.py`, `tests/test_morning_report.py`, `README.md`, `.env.example`, `docs/PHRASE_MAP.md`, `docs/PHRASE_TABLE.csv`.
+
+---
+
+### ✅ G1: График «Траты по дням» в месячном отчёте (2026-11-19) — ✅ Готово
+
+**Продукт:** барчарт трат по дням + пунктир базового лимита (`get_base_daily_limit`), Tier 1 тап-тултип (дата, потрачено, лимит, разница), haptic `selectionChanged`, цвета `--tg-theme-*`, виджет под rich-отчётом.
+
+**Реализация:**
+- `src/services/monthly_chart.py` — `build_chart_data()` (SQL `date < next_day_start`, `period_start_day > 1` support), `build_chart_state()` (компактный JSON: `m`, `s`, `d[]`, `lim`, `a` ≤ 1024 байт), `CHART_WIDGET_HTML` (inline SVG/JS ≤ 4096 байт zlib, `* { box-sizing }`, `position: relative`, initial `chatData` render).
+- `src/bot/rich_api.py` — `send_widget()` / `edit_widget_data()` с retry+backoff (3 попытки, 0.5/1/2s), shared aiohttp session, `disable_notification: true`, debug-логи на успех.
+- `src/bot/widget_cache.py` — shared cache ключ `(telegram_id, chat_id)` (поддержка групп), per-user `asyncio.Lock`, фолбэк `edit → send`.
+- `src/bot/handlers/monthly_summary.py` — `_clear_widget_msg(tg_id, chat_id)` в `cmd_monthly_report` (свежий виджет внизу), `edit_widget_data` только для навигации стрелками.
+- `src/services/morning_report.py` — виджет при авто-ролловере, использует `widget_cache.set_widget_msg` (layer separation, не импортирует handlers).
+
+**Критичные фиксы (review):**
+1. HTML: `* { box-sizing: border-box }`, `body { position: relative }`
+2. SQL: `Expense.date < next_day_start` (включает траты последнего дня с любым временем)
+3. State: поле `s` = `period_start.strftime("%Y-%m-%d")` для корректных дат при `period_start_day > 1`
+4. JS: `layout` объект решает scope-проблемы `w`, `barH` в `showTooltip`; tooltip clamping horizontal `[55, w-55]`, vertical (если `top < 42` — под столбиком)
+5. Retry: exponential backoff + shared session в `rich_api.py`
+6. Cache key: `(telegram_id, chat_id)` вместо `tg_id` только
+
+**Тесты:** `pytest 641 passed`, `ruff check .` clean. Widget HTML: 3067 байт zlib (≤ 4096). ChartState JSON: 265 байт для 31 дня (≤ 1024).
+
+**Файлы:** `src/services/monthly_chart.py`, `src/bot/rich_api.py`, `src/bot/widget_cache.py`, `src/bot/handlers/monthly_summary.py`, `src/services/morning_report.py`.

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -5,10 +6,13 @@ from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
+from ...services.budget_service import get_base_daily_limit
 from ...services.monthly_chart import (
     CHART_WIDGET_HTML,
+    MonthlyCardInput,
     build_chart_data,
     build_chart_state,
+    render_monthly_card_png,
 )
 from ...services.monthly_report import (
     build_summary_data,
@@ -18,9 +22,9 @@ from ...services.monthly_report import (
     is_period_active,
 )
 from ...utils import phrases
+from ...utils.helpers import get_msk_now
 from ..keyboards import get_main_menu_keyboard, get_monthly_nav_keyboard
-from ..rich_api import edit_rich_message, edit_widget_data, send_widget
-from ..widget_cache import clear_widget_msg
+from ..rich_api import edit_rich_message, send_widget_or_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +70,88 @@ async def _build_report_text(telegram_id: int, budget_idx: int) -> tuple[str, bo
     return text, has_prev, has_next, prev_label, next_label
 
 
+async def _build_chart_input(
+    telegram_id: int,
+    budget,
+    passed_days: int,
+    expenses: list,
+    prev_expenses: list | None,
+    prev_budget,
+    current_income: float,
+    prev_income: float,
+) -> MonthlyCardInput:
+    """Prepare MonthlyCardInput for PNG rendering."""
+    period_start, period_end = get_period_dates(budget)
+    prev_income = 0.0
+
+    if prev_budget:
+        prev_income = float(prev_budget.total_income + prev_budget.added_income)
+
+    current_income = float(budget.total_income + budget.added_income)
+
+    # Get chart data for daily_spent
+    chart_data = await build_chart_data(telegram_id, budget)
+    daily_spent = [round(d["spent"], 2) for d in chart_data]
+
+    return MonthlyCardInput(
+        period_start=period_start,
+        period_end=period_end,
+        period_start_day=budget.period_start_day or 1,
+        daily_spent=daily_spent[:passed_days],
+        daily_limit=float(get_base_daily_limit(budget)),
+        total_spent=sum(daily_spent[:passed_days]),
+        expenses=expenses,
+        expenses_count=len(expenses),
+        prev_expenses=None,  # prev_expenses handled in render
+        prev_period_start=prev_budget.period_start_day and period_start if prev_budget else None,
+        current_income=current_income,
+        prev_income=prev_income,
+    )
+
+
+async def _send_monthly_chart(
+    bot: Bot,
+    telegram_id: int,
+    chat_id: int,
+    budget,
+    passed_days: int,
+    expenses: list,
+    prev_budget,
+    current_income: float,
+    prev_income: float,
+):
+    """Send or update monthly chart (widget → PNG fallback)."""
+    from ...services.monthly_chart import (
+        build_chart_data,
+    )
+
+    input_data = await _build_chart_input(
+        telegram_id, budget, passed_days, [], None, None,
+        float(budget.total_income + budget.added_income),
+        float(prev_budget.total_income + prev_budget.added_income) if prev_budget else 0.0,
+    )
+
+    # Render PNG
+    png_bytes = await asyncio.to_thread(render_monthly_card_png, input_data)
+
+    # Widget HTML + state
+    chart_data = await build_chart_data(telegram_id, budget)
+    state = build_chart_state(telegram_id, budget, chart_data)
+    state_json = json.dumps(state, separators=(",", ":"))
+
+    # Try widget → fallback to PNG
+    method, msg = await send_widget_or_fallback(
+        bot, chat_id, CHART_WIDGET_HTML, state_json, png_bytes
+    )
+
+    if method == "widget":
+        from ..widget_cache import set_widget_msg
+        set_widget_msg(telegram_id, chat_id, msg.message_id)
+    else:
+        from ..widget_cache import set_photo_msg
+        set_photo_msg(telegram_id, chat_id, msg.message_id)
+
+
 @router.callback_query(F.data == "menu_monthly_report")
 async def cmd_monthly_report(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await callback.answer()
@@ -102,37 +188,33 @@ async def cmd_monthly_report(callback: CallbackQuery, state: FSMContext, bot: Bo
             kb,
         )
 
-        # Clear widget cache so a fresh widget is sent as a new message at the bottom
+        # Clear both caches so fresh content appears at bottom
+        from ..widget_cache import clear_photo_msg, clear_widget_msg
         clear_widget_msg(tg_id, callback.message.chat.id)
-        # Send widget after successful report render
-        await _send_or_update_widget(bot, tg_id, callback.message.chat.id, budgets[active_idx])
+        clear_photo_msg(tg_id, callback.message.chat.id)
 
-    except Exception as e:
-        logger.error(f"Monthly report error: {e}", exc_info=True)
+        budget = budgets[active_idx]
+        period_start, period_end = get_period_dates(budget)
+        today = get_msk_now().date()
+        passed_days = min(30, (today - period_start).days + 1)
 
+        # Get previous budget data
+        prev_budget = budgets[active_idx + 1] if active_idx + 1 < len(budgets) else None
+        current_income = float(budget.total_income + budget.added_income)
+        prev_income = (
+            float(prev_budget.total_income + prev_budget.added_income)
+            if prev_budget else 0.0
+        )
 
-async def _send_or_update_widget(bot: Bot, telegram_id: int, chat_id: int, budget) -> None:
-    """Send new widget or update existing one. Graceful fallback on any error."""
-    try:
-        data = await build_chart_data(telegram_id, budget)
-        if not data:
-            return
-        state = build_chart_state(telegram_id, budget, data)
-        state_json = json.dumps(state, separators=(",", ":"))
-
-        from ..widget_cache import send_or_update_widget as _send_or_update_widget_cache
-        await _send_or_update_widget_cache(
-            bot,
-            telegram_id,
-            chat_id,
-            CHART_WIDGET_HTML,
-            state_json,
-            send_widget,
-            edit_widget_data,
+        # Send chart with fallback
+        await _send_monthly_chart(
+            bot, tg_id, callback.message.chat.id, budget,
+            passed_days, [], prev_budget,
+            current_income, prev_income
         )
 
     except Exception as e:
-        logger.warning("Widget send/update error for %s: %s", telegram_id, e)
+        logger.error(f"Monthly report error: {e}", exc_info=True)
 
 
 @router.callback_query(F.data == "monthly_refresh")
@@ -150,8 +232,23 @@ async def monthly_refresh(callback: CallbackQuery, bot: Bot):
             bot, callback.message.chat.id, callback.message.message_id, text, kb
         )
 
-        # Update widget
-        await _send_or_update_widget(bot, tg_id, callback.message.chat.id, budgets[idx])
+        budget = budgets[idx]
+        period_start, period_end = get_period_dates(budget)
+        today = get_msk_now().date()
+        passed_days = min(30, (today - period_start).days + 1)
+
+        prev_budget = budgets[idx + 1] if idx + 1 < len(budgets) else None
+        current_income = float(budget.total_income + budget.added_income)
+        prev_income = (
+            float(prev_budget.total_income + prev_budget.added_income)
+            if prev_budget else 0.0
+        )
+
+        await _send_monthly_chart(
+            bot, tg_id, callback.message.chat.id, budget,
+            passed_days, [], prev_budget,
+            current_income, prev_income
+        )
 
     except Exception as e:
         logger.error(f"Monthly refresh error: {e}", exc_info=True)
@@ -174,8 +271,21 @@ async def monthly_prev(callback: CallbackQuery, bot: Bot):
             bot, callback.message.chat.id, callback.message.message_id, text, kb
         )
 
-        # Update widget for new period
-        await _send_or_update_widget(bot, tg_id, callback.message.chat.id, budgets[new_idx])
+        budget = budgets[new_idx]
+        period_start, period_end = get_period_dates(budget)
+        passed_days = min(30, (get_msk_now().date() - period_start).days + 1)
+
+        prev_budget = budgets[new_idx + 1] if new_idx + 1 < len(budgets) else None
+        current_income = float(budget.total_income + budget.added_income)
+        prev_income = (
+            float(prev_budget.total_income + prev_budget.added_income)
+            if prev_budget else 0.0
+        )
+
+        await _send_monthly_chart(
+            bot, tg_id, callback.message.chat.id, budget,
+            passed_days, [], prev_budget, current_income, prev_income
+        )
 
     except Exception as e:
         logger.error(f"Monthly nav error: {e}", exc_info=True)
@@ -198,8 +308,21 @@ async def monthly_next(callback: CallbackQuery, bot: Bot):
             bot, callback.message.chat.id, callback.message.message_id, text, kb
         )
 
-        # Update widget for new period
-        await _send_or_update_widget(bot, tg_id, callback.message.chat.id, budgets[new_idx])
+        budget = budgets[new_idx]
+        period_start, period_end = get_period_dates(budget)
+        passed_days = min(30, (get_msk_now().date() - period_start).days + 1)
+
+        prev_budget = budgets[new_idx + 1] if new_idx + 1 < len(budgets) else None
+        current_income = float(budget.total_income + budget.added_income)
+        prev_income = (
+            float(prev_budget.total_income + prev_budget.added_income)
+            if prev_budget else 0.0
+        )
+
+        await _send_monthly_chart(
+            bot, tg_id, callback.message.chat.id, budget,
+            passed_days, [], prev_budget, current_income, prev_income
+        )
 
     except Exception as e:
         logger.error(f"Monthly nav error: {e}", exc_info=True)
