@@ -197,3 +197,19 @@ class DailyReportsLog(Base):
     telegram_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     report_type: Mapped[str] = mapped_column(String(10), primary_key=True)
     sent_date: Mapped[date] = mapped_column(Date, primary_key=True)
+
+
+class DailyLimit(Base):
+    """Effective daily limit the user lived by on a given day (G2).
+
+    ``limit`` is ``plan_today`` or an active Recovery ``target``;
+    ``source`` records which one. Last write for a day wins.
+    """
+
+    __tablename__ = "daily_limits"
+
+    telegram_id: Mapped[int] = mapped_column(ForeignKey("users.telegram_id"), primary_key=True)
+    plan_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    limit: Mapped[float] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(10), default="plan")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_msk_now, onupdate=_msk_now)

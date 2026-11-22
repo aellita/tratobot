@@ -19,6 +19,7 @@ ALLOWED_TABLES = {
     "user_settings",
     "users",
     "daily_reports_log",
+    "daily_limits",
     "recovery_states",
     "recovery_offer_state",
 }

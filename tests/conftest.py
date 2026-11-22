@@ -13,6 +13,7 @@ import src.db.database as _db
 import src.services.budget_service as _bs
 import src.services.categorization as _cat
 import src.services.category_service as _cat_svc
+import src.services.daily_limits as _dl
 import src.services.expense_service as _es
 import src.services.goal_service as _gs
 import src.services.monthly_chart as _mc
@@ -54,6 +55,7 @@ async def _patch_session_maker(session_maker, monkeypatch):
         _gs,
         _es,
         _cat_svc,
+        _dl,
         _menu_h,
         _hist_h,
         _eve_h,
