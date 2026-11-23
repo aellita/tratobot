@@ -136,6 +136,18 @@ async def test_build_monthly_card_input_includes_expense_category(db_session, te
 
 
 @pytest.mark.asyncio
+async def test_build_monthly_card_input_clamps_available_income(db_session, test_budget):
+    test_budget.total_income = 100.0
+    test_budget.mandatory_payments = 200.0
+    test_budget.black_day_fund = 0.0
+    await db_session.commit()
+
+    input_data = await build_monthly_card_input(99999, test_budget)
+
+    assert input_data.available_income == 0.0
+
+
+@pytest.mark.asyncio
 async def test_build_monthly_card_input_uses_provided_current_limit(
     db_session, test_budget, monkeypatch
 ):
@@ -147,6 +159,42 @@ async def test_build_monthly_card_input_uses_provided_current_limit(
     input_data = await build_monthly_card_input(99999, test_budget, current_limit=1234.0)
 
     assert input_data.current_limit == 1234.0
+
+
+@pytest.mark.asyncio
+async def test_send_monthly_chart_does_not_borrow_active_limit_for_other_budget(
+    db_session, test_budget
+):
+    other = Budget(
+        telegram_id=99999,
+        month="2020-01",
+        total_income=100000.0,
+        mandatory_payments=0.0,
+        black_day_fund=0.0,
+        period_start_day=1,
+        base_daily_limit=1000.0,
+    )
+    with (
+        patch.object(settings, "MONTHLY_WIDGET_ENABLED", False),
+        patch(
+            "src.services.daily_limits.refresh_daily_limit",
+            new=AsyncMock(return_value=(9999.0, "plan")),
+        ),
+        patch(
+            "src.bot.chart_delivery.get_active_budget",
+            new=AsyncMock(return_value=test_budget),
+        ),
+        patch(
+            "src.bot.chart_delivery.build_monthly_card_input",
+            new=AsyncMock(return_value=MagicMock()),
+        ) as build_mock,
+        patch("src.bot.chart_delivery.render_monthly_card_png", return_value=b"png"),
+        patch("src.bot.chart_delivery.send_or_update_photo", new=AsyncMock(return_value=1)),
+    ):
+        result = await send_monthly_chart(MagicMock(), 99999, 456, other)
+
+    assert result == "png"
+    assert build_mock.await_args.kwargs["current_limit"] is None
 
 
 @pytest.mark.asyncio

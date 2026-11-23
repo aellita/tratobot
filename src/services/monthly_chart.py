@@ -410,11 +410,8 @@ def _x_label_indices(n: int) -> list[int]:
         return []
     if n == 1:
         return [0]
-    step = max(1, (n + 3) // 5)
-    indices = list(range(0, n, step))
-    if indices[-1] != n - 1:
-        indices.append(n - 1)
-    return indices
+    target = min(n, 6)
+    return sorted({round(i * (n - 1) / (target - 1)) for i in range(target)})
 
 
 LEAGUES: tuple[tuple[int, str, str | None, str], ...] = (

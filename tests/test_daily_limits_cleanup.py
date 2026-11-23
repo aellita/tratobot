@@ -1,5 +1,7 @@
 from datetime import date, datetime, timedelta
 
+from sqlalchemy import select
+
 from src.db.models.models import Budget, User
 from src.services.budget_service import (
     delete_active_budget,
@@ -140,3 +142,5 @@ async def test_period_start_change_keeps_snapshots_of_new_period(db_session, mon
 
     assert await get_daily_limits(1001, outside, outside) == {}
     assert await get_daily_limits(1001, inside, inside) == {inside: 222.0}
+    remaining = (await db_session.execute(select(Budget))).scalars().all()
+    assert len(remaining) == 1

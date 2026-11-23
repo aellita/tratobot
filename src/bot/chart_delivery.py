@@ -13,7 +13,7 @@ from aiogram import Bot
 
 from ..core.config import settings
 from ..db.models.models import Budget
-from ..services.budget_service import get_base_daily_limit
+from ..services.budget_service import get_active_budget, get_base_daily_limit
 from ..services.monthly_chart import (
     CHART_WIDGET_HTML,
     build_chart_data,
@@ -66,7 +66,12 @@ async def send_monthly_chart(
 
     effective = await refresh_daily_limit(telegram_id)
     daily_limit = await get_base_daily_limit(budget)
-    current_limit = effective[0] if effective is not None else None
+    active = await get_active_budget(telegram_id)
+    current_limit = (
+        effective[0]
+        if effective is not None and active is not None and active.id == budget.id
+        else None
+    )
 
     if settings.MONTHLY_WIDGET_ENABLED:
         try:

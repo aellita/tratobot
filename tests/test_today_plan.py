@@ -90,3 +90,5 @@ async def test_refresh_with_plan_skips_recompute(db_session, test_budget, monkey
     effective = await refresh_daily_limit(99999, test_budget, plan)
 
     assert effective is not None
+    assert effective[0] == pytest.approx(plan.plan_today)
+    assert effective[1] == SOURCE_PLAN

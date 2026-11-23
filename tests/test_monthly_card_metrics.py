@@ -417,6 +417,7 @@ def test_night_food_uses_15_percent_threshold():
     )
 
     assert metrics.cards[2].id == "night_food"
+    assert metrics.cards[2].subtitle == "с 21:00 до 5:00"
 
 
 def test_latte_effect_requires_five_checks_and_15_percent():
@@ -526,11 +527,16 @@ def test_weekend_tax_uses_completed_total_on_active_period():
 
 
 def test_x_axis_label_count_stays_at_most_six():
-    for n in (1, 2, 5, 6, 10, 20, 30, 31):
+    for n in (0, 1, 2, 5, 6, 7, 10, 20, 30, 31):
         indices = _x_label_indices(n)
+        if n == 0:
+            assert indices == []
+            continue
         assert indices[0] == 0
         assert indices[-1] == n - 1
         assert len(indices) <= 6
+        if n >= 5:
+            assert len(indices) >= 5
 
 
 def test_no_duplicate_metric_ids_across_states():
