@@ -1155,7 +1155,13 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
             font=font_card_sub,
             fill=text_secondary,
         )
-        _paste_frog(img, card.frog, x + cw - 24 - 48, y + (ch - 48) // 2, 48)
+        _paste_frog(
+            img,
+            card.frog,
+            x + cw - 24 - 96,
+            y + (ch - 96) // 2,
+            96,
+        )
 
     if metrics.wide is not None:
         draw_wide_card(metrics.wide)

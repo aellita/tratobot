@@ -300,6 +300,7 @@ class TestFrogs:
             "peak_days.png",
             "quiet_mode.png",
             "top_category.png",
+            "upcoming.png",
             "weekend_tax.png",
         }
         assert expected <= names
