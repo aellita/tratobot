@@ -97,6 +97,53 @@ class TestUpsertDailyLimit:
         assert len(rows) == 2
         assert [row.limit for row in rows] == [5000.0, 6000.0]
 
+    async def test_retries_as_update_after_insert_race(self, db_session, monkeypatch):
+        from src.services import daily_limits as dl
+
+        await _seed_user(db_session, 1001)
+        plan_date = date(2026, 11, 20)
+        await upsert_daily_limit(1001, plan_date, 5000.0)
+
+        original = dl._select_existing
+        calls = {"count": 0}
+
+        async def race_once(session, telegram_id, day):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return None  # competitor's row was not visible yet
+            return await original(session, telegram_id, day)
+
+        monkeypatch.setattr(dl, "_select_existing", race_once)
+
+        await upsert_daily_limit(1001, plan_date, 7500.0, source=SOURCE_RECOVERY)
+
+        rows = await _rows(db_session)
+        assert calls["count"] == 2
+        assert len(rows) == 1
+        assert rows[0].limit == 7500.0
+        assert rows[0].source == SOURCE_RECOVERY
+
+    async def test_second_integrity_error_propagates(self, db_session, monkeypatch):
+        from sqlalchemy.exc import IntegrityError
+
+        from src.services import daily_limits as dl
+
+        await _seed_user(db_session, 1001)
+        plan_date = date(2026, 11, 20)
+        await upsert_daily_limit(1001, plan_date, 5000.0)
+
+        async def always_missing(session, telegram_id, day):
+            return None
+
+        monkeypatch.setattr(dl, "_select_existing", always_missing)
+
+        with pytest.raises(IntegrityError):
+            await upsert_daily_limit(1001, plan_date, 7500.0)
+
+        rows = await _rows(db_session)
+        assert len(rows) == 1
+        assert rows[0].limit == 5000.0
+
 
 class TestGetDailyLimits:
     async def test_returns_range_inclusive(self, db_session):

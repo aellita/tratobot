@@ -8,11 +8,11 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 217 |
+| ✅ Готово | 218 |
 | 🔧 В работе | 0 |
-| ⏳ Ожидает | 40 |
+| ⏳ Ожидает | 39 |
 
-**Следующая задача:** «Конверты», M5 → M6. G2 (снапшоты дневного плана) готов; карточка C1–C3 — отдельная задача после G2.
+**Следующая задача:** «Конверты», M5 → M6. G2 и G2.1 (снапшоты дневного плана) готовы; карточка C1–C3 — отдельная задача после G2.1.
 
 > Контекст, цитаты пользователя и цифры для тестов — `agent/bugs_2026-11-06.md`.
 
@@ -626,6 +626,16 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 - [x] ✅ модель + `ALLOWED_TABLES` + `upsert_daily_limit` / `get_daily_limits` (G2a)
 - [x] ✅ `get_effective_daily_limit` / `refresh_daily_limit`, триггеры записи, джоб 00:05 (G2b)
 - [x] ✅ ADR, `ruff check`, `pytest` (G2c)
+
+### ✅ G2.1: фундамент перед карточкой (2026-11-23)
+
+**Зачем:** C1 — первый потребитель снапшотов. До него закрываем три вещи, которые иначе всплывут уже в видимой карточке.
+
+- **Единый расчёт плана.** `TodayPlan` + `compute_today_plan(telegram_id, budget)` в `budget_service` — единственный канон `spent_period → spent_today → money_for_life_raw → plan_today → base_limit`. Статус, утренний отчёт и `get_effective_daily_limit` берут значения только оттуда; поведение не менялось (G2.1a).
+- **Reset не оставляет снапшоты.** `delete_all_budgets` удаляет все `daily_limits` пользователя (сброс = с чистого листа). `delete_active_budget` удаляет строки только за период этого бюджета. (G2.1b)
+- **Гонка upsert.** `upsert_daily_limit` ловит `IntegrityError` от параллельного INSERT, делает `rollback` и повторяет запись как UPDATE; если конфликт повторился — исключение уходит наверх, а `refresh_daily_limit` его глотает. Портируемо для SQLite/PostgreSQL без dialect-specific `ON CONFLICT`. (G2.1c)
+- **Тест схемы.** `test_db_schema.py`: `create_all` создаёт все таблицы `Base.metadata`; у `daily_limits` проверены колонки, PK `(telegram_id, plan_date)` и FK на `users`. Это заменяет бессмысленный локальный `schema_audit` на пустом `tratobot.db`.
+- Тесты: `test_today_plan.py` (3), `test_daily_limits_cleanup.py` (3), `test_db_schema.py` (2), retry-кейсы в `test_daily_limits.py` (+2). Итог — `735 passed`.
 
 ### G3: Tier 2 — локальные переключатели
 

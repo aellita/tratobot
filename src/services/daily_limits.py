@@ -9,6 +9,7 @@ import logging
 from datetime import date
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from ..db.database import async_session_maker
 from ..db.models.models import Budget, DailyLimit
@@ -20,34 +21,64 @@ SOURCE_PLAN = "plan"
 SOURCE_RECOVERY = "recovery"
 
 
+async def _select_existing(session, telegram_id: int, plan_date: date) -> DailyLimit | None:
+    result = await session.execute(
+        select(DailyLimit).where(
+            DailyLimit.telegram_id == telegram_id,
+            DailyLimit.plan_date == plan_date,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _write_daily_limit(
+    telegram_id: int,
+    plan_date: date,
+    limit: float,
+    source: str,
+) -> None:
+    async with async_session_maker() as session:
+        try:
+            row = await _select_existing(session, telegram_id, plan_date)
+            if row is None:
+                session.add(
+                    DailyLimit(
+                        telegram_id=telegram_id,
+                        plan_date=plan_date,
+                        limit=float(limit),
+                        source=source,
+                    )
+                )
+            else:
+                row.limit = float(limit)
+                row.source = source
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
+            raise
+
+
 async def upsert_daily_limit(
     telegram_id: int,
     plan_date: date,
     limit: float,
     source: str = SOURCE_PLAN,
 ) -> None:
-    """Write the effective limit for ``plan_date``. Last write wins."""
-    async with async_session_maker() as session:
-        result = await session.execute(
-            select(DailyLimit).where(
-                DailyLimit.telegram_id == telegram_id,
-                DailyLimit.plan_date == plan_date,
-            )
+    """Write the effective limit for ``plan_date``. Last write wins.
+
+    Two writers can race between the ``SELECT`` and the ``INSERT`` (for
+    example the 00:05 job and a status render). The loser gets an
+    ``IntegrityError`` on the primary key; retrying turns it into an update.
+    """
+    try:
+        await _write_daily_limit(telegram_id, plan_date, limit, source)
+    except IntegrityError:
+        logger.info(
+            "daily_limits insert race for %s on %s, retrying as update",
+            telegram_id,
+            plan_date,
         )
-        row = result.scalar_one_or_none()
-        if row is None:
-            session.add(
-                DailyLimit(
-                    telegram_id=telegram_id,
-                    plan_date=plan_date,
-                    limit=float(limit),
-                    source=source,
-                )
-            )
-        else:
-            row.limit = float(limit)
-            row.source = source
-        await session.commit()
+        await _write_daily_limit(telegram_id, plan_date, limit, source)
 
 
 async def get_daily_limits(

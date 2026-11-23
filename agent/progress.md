@@ -7,7 +7,7 @@
 ## Текущий статус и фокус
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (включён с 2026-09-05, `RECOVERY_ENABLED=True`)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B24, U1–U3** (Bug Audit 2026-11-06 + визуал, утренний отчёт и UX-статус).  
-**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2** — инфраструктура снапшотов эффективного дневного плана (`daily_limits`) для честных дней/серии/скора; потребитель — C1 (725 тестов).  
+**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2 + G2.1** — инфраструктура снапшотов эффективного дневного плана (`daily_limits`), единый `compute_today_plan`, чистка при reset, retry на гонке upsert; потребитель — C1 (735 тестов).  
 **Активно:** месячный отчёт — **M1–M4** готовы; дальше M5 → M6.  
 **Ближайшее:** «Конверты» (обязательные как отдельный конверт), затем M5/M6. G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
 **В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям.  
@@ -29,8 +29,21 @@
 - **Backfill'а нет:** планы прошлых дней не сохраняли; C1 будет читать снапшоты с fallback на `base_daily_limit`.
 - Сегодняшняя точка карточки полая и не красится, поэтому поздняя сверка не даёт видимого флипа.
 
-**Тесты:** `test_daily_limits.py` (34: insert/update, диапазон, user scoping, plan/recovery, нулевая база, закрытый/будущий период, Recovery другого бюджета, запись из мутаций и триггеров статуса/карточки, обход 00:05, глотание ошибок). `pytest 725 passed`, `ruff check .` clean. `ruff format --check .` — единственное расхождение в `monthly_report.py` существовало до G2 и не трогалось.
+**Тесты:** `test_daily_limits.py` (34: insert/update, диапазон, user scoping, plan/recovery, нулевая база, закрытый/будущий период, Recovery другого бюджета, запись из мутаций и триггеров статуса/карточки, обход 00:05, глотание ошибок; в G2.1 добавлены 2 retry-кейса). `pytest 735 passed`, `ruff check .` clean. `ruff format --check .` — единственное расхождение в `monthly_report.py` существовало до G2 и не трогалось.
 **Файлы:** `src/services/daily_limits.py`, `src/db/models/models.py`, `src/db/database.py`, `src/services/budget_service.py`, `src/services/recovery_service.py`, `src/bot/handlers/menu.py`, `src/services/morning_report.py`, `src/bot/chart_delivery.py`, `src/bot/scheduler.py`, `tests/test_daily_limits.py`, `tests/conftest.py`
+
+### ✅ G2.1: фундамент снапшотов перед C1 (2026-11-23)
+
+**Зачем:** C1 — первый потребитель `daily_limits`. До него закрыты три вещи, которые иначе всплыли бы уже в видимой карточке.
+
+- **Один канон плана.** `TodayPlan` + `compute_today_plan(telegram_id, budget)` в `budget_service` собирают `spent_period → spent_today → money_for_life_raw → plan_today`, `base_limit` и `days_left`. Статус, утренний отчёт и `get_effective_daily_limit` используют только этот хелпер. Поведение не менялось: это вынос уже работавшей цепочки, а не новая формула.
+- **Reset чистит снапшоты.** Полный `reset_budget` → `delete_all_budgets` удаляет все `daily_limits` пользователя: сброс означает «начать с нуля», старые лимиты не должны всплыть в новой карточке. `delete_active_budget` удаляет строки только за период своего бюджета и не трогает чужие/внешние даты.
+- **Гонка upsert.** `upsert_daily_limit` разделён на `_write_daily_limit`; при `IntegrityError` от параллельного INSERT внешний слой делает `rollback` (внутри сессии) и повторяет запись как UPDATE. Второй конфликт пробрасывается, но `refresh_daily_limit` его глотает с `warning` — прод не падает. Без dialect-specific `ON CONFLICT`, одинаково для SQLite и PostgreSQL.
+- **Тест схемы вместо пустого локального аудита.** `test_db_schema.py` проверяет, что `create_all` создаёт все таблицы `Base.metadata`, и отдельно — колонки, PK `(telegram_id, plan_date)` и FK на `users` у `daily_limits`. Локальный `tratobot.db` остаётся пустым артефактом; на проде таблицу создаёт `init_db()`.
+
+**Тесты:** `test_today_plan.py` (3), `test_daily_limits_cleanup.py` (3), `test_db_schema.py` (2), retry-кейсы в `test_daily_limits.py` (+2). Итог — `735 passed`, `ruff check .` clean; форматирование изменённых файлов чистое.
+
+**Файлы:** `src/services/budget_service.py`, `src/services/daily_limits.py`, `src/bot/handlers/menu.py`, `src/services/morning_report.py`, `tests/test_today_plan.py`, `tests/test_daily_limits_cleanup.py`, `tests/test_db_schema.py`, `tests/test_daily_limits.py`
 
 ### 🐛 Bug Audit 2026-11-06 — P0/P1/P2, 15 пунктов + 5 находок (в работе)
 
