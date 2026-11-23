@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, select
 
 from ..db.database import async_session_maker
-from ..db.models.models import Budget, RecoveryState
+from ..db.models.models import Budget, DailyLimit, RecoveryState
 from ..utils import phrases
 from ..utils.helpers import get_msk_now
 
@@ -295,6 +295,16 @@ async def delete_active_budget(telegram_id: int) -> bool:
         budget = await session.get(Budget, active.id)
         if budget is None:
             return False
+        from .monthly_report import get_period_dates
+
+        period_start, period_end = get_period_dates(budget)
+        await session.execute(
+            delete(DailyLimit).where(
+                DailyLimit.telegram_id == telegram_id,
+                DailyLimit.plan_date >= period_start.date(),
+                DailyLimit.plan_date <= period_end.date(),
+            )
+        )
         await _delete_budget_row(session, budget)
         await session.commit()
         return True
@@ -307,6 +317,7 @@ async def delete_all_budgets(telegram_id: int) -> int:
         budgets = result.scalars().all()
         for budget in budgets:
             await _delete_budget_row(session, budget)
+        await session.execute(delete(DailyLimit).where(DailyLimit.telegram_id == telegram_id))
         await session.commit()
         return len(budgets)
 
