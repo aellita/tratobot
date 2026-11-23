@@ -641,13 +641,15 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 
 > Решение пользователя 2026-11-23: коммит `b443c46` (review-фиксы G2.1) запушен **без отдельного повторного @review**, потому что ревью дорогое. Проверить эти места при работе над карточкой, не заводить отдельную задачу.
 
-- [ ] **Одинарный расчёт плана.** Убедиться, что статус и утренний отчёт после `compute_today_plan` → `refresh_daily_limit(..., plan=...)` показывают те же цифры, что до G2.1 (сверить на паре реальных сценариев: обычный день, Recovery, после сверки).
-- [ ] **`get_effective_daily_limit` — только «сегодня».** C1 должен читать историю через `get_daily_limits` с fallback на `base_daily_limit`, а не пытаться вызвать эффективный лимит за прошлую дату.
-- [ ] **Retry только на INSERT.** Проверить на PostgreSQL-подобной нагрузке (00:05-джоб + статус одновременно), что гонка лечится, а ошибка UPDATE не маскируется повтором.
-- [ ] **Границы периода при удалении.** `delete_active_budget` / `_delete_budget_with_limits` для `period_start_day = 29–31` в коротких месяцах: не удаляются ли снапшоты соседнего периода.
-- [ ] **SQLite не проверяет FK.** В тестах `PRAGMA foreign_keys` выключен, поэтому порядок удаления `RecoveryState`/`DailyLimit` перед `Budget` проверен только логикой. При C1 либо включить FK в тестовом engine, либо явно прогнать сценарий на PostgreSQL.
-- [ ] **Остаточный риск L2.** Если конкурент ещё не закоммитил INSERT, повторная попытка может снова получить `IntegrityError`, и день останется без снапшота (только `warning`). Для C1 это дырка в графике — решить, нужен ли UPDATE-only последний шаг.
-- [ ] **Известное, не блокирует:** `morning_report` импортирует aiogram (нарушение слоёв, предсуществующее); `daily_limits` и `budget_service` связаны ленивыми импортами — не делать их модульными без разрыва цикла.
+- [x] **Одинарный расчёт плана.** Ревью 2026-11-23 подтвердило: статус и утро считают `TodayPlan` один раз и передают в `refresh_daily_limit`; добавлен тест, что при переданном `plan` `compute_today_plan` не вызывается.
+- [x] **`get_effective_daily_limit` — только «сегодня».** Подтверждено: история C1 читает `get_daily_limits` с fallback на `base_daily_limit`; эффективный лимит используется только для пилюли/сегодняшнего снапшота.
+- [x] **Retry только на INSERT.** Подтверждено ревью; `attempted_insert` инициализируется до `try`, UPDATE-ошибки не маскируются. Остаточный L2 ниже.
+- [x] **Границы периода при удалении.** Ревью нашло пересечение stale-периода с новым активным; `_delete_budget_with_limits` получил `exclude_period`, добавлен тест на смену `period_start_day`.
+- [ ] **SQLite не проверяет FK.** В тестах `PRAGMA foreign_keys` выключен; это остаётся известным отложенным пунктом до отдельного FK-фикстуры.
+- [ ] **Остаточный риск L2.** Если конкурент ещё не закоммитил INSERT, повторная попытка может снова получить `IntegrityError`, и день останется без снапшота (только `warning`). Fallback на базу не даёт визуальной дырки; решение об UPDATE-only/ON CONFLICT отложено.
+- [x] **Известное, не блокирует:** `morning_report` импортирует aiogram (нарушение слоёв, предсуществующее); `daily_limits` и `budget_service` связаны ленивыми импортами — не делать их модульными без разрыва цикла.
+
+> Ревью G2.1 + C1–C3 (2026-11-23): Critical/High нет; исправлены Medium/Low по плану. В backlog осознанно оставлены SQLite FK, остаточный L2, лишний prev-запрос (B3), спорные пилюли при `base=0` (B6) и расширение тестов (B10).
 
 ### ✅ C1–C3: Bento-карточка 900×840 (2026-11-23)
 
@@ -655,13 +657,13 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 
 - **C1 — данные и метрики.** `MonthlyCardInput` + `compute_card_metrics()`: `daily_limits[]` (снапшот или база), завершённые дни без сегодня, `green/tracked`, скор `70·green/tracked + 30·(1 − overspend/Σlimits)` с гейтом `base > 0`, `tracked ≥ 3`, лиги 55/75/90; серия с нейтральным `0 ₽`; `peak_days` только закрытый, порог 45%, минимальное k ∈ {1,2,3}, гейт `tracked ≥ 7`; `weekend_tax` — доля трат на выходных ≥40% и только при наличии и будней, и выходных; `night_food`/`latte_effect` — ≥15%; `top_expense` — самая дорогая покупка.
 - **C2 — рендер.** 900×840, фон `#0B0F14`, карточка `#111822`/`#1E293B`/r16, линия `#1C6CFF` + заливка, ступенчатый пунктир `#FACC15`, перерасход/пик `#FF4433`; шапка с двумя пилюлями; nice-step Y-ось; полая точка сегодня; callout пика одной строкой без категории; bento 2×2 с микро-барами.
-- **C3 — лягушки и закрытые состояния.** `src/assets/frogs/{metric_id}.png`, 48×48 RGBA, тихий пропуск при отсутствии, fallback на generic; `quiet_mode_closed` с подписью `за период — ни одной траты`; до старта — `upcoming` без пилюль.
-- **Ассеты:** в `src/assets/frogs/` 21 PNG 100×100 RGBA: `limit_streak_first`, `limit_streak_chasing`, `limit_streak_repeat`, `limit_streak_record`, `limit_streak_zero`, `limit_winrate_clean`, `limit_winrate`, `limit_winrate_rough`, `avg_day`, `bro_score_novice`, `bro_score_own`, `bro_score_pro`, `bro_score_ninja`, `forecast`, `peak_days`, `top_category`, `night_food`, `latte_effect`, `weekend_tax`, `quiet_mode`, `upcoming`.
+- **C3 — лягушки и закрытые состояния.** `src/assets/frogs/{metric_id}.png`, 100×100 PNG RGBA, в bento 48×48 / в широких 96×96; тихий пропуск при отсутствии, fallback на generic; `quiet_mode_closed` с подписью `за период — ни одной траты`; до старта — `upcoming` без пилюль.
+- **Ассеты:** в `src/assets/frogs/` 23 PNG 100×100 RGBA: `limit_streak`, `limit_streak_first`, `limit_streak_chasing`, `limit_streak_repeat`, `limit_streak_record`, `limit_streak_zero`, `limit_winrate_clean`, `limit_winrate`, `limit_winrate_rough`, `avg_day`, `bro_score`, `bro_score_novice`, `bro_score_own`, `bro_score_pro`, `bro_score_ninja`, `forecast`, `peak_days`, `top_category`, `night_food`, `latte_effect`, `weekend_tax`, `quiet_mode`, `upcoming`.
 - **Alias/fallback без файлов:** `top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`. `tx_per_day_zero` не добавляли — код его не использует. В широких карточках лягушка 96×96, в bento — 48×48.
 - [x] ✅ C1 — input + метрики + тесты
 - [x] ✅ C2 — рендер 900×840 + тесты
 - [x] ✅ C3 — лягушки, closed/quiet, доки
-- [x] ✅ Ассеты лягушек: 20 PNG + alias/fallback (`top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`)
+- [x] ✅ Ассеты лягушек: 23 PNG + alias/fallback (`top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`)
 - [ ] ⏳ Ручная проверка карточки в Telegram (активный, закрытый, quiet_mode, base=0/top_expense)
 
 ### G3: Tier 2 — локальные переключатели

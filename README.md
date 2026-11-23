@@ -109,7 +109,7 @@ echo $?   # 0 — чисто, 1 — есть critical, 2 — не удалось
 
 ## Тесты и качество
 
-**777 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
+**787 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -141,7 +141,7 @@ tratobot/
 │   │   ├── scheduler.py
 │   │   └── main.py
 │   ├── assets/fonts/   # Nunito (variable TTF) для PNG-карточки
-│   ├── assets/frogs/   # опциональные 48×48 PNG-лягушки для bento-карточки
+│   ├── assets/frogs/   # PNG-лягушки 100×100; в карточке 48×48 / 96×96
 │   ├── services/        # budget, expense, categorization, category, morning/evening report,
 │   │                    # monthly_report, monthly_chart, recovery, goal, user
 │   ├── db/
@@ -151,7 +151,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 777 тестов
+├── tests/               # 787 тестов
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile
