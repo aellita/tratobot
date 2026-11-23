@@ -109,7 +109,7 @@ echo $?   # 0 — чисто, 1 — есть critical, 2 — не удалось
 
 ## Тесты и качество
 
-**787 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
+**789 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -151,7 +151,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 787 тестов
+├── tests/               # 789 тестов
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile
