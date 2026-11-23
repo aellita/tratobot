@@ -45,7 +45,7 @@ Telegram-бот для учёта личных финансов. Отвечае�
 | Утренний отчёт 08:00 МСК | план + вчерашний итог + зона + recovery-контекст, дедупликация через `daily_reports_log` |
 | Вечерняя сессия 22:00 + автозакрытие 23:30 | контейнер с живым списком, итог дня, recovery-фидбек |
 | Месячный отчёт | Rich HTML: разбивка по категориям, тотем топ-категории, «Сэкономлено/Перерасход» от доступного лимита, добавленный доход, навигация по периодам |
-| Bento-карточка 900×840 | Траты по дням, ступенчатый лимит из посуточных снапшотов, серия/зелёные дни, фин-скор, привычки, `top_expense`; лягушки — опциональные PNG |
+| Bento-карточка | Логическая сетка 900×840, PNG 1280×1195 (2× supersampling + LANCZOS): траты по дням, ступенчатый лимит из посуточных снапшотов, серия/зелёные дни, фин-скор, привычки, `top_expense`; лягушки — 100×100 PNG |
 | Recovery mode | Decimal-математика, cooldown 3 дня, пересчёт при изменении бюджета, авто-завершение при успехе |
 | Ролловер периода | «Оставить всё» / «Изменить» с умными дефолтами из прошлого месяца |
 | Пересчёт по реальному балансу | снапшот `free_money + spent_at_recalc` в одной транзакции |
@@ -93,6 +93,8 @@ Docker: `python:3.12-slim`, `CMD ["python", "-m", "src.bot.main"]`. Деплой
 | `EXPENSE_SIMPLE_CHECK` | `True` | Reply-меню внизу чата вместо inline-меню |
 | `RECOVERY_ENABLED` | `True` | Kill-switch режима восстановления лимита |
 | `MONTHLY_WIDGET_ENABLED` | `False` | Нативные Telegram-виджеты откатаны; PNG — основной путь. `True` возвращает виджет |
+| `MONTHLY_CARD_RENDER_SCALE` | `2` | Внутренний supersampling карточки: 2× рендер, затем LANCZOS-уменьшение. `1` — откат на 900×840 |
+| `MONTHLY_CARD_OUTPUT_WIDTH` | `1280` | Финальная ширина PNG; высота считается по пропорции 900×840 |
 
 ### Аудит схемы перед деплоем
 
@@ -109,7 +111,7 @@ echo $?   # 0 — чисто, 1 — есть critical, 2 — не удалось
 
 ## Тесты и качество
 
-**789 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
+**790 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -151,7 +153,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 789 тестов
+├── tests/               # 790 тестов
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile

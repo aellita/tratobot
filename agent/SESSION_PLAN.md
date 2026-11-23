@@ -651,17 +651,17 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 
 > Ревью G2.1 + C1–C3 (2026-11-23): Critical/High нет; исправлены Medium/Low по плану. Точечное ре-ревью `e361624` нашло Medium #1 (пилюля брала лимит активного, а не отображаемого бюджета) — исправлено и покрыто тестом. В backlog осознанно оставлены SQLite FK, остаточный L2, лишний prev-запрос (B3), спорные пилюли при `base=0` (B6) и расширение тестов (B10).
 
-### ✅ C1–C3: Bento-карточка 900×840 (2026-11-23)
+### ✅ C1–C3: Bento-карточка 900×840 → PNG 1280×1195 (2026-11-23)
 
 **Зачем:** старая карточка 900×620 судила историю по текущему плану и теряла контекст: сколько дней реально в лимите, какая серия, что съело деньги. Новая карточка читает посуточные снапшоты и показывает 4 понятных блока.
 
 - **C1 — данные и метрики.** `MonthlyCardInput` + `compute_card_metrics()`: `daily_limits[]` (снапшот или база), завершённые дни без сегодня, `green/tracked`, скор `70·green/tracked + 30·(1 − overspend/Σlimits)` с гейтом `base > 0`, `tracked ≥ 3`, лиги 55/75/90; серия с нейтральным `0 ₽`; `peak_days` только закрытый, порог 45%, минимальное k ∈ {1,2,3}, гейт `tracked ≥ 7`; `weekend_tax` — доля трат на выходных ≥40% и только при наличии и будней, и выходных; `night_food`/`latte_effect` — ≥15%; `top_expense` — самая дорогая покупка.
-- **C2 — рендер.** 900×840, фон `#0B0F14`, карточка `#111822`/`#1E293B`/r16, линия `#1C6CFF` + заливка, ступенчатый пунктир `#FACC15`, перерасход/пик `#FF4433`; шапка с двумя пилюлями; nice-step Y-ось; полая точка сегодня; callout пика одной строкой без категории; bento 2×2 с микро-барами.
+- **C2 — рендер.** Логическая сетка 900×840, 2× внутренний рендер → LANCZOS 1280×1195; фон `#0B0F14`, карточка `#111822`/`#1E293B`/r16, линия `#1C6CFF` + заливка, ступенчатый пунктир `#FACC15`, перерасход/пик `#FF4433`; шапка с двумя пилюлями; nice-step Y-ось; полая точка сегодня; callout пика одной строкой без категории; bento 2×2 с микро-барами.
 - **C3 — лягушки и закрытые состояния.** `src/assets/frogs/{metric_id}.png`, 100×100 PNG RGBA, в bento 48×48 / в широких 96×96; тихий пропуск при отсутствии, fallback на generic; `quiet_mode_closed` с подписью `за период — ни одной траты`; до старта — `upcoming` без пилюль.
 - **Ассеты:** в `src/assets/frogs/` 23 PNG 100×100 RGBA: `limit_streak`, `limit_streak_first`, `limit_streak_chasing`, `limit_streak_repeat`, `limit_streak_record`, `limit_streak_zero`, `limit_winrate_clean`, `limit_winrate`, `limit_winrate_rough`, `avg_day`, `bro_score`, `bro_score_novice`, `bro_score_own`, `bro_score_pro`, `bro_score_ninja`, `forecast`, `peak_days`, `top_category`, `night_food`, `latte_effect`, `weekend_tax`, `quiet_mode`, `upcoming`.
 - **Alias/fallback без файлов:** `top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`. `tx_per_day_zero` не добавляли — код его не использует. В широких карточках лягушка 96×96, в bento — 48×48.
 - [x] ✅ C1 — input + метрики + тесты
-- [x] ✅ C2 — рендер 900×840 + тесты
+- [x] ✅ C2 — рендер 2× → 1280×1195 + тесты
 - [x] ✅ C3 — лягушки, closed/quiet, доки
 - [x] ✅ Ассеты лягушек: 23 PNG + alias/fallback (`top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`)
 - [ ] ⏳ Ручная проверка карточки в Telegram (активный, закрытый, quiet_mode, base=0/top_expense)
