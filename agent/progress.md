@@ -7,7 +7,7 @@
 ## Текущий статус и фокус
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (включён с 2026-09-05, `RECOVERY_ENABLED=True`)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B24, U1–U3** (Bug Audit 2026-11-06 + визуал, утренний отчёт и UX-статус).  
-**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2 + G2.1** — снапшоты эффективного дневного плана (`daily_limits`), единый `compute_today_plan`, чистка при reset, retry; **C1–C3** — Bento-карточка 900×840 с метриками от посуточных лимитов (776 тестов).  
+**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2 + G2.1** — снапшоты эффективного дневного плана (`daily_limits`), единый `compute_today_plan`, чистка при reset, retry; **C1–C3** — Bento-карточка 900×840 с метриками от посуточных лимитов (777 тестов).  
 **Активно:** месячный отчёт — **M1–M4** готовы; дальше M5 → M6.  
 **Ближайшее:** «Конверты» (обязательные как отдельный конверт), затем M5/M6. G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
 **В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям.  
@@ -72,9 +72,9 @@
 **C3 — лягушки и закрытые состояния:**
 - `_load_frog` / `_paste_frog`: `src/assets/frogs/{metric_id}.png`, 48×48 RGBA, тихий пропуск при отсутствии, fallback на generic-ассеты.
 - Закрытый `quiet_mode`: `quiet_mode_closed` с fallback на `quiet_mode`, подпись `за период — ни одной траты`, без обвинений.
-- Полный список 25 ассетов и минимальный 16+1 — в `SESSION_PLAN.md`.
+- **Ассеты:** в `src/assets/frogs/` лежат 20 PNG 100×100 RGBA. Alias/fallback: `top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`; `upcoming` без лягушки. `tx_per_day_zero` не добавляли — код его не использует.
 
-**Тесты:** `test_monthly_card_metrics.py` (33: все состояния, серия/0-дни, скор, границы, peak_days/k, weekend-гейт, night/latte, callout, пилюли, дедуп), обновлены `test_monthly_chart.py` и `test_monthly_chart_integration.py`. `pytest 776 passed`, `ruff check .` clean.
+**Тесты:** `test_monthly_card_metrics.py` (33: все состояния, серия/0-дни, скор, границы, peak_days/k, weekend-гейт, night/latte, callout, пилюли, дедуп), обновлены `test_monthly_chart.py` и `test_monthly_chart_integration.py`. `pytest 777 passed`, `ruff check .` clean.
 **Файлы:** `src/services/monthly_chart.py`, `tests/test_monthly_card_metrics.py`, `tests/test_monthly_chart.py`, `tests/test_monthly_chart_integration.py`
 
 ### 🐛 Bug Audit 2026-11-06 — P0/P1/P2, 15 пунктов + 5 находок (в работе)

@@ -8,11 +8,11 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 219 |
+| ✅ Готово | 220 |
 | 🔧 В работе | 0 |
 | ⏳ Ожидает | 38 |
 
-**Следующая задача:** «Конверты», M5 → M6. G2, G2.1 и карточка C1–C3 готовы; остались ассеты лягушек и ручная проверка карточки в Telegram.
+**Следующая задача:** «Конверты», M5 → M6. G2, G2.1 и карточка C1–C3 готовы; ассеты лягушек добавлены, осталась ручная проверка карточки в Telegram.
 
 > Контекст, цитаты пользователя и цифры для тестов — `agent/bugs_2026-11-06.md`.
 
@@ -656,12 +656,13 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 - **C1 — данные и метрики.** `MonthlyCardInput` + `compute_card_metrics()`: `daily_limits[]` (снапшот или база), завершённые дни без сегодня, `green/tracked`, скор `70·green/tracked + 30·(1 − overspend/Σlimits)` с гейтом `base > 0`, `tracked ≥ 3`, лиги 55/75/90; серия с нейтральным `0 ₽`; `peak_days` только закрытый, порог 45%, минимальное k ∈ {1,2,3}, гейт `tracked ≥ 7`; `weekend_tax` — доля трат на выходных ≥40% и только при наличии и будней, и выходных; `night_food`/`latte_effect` — ≥15%; `top_expense` — самая дорогая покупка.
 - **C2 — рендер.** 900×840, фон `#0B0F14`, карточка `#111822`/`#1E293B`/r16, линия `#1C6CFF` + заливка, ступенчатый пунктир `#FACC15`, перерасход/пик `#FF4433`; шапка с двумя пилюлями; nice-step Y-ось; полая точка сегодня; callout пика одной строкой без категории; bento 2×2 с микро-барами.
 - **C3 — лягушки и закрытые состояния.** `src/assets/frogs/{metric_id}.png`, 48×48 RGBA, тихий пропуск при отсутствии, fallback на generic; `quiet_mode_closed` с подписью `за период — ни одной траты`; до старта — `upcoming` без пилюль.
-- **Ассеты:** полный набор 25 файлов: `limit_streak_first`, `limit_streak_chasing`, `limit_streak_repeat`, `limit_streak_record`, `limit_streak_zero`, `limit_winrate_clean`, `limit_winrate`, `limit_winrate_rough`, `avg_day`, `bro_score_novice`, `bro_score_own`, `bro_score_pro`, `bro_score_ninja`, `forecast`, `forecast_early`, `top_category`, `top_expense`, `peak_days`, `night_food`, `latte_effect`, `weekend_tax`, `tx_per_day`, `quiet_mode`, `quiet_mode_closed`, `upcoming`.
-- **Минимальный набор 16 + 1:** `limit_streak`, `limit_streak_record`, `limit_streak_zero`, `limit_winrate`, `avg_day`, `bro_score`, `forecast`, `top_category`, `top_expense`, `peak_days`, `night_food`, `latte_effect`, `weekend_tax`, `tx_per_day`, `quiet_mode`, `upcoming` (+ `quiet_mode_closed`).
+- **Ассеты:** в `src/assets/frogs/` 20 PNG 100×100 RGBA: `limit_streak_first`, `limit_streak_chasing`, `limit_streak_repeat`, `limit_streak_record`, `limit_streak_zero`, `limit_winrate_clean`, `limit_winrate`, `limit_winrate_rough`, `avg_day`, `bro_score_novice`, `bro_score_own`, `bro_score_pro`, `bro_score_ninja`, `forecast`, `peak_days`, `top_category`, `night_food`, `latte_effect`, `weekend_tax`, `quiet_mode`.
+- **Alias/fallback без файлов:** `top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`; `upcoming` без лягушки. `tx_per_day_zero` не добавляли — код его не использует.
 - [x] ✅ C1 — input + метрики + тесты
 - [x] ✅ C2 — рендер 900×840 + тесты
 - [x] ✅ C3 — лягушки, closed/quiet, доки
-- [ ] ⏳ Добавить ассеты лягушек и проверить карточку в Telegram (активный, закрытый, quiet_mode, upcoming)
+- [x] ✅ Ассеты лягушек: 20 PNG + alias/fallback (`top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`)
+- [ ] ⏳ Ручная проверка карточки в Telegram (активный, закрытый, quiet_mode, base=0/top_expense)
 
 ### G3: Tier 2 — локальные переключатели
 
