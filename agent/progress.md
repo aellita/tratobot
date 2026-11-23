@@ -72,7 +72,7 @@
 **C3 — лягушки и закрытые состояния:**
 - `_load_frog` / `_paste_frog`: `src/assets/frogs/{metric_id}.png`, 48×48 RGBA, тихий пропуск при отсутствии, fallback на generic-ассеты.
 - Закрытый `quiet_mode`: `quiet_mode_closed` с fallback на `quiet_mode`, подпись `за период — ни одной траты`, без обвинений.
-- **Ассеты:** в `src/assets/frogs/` лежат 20 PNG 100×100 RGBA. Alias/fallback: `top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`; `upcoming` без лягушки. `tx_per_day_zero` не добавляли — код его не использует.
+- **Ассеты:** в `src/assets/frogs/` лежат 21 PNG 100×100 RGBA. Alias/fallback: `top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`. `tx_per_day_zero` не добавляли — код его не использует. В широких карточках лягушка рисуется 96×96, в bento — 48×48.
 
 **Тесты:** `test_monthly_card_metrics.py` (33: все состояния, серия/0-дни, скор, границы, peak_days/k, weekend-гейт, night/latte, callout, пилюли, дедуп), обновлены `test_monthly_chart.py` и `test_monthly_chart_integration.py`. `pytest 777 passed`, `ruff check .` clean.
 **Файлы:** `src/services/monthly_chart.py`, `tests/test_monthly_card_metrics.py`, `tests/test_monthly_chart.py`, `tests/test_monthly_chart_integration.py`
