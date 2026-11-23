@@ -166,6 +166,18 @@ class TestBuildChartState:
         assert state["lim"] == 123.0
 
 
+class TestScaledDraw:
+    def test_scales_boxes_and_points(self):
+        from PIL import Image, ImageDraw
+
+        from src.services.monthly_chart import _ScaledDraw
+
+        draw = _ScaledDraw(ImageDraw.Draw(Image.new("RGB", (100, 100))), 2)
+
+        assert draw._box((10, 10, 20, 20)) == (20, 20, 40, 40)
+        assert draw._points([(1, 2), (3, 4)]) == [(2, 4), (6, 8)]
+
+
 class TestRenderMonthlyCardPng:
     """Tests for render_monthly_card_png function."""
 
@@ -195,6 +207,19 @@ class TestRenderMonthlyCardPng:
         png_bytes = render_monthly_card_png(_make_input())
         img = Image.open(BytesIO(png_bytes))
         assert img.size == (900, 840)
+
+    def test_custom_output_width(self, monkeypatch):
+        from io import BytesIO
+
+        from PIL import Image
+
+        from src.core.config import settings
+
+        monkeypatch.setattr(settings, "MONTHLY_CARD_RENDER_SCALE", 2)
+        monkeypatch.setattr(settings, "MONTHLY_CARD_OUTPUT_WIDTH", 1000)
+        png_bytes = render_monthly_card_png(_make_input())
+        img = Image.open(BytesIO(png_bytes))
+        assert img.size == (1000, 933)
 
     def test_zero_spent_quiet_mode(self):
         png_bytes = render_monthly_card_png(_make_input(daily_spent=[0.0] * 30, total_spent=0.0))

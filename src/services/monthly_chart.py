@@ -925,9 +925,9 @@ def _input_to_json(input: MonthlyCardInput) -> str:
     )
 
 
-def _cached_render(input_json: str, _scale: int, _output_width: int) -> bytes:
-    input_data = json.loads(input_json)
-    return _render_monthly_card_png_from_dict(input_data)
+@functools.lru_cache(maxsize=32)
+def _cached_render(input_json: str, scale: int, output_width: int) -> bytes:
+    return _render_monthly_card_png_from_dict(json.loads(input_json), scale, output_width)
 
 
 FROG_FALLBACKS = {
@@ -984,7 +984,7 @@ def _paste_frog(
     if frog is None:
         return
     size = max(1, round(size * scale))
-    frog = frog.resize((size, size), Image.LANCZOS)
+    frog = frog.resize((size, size), getattr(Image, "Resampling", Image).LANCZOS)
     img.paste(frog, (int(x * scale), int(y * scale)), frog)
 
 
@@ -1012,14 +1012,6 @@ class _ScaledDraw:
 
     def textlength(self, text, font=None, **kwargs):
         return self._draw.textlength(text, font=font, **kwargs) / self._scale
-
-    def textbbox(self, xy, text, font=None, anchor=None, **kwargs):
-        return tuple(
-            round(value / self._scale)
-            for value in self._draw.textbbox(
-                self._point(xy), text, font=font, anchor=anchor, **kwargs
-            )
-        )
 
     def line(self, xy, fill=None, width=1, **kwargs):
         return self._draw.line(
@@ -1067,7 +1059,7 @@ class _ScaledDraw:
         )
 
 
-def _render_monthly_card_png_from_dict(data: dict) -> bytes:
+def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int) -> bytes:
     from PIL import Image, ImageDraw
 
     bg = "#0B0F14"
@@ -1084,7 +1076,6 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
     accent_pink = "#F472B6"
 
     w, h = 900, 840
-    scale = max(1, int(settings.MONTHLY_CARD_RENDER_SCALE))
     margin = 32
     img = Image.new("RGB", (w * scale, h * scale), bg)
     draw = _ScaledDraw(ImageDraw.Draw(img), scale)
@@ -1467,8 +1458,7 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
 
     from io import BytesIO
 
-    if scale > 1:
-        output_width = max(w, int(settings.MONTHLY_CARD_OUTPUT_WIDTH))
+    if output_width != w * scale:
         output_height = round(output_width * h / w)
         resample = getattr(Image, "Resampling", Image).LANCZOS
         img = img.resize((output_width, output_height), resample)
@@ -1481,7 +1471,8 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
 def render_monthly_card_png(input: MonthlyCardInput) -> bytes:
     input_json = _input_to_json(input)
     scale = max(1, int(settings.MONTHLY_CARD_RENDER_SCALE))
-    output_width = max(900, int(settings.MONTHLY_CARD_OUTPUT_WIDTH))
+    configured_width = max(900, int(settings.MONTHLY_CARD_OUTPUT_WIDTH))
+    output_width = min(configured_width, 900 * scale)
     return _cached_render(input_json, scale, output_width)
 
 
