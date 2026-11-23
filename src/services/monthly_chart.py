@@ -926,6 +926,8 @@ FROG_FALLBACKS = {
     "bro_score_ninja": "bro_score",
     "forecast_early": "forecast",
     "quiet_mode_closed": "quiet_mode",
+    "top_expense": "weekend_tax",
+    "tx_per_day": "avg_day",
 }
 
 

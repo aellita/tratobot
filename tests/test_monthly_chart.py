@@ -270,6 +270,44 @@ class TestFrogs:
         assert FROG_FALLBACKS["bro_score_pro"] == "bro_score"
         assert FROG_FALLBACKS["limit_streak_record"] == "limit_streak"
         assert FROG_FALLBACKS["quiet_mode_closed"] == "quiet_mode"
+        assert FROG_FALLBACKS["top_expense"] == "weekend_tax"
+        assert FROG_FALLBACKS["tx_per_day"] == "avg_day"
+
+    def test_committed_frog_assets_are_png_rgba(self):
+        from pathlib import Path
+
+        from PIL import Image
+
+        root = Path(__file__).resolve().parents[1] / "src" / "assets" / "frogs"
+        names = {path.name for path in root.glob("*.png")}
+        expected = {
+            "avg_day.png",
+            "bro_score_ninja.png",
+            "bro_score_novice.png",
+            "bro_score_own.png",
+            "bro_score_pro.png",
+            "forecast.png",
+            "latte_effect.png",
+            "limit_streak_chasing.png",
+            "limit_streak_first.png",
+            "limit_streak_record.png",
+            "limit_streak_repeat.png",
+            "limit_streak_zero.png",
+            "limit_winrate.png",
+            "limit_winrate_clean.png",
+            "limit_winrate_rough.png",
+            "night_food.png",
+            "peak_days.png",
+            "quiet_mode.png",
+            "top_category.png",
+            "weekend_tax.png",
+        }
+        assert expected <= names
+        for path in sorted(root.glob("*.png")):
+            with Image.open(path) as img:
+                assert img.format == "PNG"
+                assert img.mode == "RGBA"
+                assert img.size == (100, 100)
 
 
 class TestFonts:
