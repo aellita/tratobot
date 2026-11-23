@@ -1,7 +1,11 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from src.db.models.models import Budget, User
-from src.services.budget_service import delete_active_budget, delete_all_budgets
+from src.services.budget_service import (
+    delete_active_budget,
+    delete_all_budgets,
+    update_budget_field,
+)
 from src.services.daily_limits import get_daily_limits, upsert_daily_limit
 from src.utils.helpers import get_msk_now, period_dates
 
@@ -100,3 +104,39 @@ async def test_delete_active_budget_without_budget_returns_false(db_session):
     await _seed_user(db_session, 3003)
 
     assert await delete_active_budget(3003) is False
+
+
+async def test_period_start_change_keeps_snapshots_of_new_period(db_session, monkeypatch):
+    fixed = datetime(2026, 11, 23, 12, 0, 0)
+    monkeypatch.setattr("src.services.budget_service.get_msk_now", lambda: fixed)
+    await _seed_user(db_session, 1001)
+    db_session.add(
+        Budget(
+            telegram_id=1001,
+            month="2026-11",
+            total_income=100000,
+            mandatory_payments=0,
+            black_day_fund=0,
+            period_start_day=1,
+        )
+    )
+    db_session.add(
+        Budget(
+            telegram_id=1001,
+            month="2026-10",
+            total_income=100000,
+            mandatory_payments=0,
+            black_day_fund=0,
+            period_start_day=1,
+        )
+    )
+    await db_session.commit()
+    outside = date(2026, 10, 20)
+    inside = date(2026, 10, 27)
+    await upsert_daily_limit(1001, outside, 111.0)
+    await upsert_daily_limit(1001, inside, 222.0)
+
+    await update_budget_field(1001, "period_start_day", 25)
+
+    assert await get_daily_limits(1001, outside, outside) == {}
+    assert await get_daily_limits(1001, inside, inside) == {inside: 222.0}

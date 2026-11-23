@@ -44,6 +44,7 @@ async def _write_daily_limit(
     """Insert or update one day; retry only an INSERT that lost the PK race."""
     for attempt in (0, 1):
         async with async_session_maker() as session:
+            attempted_insert = False
             try:
                 row = await _select_existing(session, telegram_id, plan_date)
                 attempted_insert = row is None
@@ -141,7 +142,8 @@ async def _effective_daily_limit(
         return None
     if budget.days_remaining <= 0:
         return None
-    if await get_base_daily_limit(budget) <= 0:
+    base_limit = plan.base_limit if plan is not None else await get_base_daily_limit(budget)
+    if base_limit <= 0:
         return None
 
     recovery = await get_active_recovery(telegram_id)
@@ -156,21 +158,25 @@ async def refresh_daily_limit(
     telegram_id: int,
     budget: Budget | None = None,
     plan: "TodayPlan | None" = None,
-) -> None:
+) -> tuple[float, str] | None:
     """Snapshot today's effective limit. Never raises into the caller.
 
     ``plan`` lets the caller reuse an already computed ``TodayPlan`` so the
-    status/morning render does not run the canonical chain twice.
+    status/morning render does not run the canonical chain twice. Returns the
+    effective ``(limit, source)`` when a snapshot was written, otherwise
+    ``None``.
     """
     try:
         plan_date = get_msk_now().date()
         effective = await _effective_daily_limit(telegram_id, budget, plan_date, plan)
         if effective is None:
-            return
+            return None
         limit, source = effective
         await upsert_daily_limit(telegram_id, plan_date, limit, source)
+        return effective
     except Exception:
         logger.warning("Failed to refresh daily limit for %s", telegram_id, exc_info=True)
+        return None
 
 
 async def refresh_all_daily_limits() -> int:

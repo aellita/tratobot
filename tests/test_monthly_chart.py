@@ -211,6 +211,28 @@ class TestRenderMonthlyCardPng:
         png_bytes = render_monthly_card_png(_make_input(daily_spent=[], total_spent=0.0))
         assert len(png_bytes) > 1000
 
+    def test_31_day_period(self):
+        png_bytes = render_monthly_card_png(
+            _make_input(daily_spent=[100.0] * 31, total_spent=3100.0)
+        )
+        assert len(png_bytes) > 1000
+
+    def test_upcoming_period(self):
+        png_bytes = render_monthly_card_png(
+            _make_input(
+                period_start=date(2026, 12, 1),
+                period_end=date(2026, 12, 31),
+                daily_spent=[],
+                total_spent=0.0,
+                expenses_count=0,
+                as_of=date(2026, 11, 23),
+                is_active=False,
+                upcoming=True,
+                daily_limits=[],
+            )
+        )
+        assert len(png_bytes) > 1000
+
     def test_single_day_period(self):
         png_bytes = render_monthly_card_png(
             _make_input(
@@ -273,6 +295,15 @@ class TestFrogs:
         assert FROG_FALLBACKS["top_expense"] == "weekend_tax"
         assert FROG_FALLBACKS["tx_per_day"] == "avg_day"
 
+    def test_fallback_targets_exist(self):
+        from pathlib import Path
+
+        from src.services.monthly_chart import FROG_FALLBACKS
+
+        root = Path(__file__).resolve().parents[1] / "src" / "assets" / "frogs"
+        names = {path.stem for path in root.glob("*.png")}
+        assert set(FROG_FALLBACKS.values()) <= names
+
     def test_committed_frog_assets_are_png_rgba(self):
         from pathlib import Path
 
@@ -282,12 +313,14 @@ class TestFrogs:
         names = {path.name for path in root.glob("*.png")}
         expected = {
             "avg_day.png",
+            "bro_score.png",
             "bro_score_ninja.png",
             "bro_score_novice.png",
             "bro_score_own.png",
             "bro_score_pro.png",
             "forecast.png",
             "latte_effect.png",
+            "limit_streak.png",
             "limit_streak_chasing.png",
             "limit_streak_first.png",
             "limit_streak_record.png",

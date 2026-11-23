@@ -1,6 +1,10 @@
 from datetime import date, timedelta
 
-from src.services.monthly_chart import MonthlyCardInput, compute_card_metrics
+from src.services.monthly_chart import (
+    MonthlyCardInput,
+    _x_label_indices,
+    compute_card_metrics,
+)
 
 
 def _make_input(
@@ -415,6 +419,48 @@ def test_night_food_uses_15_percent_threshold():
     assert metrics.cards[2].id == "night_food"
 
 
+def test_latte_effect_requires_five_checks_and_15_percent():
+    expenses = [
+        {"date": "2026-11-02T12:00:00", "amount": 200.0},
+        {"date": "2026-11-03T12:00:00", "amount": 200.0},
+        {"date": "2026-11-04T12:00:00", "amount": 200.0},
+        {"date": "2026-11-05T12:00:00", "amount": 200.0},
+        {"date": "2026-11-06T12:00:00", "amount": 200.0},
+    ]
+    metrics = compute_card_metrics(
+        _make_input(
+            [1000.0] * 5,
+            start=date(2026, 11, 2),
+            period_end=date(2026, 11, 6),
+            active=False,
+            expenses=expenses,
+        )
+    )
+
+    assert metrics.cards[2].id == "latte_effect"
+
+
+def test_latte_effect_needs_five_checks():
+    expenses = [
+        {"date": "2026-11-02T12:00:00", "amount": 250.0},
+        {"date": "2026-11-03T12:00:00", "amount": 250.0},
+        {"date": "2026-11-04T12:00:00", "amount": 250.0},
+        {"date": "2026-11-05T12:00:00", "amount": 250.0},
+    ]
+    metrics = compute_card_metrics(
+        _make_input(
+            [1000.0] * 5,
+            start=date(2026, 11, 2),
+            period_end=date(2026, 11, 6),
+            active=False,
+            expenses=expenses,
+        )
+    )
+
+    assert "latte_effect" not in _ids(metrics)
+    assert metrics.cards[2].id == "top_category"
+
+
 def test_top_category_is_fallback():
     expenses = [
         {"date": "2026-11-02T12:00:00", "amount": 3000.0, "category": "Еда"},
@@ -462,6 +508,29 @@ def test_pills_and_delta():
     assert closed.current_limit == 5000.0
     assert closed.limit_delta is None
     assert closed.budget_saved == 145000.0
+
+
+def test_weekend_tax_uses_completed_total_on_active_period():
+    spent = [1000.0] * 5 + [2000.0, 2000.0, 50000.0]
+    metrics = compute_card_metrics(
+        _make_input(
+            spent,
+            start=date(2026, 11, 2),
+            as_of=date(2026, 11, 9),
+            active=True,
+        )
+    )
+
+    assert metrics.cards[2].id == "weekend_tax"
+    assert metrics.cards[2].value == "44%"
+
+
+def test_x_axis_label_count_stays_at_most_six():
+    for n in (1, 2, 5, 6, 10, 20, 30, 31):
+        indices = _x_label_indices(n)
+        assert indices[0] == 0
+        assert indices[-1] == n - 1
+        assert len(indices) <= 6
 
 
 def test_no_duplicate_metric_ids_across_states():

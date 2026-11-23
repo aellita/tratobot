@@ -77,3 +77,16 @@ async def test_snapshot_uses_same_plan(db_session, test_budget):
 
     stored = await get_daily_limits(99999, today, today)
     assert stored[today] == pytest.approx(plan.plan_today)
+
+
+async def test_refresh_with_plan_skips_recompute(db_session, test_budget, monkeypatch):
+    plan = await compute_today_plan(99999, test_budget)
+
+    async def boom(*args, **kwargs):
+        raise AssertionError("compute_today_plan must not run when a plan is passed")
+
+    monkeypatch.setattr("src.services.budget_service.compute_today_plan", boom)
+
+    effective = await refresh_daily_limit(99999, test_budget, plan)
+
+    assert effective is not None

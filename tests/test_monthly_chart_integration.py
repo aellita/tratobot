@@ -136,6 +136,20 @@ async def test_build_monthly_card_input_includes_expense_category(db_session, te
 
 
 @pytest.mark.asyncio
+async def test_build_monthly_card_input_uses_provided_current_limit(
+    db_session, test_budget, monkeypatch
+):
+    async def boom(*args, **kwargs):
+        raise AssertionError("effective limit must not be recomputed")
+
+    monkeypatch.setattr("src.services.daily_limits.get_effective_daily_limit", boom)
+
+    input_data = await build_monthly_card_input(99999, test_budget, current_limit=1234.0)
+
+    assert input_data.current_limit == 1234.0
+
+
+@pytest.mark.asyncio
 async def test_send_monthly_chart_widget_value_error_falls_back(db_session, test_budget):
     bot = MagicMock()
     with (

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import delete, select
 
@@ -228,16 +228,27 @@ async def _delete_budget_row(session, budget: Budget) -> None:
     await session.delete(budget)
 
 
-async def _delete_budget_with_limits(session, telegram_id: int, budget: Budget) -> None:
-    """Удалить бюджет, его recovery-состояния и снапшоты за его период."""
+async def _delete_budget_with_limits(
+    session,
+    telegram_id: int,
+    budget: Budget,
+    exclude_period: tuple[date, date] | None = None,
+) -> None:
+    """Удалить бюджет, его recovery-состояния и снапшоты за его период.
+
+    ``exclude_period`` защищает снапшоты нового активного периода, когда
+    stale-бюджет и новый период пересекаются из-за ``period_start_day``.
+    """
     period_start, period_end = period_dates(budget.month, budget.period_start_day or 1)
-    await session.execute(
-        delete(DailyLimit).where(
-            DailyLimit.telegram_id == telegram_id,
-            DailyLimit.plan_date >= period_start.date(),
-            DailyLimit.plan_date <= period_end.date(),
-        )
-    )
+    conditions = [
+        DailyLimit.telegram_id == telegram_id,
+        DailyLimit.plan_date >= period_start.date(),
+        DailyLimit.plan_date <= period_end.date(),
+    ]
+    if exclude_period is not None:
+        exclude_start, exclude_end = exclude_period
+        conditions.append(~DailyLimit.plan_date.between(exclude_start, exclude_end))
+    await session.execute(delete(DailyLimit).where(*conditions))
     await _delete_budget_row(session, budget)
 
 
@@ -278,7 +289,13 @@ async def update_budget_field(telegram_id: int, field: str, value) -> Budget:
                 )
                 stale = conflict.scalar_one_or_none()
                 if stale is not None and stale.id != budget.id:
-                    await _delete_budget_with_limits(session, telegram_id, stale)
+                    new_start, new_end = period_dates(target_month, int(value))
+                    await _delete_budget_with_limits(
+                        session,
+                        telegram_id,
+                        stale,
+                        (new_start.date(), new_end.date()),
+                    )
                 budget.month = target_month
 
         if field in _BASE_LIMIT_FIELDS:

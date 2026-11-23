@@ -220,6 +220,7 @@ async def build_monthly_card_input(
     budget: Budget,
     prev_budget: Budget | None = None,
     daily_limit: float | None = None,
+    current_limit: float | None = None,
 ) -> MonthlyCardInput:
     from .daily_limits import get_daily_limits, get_effective_daily_limit
 
@@ -242,11 +243,11 @@ async def build_monthly_card_input(
         for i in range(len(daily_spent))
     ]
 
-    current_limit = moving_limit
-    if is_active:
+    current_limit_value = float(current_limit) if current_limit is not None else moving_limit
+    if current_limit is None and is_active:
         effective = await get_effective_daily_limit(telegram_id, budget)
         if effective is not None:
-            current_limit = float(effective[0])
+            current_limit_value = float(effective[0])
 
     next_day_start = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
     expenses = await _fetch_card_expenses(telegram_id, period_start, next_day_start)
@@ -264,8 +265,13 @@ async def build_monthly_card_input(
         prev_period_end = prev_end.date()
         prev_income = float((prev_budget.total_income or 0) + (prev_budget.added_income or 0))
 
-    available_income = float(
-        (budget.total_income or 0) - (budget.mandatory_payments or 0) - (budget.black_day_fund or 0)
+    available_income = max(
+        0.0,
+        float(
+            (budget.total_income or 0)
+            - (budget.mandatory_payments or 0)
+            - (budget.black_day_fund or 0)
+        ),
     )
 
     return MonthlyCardInput(
@@ -286,7 +292,7 @@ async def build_monthly_card_input(
         is_active=is_active,
         upcoming=today < period_start.date(),
         daily_limits=daily_limits,
-        current_limit=current_limit,
+        current_limit=current_limit_value,
         available_income=available_income,
     )
 
@@ -396,6 +402,19 @@ def _fmt_money(value: float) -> str:
 
 def _month_short(value: date) -> str:
     return _format_rus_month(value)[:3]
+
+
+def _x_label_indices(n: int) -> list[int]:
+    """Return 5–6 evenly spaced indices, always including the last day."""
+    if n <= 0:
+        return []
+    if n == 1:
+        return [0]
+    step = max(1, (n + 3) // 5)
+    indices = list(range(0, n, step))
+    if indices[-1] != n - 1:
+        indices.append(n - 1)
+    return indices
 
 
 LEAGUES: tuple[tuple[int, str, str | None, str], ...] = (
@@ -557,8 +576,9 @@ def compute_card_metrics(input: MonthlyCardInput) -> CardMetrics:
     completed_days = [input.period_start + timedelta(days=i) for i in range(completed_count)]
     has_weekday = any(day.weekday() < 5 for day in completed_days)
     has_weekend = any(day.weekday() >= 5 for day in completed_days)
-    weekend_ok = has_weekday and has_weekend and total_spent > 0
-    weekend_share = (weekend_spent / total_spent) if weekend_ok else 0.0
+    completed_total = sum(completed_spent)
+    weekend_ok = has_weekday and has_weekend and completed_total > 0
+    weekend_share = (weekend_spent / completed_total) if weekend_ok else 0.0
     weekend_pct = int(round(weekend_share * 100))
 
     night_amount = sum(float(e["amount"]) for e in input.expenses if _is_night_expense(e))
@@ -652,7 +672,7 @@ def compute_card_metrics(input: MonthlyCardInput) -> CardMetrics:
                 "night_food",
                 "НОЧНОЙ ДОЖОР",
                 f"{_fmt_money(night_amount)} ₽",
-                "после 21:00",
+                "с 21:00 до 5:00",
                 bar=night_share,
             )
             if night_amount > 0
@@ -1002,6 +1022,8 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
         available_income=(
             float(data["available_income"]) if data.get("available_income") is not None else None
         ),
+        current_income=float(data.get("current_income") or 0),
+        prev_income=float(data.get("prev_income") or 0),
     )
     metrics = compute_card_metrics(input_data)
 
@@ -1261,7 +1283,7 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
                     callout_w = text_width(callout, font_callout) + 20
                     callout_h = 26
                     tx = peak_x - callout_w / 2
-                    tx = max(chart_x + 12, min(tx, chart_x + chart_w - callout_w - 12))
+                    tx = max(inner_x, min(tx, inner_x + inner_w - callout_w))
                     ty = max(chart_y + 56, peak_y - callout_h - 10)
                     rounded((tx, ty, tx + callout_w, ty + callout_h), 6, card_bg, accent_red, 1)
                     draw.text((tx + 10, ty + 5), callout, font=font_callout, fill=text_primary)
@@ -1275,11 +1297,7 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
                     width=2,
                 )
 
-            label_step = max(1, (n - 1) // 5) if n > 1 else 1
-            label_indices = list(range(0, n, label_step))
-            if label_indices and label_indices[-1] != n - 1:
-                label_indices.append(n - 1)
-            for i in label_indices:
+            for i in _x_label_indices(n):
                 label_date = input_data.period_start + timedelta(days=i)
                 draw.text(
                     (points[i][0], inner_y + inner_h + 10),

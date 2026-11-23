@@ -64,8 +64,9 @@ async def send_monthly_chart(
     """
     from ..services.daily_limits import refresh_daily_limit
 
-    await refresh_daily_limit(telegram_id)
+    effective = await refresh_daily_limit(telegram_id)
     daily_limit = await get_base_daily_limit(budget)
+    current_limit = effective[0] if effective is not None else None
 
     if settings.MONTHLY_WIDGET_ENABLED:
         try:
@@ -83,7 +84,11 @@ async def send_monthly_chart(
             )
 
     input_data = await build_monthly_card_input(
-        telegram_id, budget, prev_budget, daily_limit=daily_limit
+        telegram_id,
+        budget,
+        prev_budget,
+        daily_limit=daily_limit,
+        current_limit=current_limit,
     )
     png_bytes = await asyncio.to_thread(render_monthly_card_png, input_data)
     message_id = await send_or_update_photo(
