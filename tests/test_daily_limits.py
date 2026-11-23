@@ -32,7 +32,6 @@ def _today() -> date:
     return get_msk_now().date()
 
 
-
 async def _seed_user(db_session, telegram_id: int):
     db_session.add(User(telegram_id=telegram_id))
     await db_session.commit()
