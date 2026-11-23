@@ -181,6 +181,19 @@ class TestRenderMonthlyCardPng:
 
         png_bytes = render_monthly_card_png(_make_input())
         img = Image.open(BytesIO(png_bytes))
+        assert img.size == (1280, 1195)
+        assert abs(img.size[0] / img.size[1] - 900 / 840) < 0.001
+
+    def test_render_scale_one_rolls_back_to_900(self, monkeypatch):
+        from io import BytesIO
+
+        from PIL import Image
+
+        from src.core.config import settings
+
+        monkeypatch.setattr(settings, "MONTHLY_CARD_RENDER_SCALE", 1)
+        png_bytes = render_monthly_card_png(_make_input())
+        img = Image.open(BytesIO(png_bytes))
         assert img.size == (900, 840)
 
     def test_zero_spent_quiet_mode(self):

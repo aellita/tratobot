@@ -11,6 +11,7 @@ from typing import NotRequired, TypedDict
 
 from sqlalchemy import func, select
 
+from ..core.config import settings
 from ..db.database import async_session_maker
 from ..db.models.models import Budget, Category, Expense
 from ..utils.helpers import get_msk_now, period_dates, period_total_days
@@ -924,7 +925,7 @@ def _input_to_json(input: MonthlyCardInput) -> str:
     )
 
 
-def _cached_render(input_json: str) -> bytes:
+def _cached_render(input_json: str, _scale: int, _output_width: int) -> bytes:
     input_data = json.loads(input_json)
     return _render_monthly_card_png_from_dict(input_data)
 
@@ -969,14 +970,101 @@ def _load_frog(frog_id: str):
     return None
 
 
-def _paste_frog(img, frog_id: str, x: int, y: int, size: int = 48) -> None:
+def _paste_frog(
+    img,
+    frog_id: str,
+    x: int,
+    y: int,
+    size: int = 48,
+    scale: int = 1,
+) -> None:
     from PIL import Image
 
     frog = _load_frog(frog_id)
     if frog is None:
         return
+    size = max(1, round(size * scale))
     frog = frog.resize((size, size), Image.LANCZOS)
-    img.paste(frog, (int(x), int(y)), frog)
+    img.paste(frog, (int(x * scale), int(y * scale)), frog)
+
+
+class _ScaledDraw:
+    """Draw on a scaled canvas while keeping layout math in logical pixels."""
+
+    def __init__(self, draw, scale: int):
+        self._draw = draw
+        self._scale = scale
+
+    def _point(self, xy):
+        return (round(xy[0] * self._scale), round(xy[1] * self._scale))
+
+    def _points(self, xy):
+        return [self._point(point) for point in xy]
+
+    def _box(self, xy):
+        return tuple(round(value * self._scale) for value in xy)
+
+    def text(self, xy, text, font=None, fill=None, anchor=None, **kwargs):
+        stroke = kwargs.pop("stroke_width", None)
+        if stroke is not None:
+            kwargs["stroke_width"] = max(1, round(stroke * self._scale))
+        return self._draw.text(self._point(xy), text, font=font, fill=fill, anchor=anchor, **kwargs)
+
+    def textlength(self, text, font=None, **kwargs):
+        return self._draw.textlength(text, font=font, **kwargs) / self._scale
+
+    def textbbox(self, xy, text, font=None, anchor=None, **kwargs):
+        return tuple(
+            round(value / self._scale)
+            for value in self._draw.textbbox(
+                self._point(xy), text, font=font, anchor=anchor, **kwargs
+            )
+        )
+
+    def line(self, xy, fill=None, width=1, **kwargs):
+        return self._draw.line(
+            self._points(xy),
+            fill=fill,
+            width=max(1, round(width * self._scale)),
+            **kwargs,
+        )
+
+    def ellipse(self, xy, fill=None, outline=None, width=1, **kwargs):
+        return self._draw.ellipse(
+            self._box(xy),
+            fill=fill,
+            outline=outline,
+            width=max(1, round(width * self._scale)),
+            **kwargs,
+        )
+
+    def polygon(self, xy, fill=None, outline=None, width=1, **kwargs):
+        return self._draw.polygon(
+            self._points(xy),
+            fill=fill,
+            outline=outline,
+            width=max(1, round(width * self._scale)),
+            **kwargs,
+        )
+
+    def rounded_rectangle(self, xy, radius=0, fill=None, outline=None, width=1, **kwargs):
+        return self._draw.rounded_rectangle(
+            self._box(xy),
+            radius=round(radius * self._scale),
+            fill=fill,
+            outline=outline,
+            width=max(1, round(width * self._scale)),
+            **kwargs,
+        )
+
+    def rectangle(self, xy, fill=None, outline=None, width=1, **kwargs):
+        return self._draw.rectangle(
+            self._box(xy),
+            fill=fill,
+            outline=outline,
+            width=max(1, round(width * self._scale)),
+            **kwargs,
+        )
 
 
 def _render_monthly_card_png_from_dict(data: dict) -> bytes:
@@ -996,9 +1084,13 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
     accent_pink = "#F472B6"
 
     w, h = 900, 840
+    scale = max(1, int(settings.MONTHLY_CARD_RENDER_SCALE))
     margin = 32
-    img = Image.new("RGB", (w, h), bg)
-    draw = ImageDraw.Draw(img)
+    img = Image.new("RGB", (w * scale, h * scale), bg)
+    draw = _ScaledDraw(ImageDraw.Draw(img), scale)
+
+    def font(weight: str, size: int):
+        return _load_font(weight, max(8, round(size * scale)))
 
     input_data = MonthlyCardInput(
         period_start=date.fromisoformat(data["period_start"]),
@@ -1024,13 +1116,13 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
     )
     metrics = compute_card_metrics(input_data)
 
-    font_title = _load_font("bold", 27)
-    font_sub = _load_font("regular", 15)
-    font_pill = _load_font("semibold", 13)
-    font_axis = _load_font("regular", 12)
-    font_callout = _load_font("semibold", 13)
-    font_card_title = _load_font("semibold", 12)
-    font_card_sub = _load_font("regular", 14)
+    font_title = font("bold", 27)
+    font_sub = font("regular", 15)
+    font_pill = font("semibold", 13)
+    font_axis = font("regular", 12)
+    font_callout = font("semibold", 13)
+    font_card_title = font("semibold", 12)
+    font_card_sub = font("regular", 14)
 
     def rounded(xy, radius, fill, outline=None, width=1):
         draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
@@ -1040,10 +1132,10 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
 
     def fit_font(text, weight, sizes, max_width):
         for size in sizes:
-            font = _load_font(weight, size)
-            if text_width(text, font) <= max_width:
-                return font
-        return _load_font(weight, sizes[-1])
+            candidate = font(weight, size)
+            if text_width(text, candidate) <= max_width:
+                return candidate
+        return font(weight, sizes[-1])
 
     def truncate(text, font, max_width):
         if text_width(text, font) <= max_width:
@@ -1180,6 +1272,7 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
             x + cw - 24 - 96,
             y + (ch - 96) // 2,
             96,
+            scale,
         )
 
     if metrics.wide is not None:
@@ -1242,10 +1335,12 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
                     (inner_x + inner_w, inner_y + inner_h),
                     (inner_x, inner_y + inner_h),
                 ]
-                fill_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-                ImageDraw.Draw(fill_layer).polygon(fill_points, fill=accent_fill)
+                fill_layer = Image.new("RGBA", (w * scale, h * scale), (0, 0, 0, 0))
+                _ScaledDraw(ImageDraw.Draw(fill_layer), scale).polygon(
+                    fill_points, fill=accent_fill
+                )
                 img.paste(Image.alpha_composite(img.convert("RGBA"), fill_layer).convert("RGB"))
-                draw = ImageDraw.Draw(img)
+                draw = _ScaledDraw(ImageDraw.Draw(img), scale)
                 for i in range(n - 1):
                     draw.line([points[i], points[i + 1]], fill=accent_blue, width=3, joint="curve")
 
@@ -1361,9 +1456,22 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
                     3,
                     accent,
                 )
-            _paste_frog(img, card.frog, x + card_w - 68, y + (card_h - 48) // 2, 48)
+            _paste_frog(
+                img,
+                card.frog,
+                x + card_w - 68,
+                y + (card_h - 48) // 2,
+                48,
+                scale,
+            )
 
     from io import BytesIO
+
+    if scale > 1:
+        output_width = max(w, int(settings.MONTHLY_CARD_OUTPUT_WIDTH))
+        output_height = round(output_width * h / w)
+        resample = getattr(Image, "Resampling", Image).LANCZOS
+        img = img.resize((output_width, output_height), resample)
 
     buf = BytesIO()
     img.save(buf, format="PNG", optimize=True, compress_level=6)
@@ -1372,7 +1480,9 @@ def _render_monthly_card_png_from_dict(data: dict) -> bytes:
 
 def render_monthly_card_png(input: MonthlyCardInput) -> bytes:
     input_json = _input_to_json(input)
-    return _cached_render(input_json)
+    scale = max(1, int(settings.MONTHLY_CARD_RENDER_SCALE))
+    output_width = max(900, int(settings.MONTHLY_CARD_OUTPUT_WIDTH))
+    return _cached_render(input_json, scale, output_width)
 
 
 # ──────────────────────────────────────────────────────────────────────

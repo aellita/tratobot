@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Native Telegram widgets are rolled back for security reasons.
     # PNG is the primary delivery path; set to True to re-enable widgets.
     MONTHLY_WIDGET_ENABLED: bool = False
+    # 2x supersampling + LANCZOS downscale keeps the inline photo crisp
+    # without letting Telegram do its own rough resize. Set scale=1 to roll back.
+    MONTHLY_CARD_RENDER_SCALE: int = 2
+    MONTHLY_CARD_OUTPUT_WIDTH: int = 1280
 
     RECOVERY_TRIGGER: float = 0.85
     RECOVERY_FAST: float = 0.60
