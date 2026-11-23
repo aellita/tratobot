@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, select
@@ -10,6 +11,19 @@ from ..utils.helpers import get_msk_now
 
 class NoActiveBudgetError(LookupError):
     """У пользователя нет активного бюджета на текущий период."""
+
+
+@dataclass(frozen=True)
+class TodayPlan:
+    """Canonical today's plan shared by status, morning report and snapshots."""
+
+    plan_today: float
+    spent_today: float
+    spent_period: float
+    days_left: int
+    base_limit: float
+    money_for_life: float
+    money_for_life_raw: float
 
 
 def month_for_period_start(start_day: int, today: datetime | None = None) -> str:
@@ -402,6 +416,30 @@ async def get_period_spent(telegram_id: int, budget: Budget) -> float:
             )
         )
         return float(result.scalar() or 0)
+
+
+async def compute_today_plan(telegram_id: int, budget: Budget) -> TodayPlan:
+    """Single source of truth for today's plan and its inputs."""
+    from .expense_service import get_today_expenses_sum
+
+    spent_period = await get_period_spent(telegram_id, budget)
+    spent_today = await get_today_expenses_sum(telegram_id)
+    money_for_life_raw = get_money_for_life_raw(budget, spent_period)
+    days_left = budget.days_remaining
+    return TodayPlan(
+        plan_today=get_plan_today(
+            money_for_life_raw,
+            spent_today,
+            days_left,
+            get_spent_today_at_recalc(budget),
+        ),
+        spent_today=spent_today,
+        spent_period=spent_period,
+        days_left=days_left,
+        base_limit=await get_base_daily_limit(budget),
+        money_for_life=get_money_for_life(budget, spent_period),
+        money_for_life_raw=money_for_life_raw,
+    )
 
 
 async def apply_reconciliation(

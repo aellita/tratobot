@@ -13,7 +13,7 @@ from ..db.models.models import DailyReportsLog, User, UserSettings
 from ..utils import phrases
 from ..utils.helpers import get_msk_now
 from .budget_service import get_plan_today
-from .expense_service import get_today_expenses_sum, get_yesterday_expenses_sum
+from .expense_service import get_yesterday_expenses_sum
 from .status_zones import (
     PRESSURE_GREEN_MIN,
     PRESSURE_LIGHT_MIN,
@@ -252,26 +252,18 @@ async def send_morning_reports(bot: Bot):
 
                 yesterday_spent = await get_yesterday_expenses_sum(tg_id)
                 from .budget_service import (
-                    get_base_daily_limit,
+                    compute_today_plan,
                     get_free_today,
-                    get_money_for_life,
-                    get_money_for_life_raw,
                     get_overrun_today,
-                    get_period_spent,
-                    get_plan_today,
-                    get_spent_today_at_recalc,
                 )
 
-                spent_period = await get_period_spent(tg_id, budget)
-                spent_today = await get_today_expenses_sum(tg_id)
-                money_for_life_raw = get_money_for_life_raw(budget, spent_period)
-                money_for_life = get_money_for_life(budget, spent_period)
-                days_left = budget.days_remaining
-                dl_base = await get_base_daily_limit(budget)
-                spent_today_at_recalc = get_spent_today_at_recalc(budget)
-                dl_pred = get_plan_today(
-                    money_for_life_raw, spent_today, days_left, spent_today_at_recalc
-                )
+                today_plan = await compute_today_plan(tg_id, budget)
+                money_for_life_raw = today_plan.money_for_life_raw
+                spent_today = today_plan.spent_today
+                money_for_life = today_plan.money_for_life
+                days_left = today_plan.days_left
+                dl_base = today_plan.base_limit
+                dl_pred = today_plan.plan_today
                 free_today = get_free_today(dl_pred, spent_today)
                 overrun_today = get_overrun_today(dl_pred, spent_today)
 

@@ -78,14 +78,10 @@ async def get_effective_daily_limit(
     snapshot never stores a meaningless value.
     """
     from .budget_service import (
+        compute_today_plan,
         get_active_budget,
         get_base_daily_limit,
-        get_money_for_life_raw,
-        get_period_spent,
-        get_plan_today,
-        get_spent_today_at_recalc,
     )
-    from .expense_service import get_today_expenses_sum
     from .monthly_report import get_period_dates
     from .recovery_service import get_active_recovery
 
@@ -107,15 +103,8 @@ async def get_effective_daily_limit(
     if recovery is not None and recovery.budget_id == budget.id:
         return max(float(recovery.target), 0.0), SOURCE_RECOVERY
 
-    spent_period = await get_period_spent(telegram_id, budget)
-    spent_today = await get_today_expenses_sum(telegram_id)
-    plan_today = get_plan_today(
-        get_money_for_life_raw(budget, spent_period),
-        spent_today,
-        budget.days_remaining,
-        get_spent_today_at_recalc(budget),
-    )
-    return max(float(plan_today), 0.0), SOURCE_PLAN
+    today_plan = await compute_today_plan(telegram_id, budget)
+    return max(float(today_plan.plan_today), 0.0), SOURCE_PLAN
 
 
 async def refresh_daily_limit(telegram_id: int, budget: Budget | None = None) -> None:

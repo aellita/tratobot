@@ -1,14 +1,13 @@
 import logging
 import random
 import re
-from datetime import timedelta
 
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from ...core.config import settings
 from ...db.database import async_session_maker
@@ -25,7 +24,6 @@ from ...services.budget_service import (
     apply_reconciliation,
     delete_all_budgets,
     get_active_budget,
-    get_base_daily_limit,
     month_for_period_start,
     reconcile_budget_with_reality,
     save_budget,
@@ -515,43 +513,24 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
 
     await refresh_daily_limit(tg_id)
 
-    spent_today = await get_today_expenses_sum(tg_id)
-
-    async with async_session_maker() as session:
-        from ...services.monthly_report import get_period_dates
-
-        period_start, period_end = get_period_dates(budget)
-        next_day = period_end + timedelta(days=1)
-
-        result = await session.execute(
-            select(func.sum(Expense.amount)).where(
-                Expense.telegram_id == tg_id,
-                Expense.is_deleted == False,
-                Expense.date >= period_start,
-                Expense.date < next_day,
-            )
-        )
-        spent_period = result.scalar() or 0
-
-    days_left = budget.days_remaining
-    dl_base = await get_base_daily_limit(budget)
-
     from ...services.budget_service import (
+        compute_today_plan,
         get_free_today,
-        get_money_for_life,
-        get_money_for_life_raw,
         get_overrun_today,
-        get_plan_today,
-        get_spent_today_at_recalc,
     )
+    from ...services.monthly_report import get_period_dates
 
-    money_for_life_raw = get_money_for_life_raw(budget, spent_period)
-    money_for_life = get_money_for_life(budget, spent_period)
-    spent_today_at_recalc = get_spent_today_at_recalc(budget)
-    plan_today = get_plan_today(money_for_life_raw, spent_today, days_left, spent_today_at_recalc)
+    today_plan = await compute_today_plan(tg_id, budget)
+    spent_today = today_plan.spent_today
+    days_left = today_plan.days_left
+    dl_base = today_plan.base_limit
+    money_for_life = today_plan.money_for_life
+    plan_today = today_plan.plan_today
     free_today = get_free_today(plan_today, spent_today)
     overrun_today = get_overrun_today(plan_today, spent_today)
     plan_tomorrow = tomorrow_plan(money_for_life, days_left)
+
+    _, period_end = get_period_dates(budget)
 
     remaining_period = money_for_life
     period_end_str = f"{period_end.day}{phrases.PERIOD_DAY_SUFFIX}"
