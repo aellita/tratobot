@@ -1,3 +1,4 @@
+import logging
 from datetime import date, timedelta
 
 import pytest
@@ -197,36 +198,40 @@ class TestGetEffectiveDailyLimit:
 
 class TestRefreshDailyLimit:
     async def test_writes_today_from_plan(self, db_session, test_budget):
+        today = _today()
+
         await refresh_daily_limit(99999)
 
-        limits = await get_daily_limits(99999, _today(), _today())
-
-        assert limits[_today()] > 0
+        limits = await get_daily_limits(99999, today, today)
+        assert limits[today] > 0
 
     async def test_last_write_wins(self, db_session, test_budget):
-        await upsert_daily_limit(99999, _today(), 1.0)
+        today = _today()
+        await upsert_daily_limit(99999, today, 1.0)
+
         await refresh_daily_limit(99999)
 
-        limits = await get_daily_limits(99999, _today(), _today())
-
-        assert limits[_today()] != 1.0
+        limits = await get_daily_limits(99999, today, today)
+        assert limits[today] != 1.0
 
     async def test_does_not_touch_past_days(self, db_session, test_budget):
-        yesterday = _today() - timedelta(days=1)
+        today = _today()
+        yesterday = today - timedelta(days=1)
         await upsert_daily_limit(99999, yesterday, 111.0)
 
         await refresh_daily_limit(99999)
 
-        limits = await get_daily_limits(99999, yesterday, _today())
+        limits = await get_daily_limits(99999, yesterday, today)
         assert limits[yesterday] == 111.0
-        assert _today() in limits
+        assert today in limits
 
     async def test_skips_user_without_budget(self, db_session):
+        today = _today()
         await _seed_user(db_session, 6006)
 
         await refresh_daily_limit(6006)
 
-        assert await get_daily_limits(6006, _today(), _today()) == {}
+        assert await get_daily_limits(6006, today, today) == {}
 
     async def test_writes_recovery_target(self, db_session, test_budget):
         await create_recovery(99999, test_budget.id, 1000, 300, 10, 5000)
@@ -237,36 +242,55 @@ class TestRefreshDailyLimit:
         assert rows[-1].limit == 300.0
         assert rows[-1].source == SOURCE_RECOVERY
 
-    async def test_refresh_all_covers_active_budgets_only(self, db_session, test_budget):
+    async def test_refresh_all_covers_users_with_budget(self, db_session, test_budget):
+        today = _today()
         await _seed_user(db_session, 6006)
 
         seen = await refresh_all_daily_limits()
 
         assert seen == 1
-        assert _today() in await get_daily_limits(99999, _today(), _today())
-        assert await get_daily_limits(6006, _today(), _today()) == {}
+        assert today in await get_daily_limits(99999, today, today)
+        assert await get_daily_limits(6006, today, today) == {}
+
+    async def test_never_raises_on_failure(self, db_session, test_budget, monkeypatch, caplog):
+        from src.services import daily_limits as dl
+
+        async def boom(*args, **kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(dl, "upsert_daily_limit", boom)
+        today = _today()
+
+        with caplog.at_level(logging.WARNING):
+            await refresh_daily_limit(99999)
+
+        assert "Failed to refresh daily limit" in caplog.text
+        assert await get_daily_limits(99999, today, today) == {}
 
 
 class TestPlanMutationTriggers:
     async def test_add_income_refreshes_today(self, db_session, test_budget):
+        today = _today()
         await refresh_daily_limit(99999)
-        before = (await get_daily_limits(99999, _today(), _today()))[_today()]
+        before = (await get_daily_limits(99999, today, today))[today]
 
         await add_income(99999, 10000)
 
-        after = (await get_daily_limits(99999, _today(), _today()))[_today()]
+        after = (await get_daily_limits(99999, today, today))[today]
         assert after > before
 
     async def test_reconciliation_refreshes_today(self, db_session, test_budget):
+        today = _today()
         await refresh_daily_limit(99999)
-        before = (await get_daily_limits(99999, _today(), _today()))[_today()]
+        before = (await get_daily_limits(99999, today, today))[today]
 
         await apply_reconciliation(99999, 1000.0)
 
-        after = (await get_daily_limits(99999, _today(), _today()))[_today()]
+        after = (await get_daily_limits(99999, today, today))[today]
         assert after < before
 
     async def test_save_budget_writes_today(self, db_session):
+        today = _today()
         await _seed_user(db_session, 4004)
 
         await save_budget(
@@ -278,16 +302,17 @@ class TestPlanMutationTriggers:
             period_start_day=1,
         )
 
-        limits = await get_daily_limits(4004, _today(), _today())
-        assert limits[_today()] > 0
+        limits = await get_daily_limits(4004, today, today)
+        assert limits[today] > 0
 
     async def test_update_budget_field_refreshes_today(self, db_session, test_budget):
+        today = _today()
         await refresh_daily_limit(99999)
-        before = (await get_daily_limits(99999, _today(), _today()))[_today()]
+        before = (await get_daily_limits(99999, today, today))[today]
 
         await update_budget_field(99999, "total_income", 200000.0)
 
-        after = (await get_daily_limits(99999, _today(), _today()))[_today()]
+        after = (await get_daily_limits(99999, today, today))[today]
         assert after > before
 
 
@@ -299,8 +324,9 @@ class TestRecoveryMutationTriggers:
         assert [(row.limit, row.source) for row in rows] == [(300.0, SOURCE_RECOVERY)]
 
     async def test_stop_recovery_restores_plan(self, db_session, test_budget):
+        today = _today()
         await refresh_daily_limit(99999)
-        plan_limit = (await get_daily_limits(99999, _today(), _today()))[_today()]
+        plan_limit = (await get_daily_limits(99999, today, today))[today]
         await create_recovery(99999, test_budget.id, 1000, 300, 10, 5000)
 
         await stop_recovery(99999)
@@ -310,8 +336,9 @@ class TestRecoveryMutationTriggers:
         assert rows[-1].limit == pytest.approx(plan_limit)
 
     async def test_complete_recovery_restores_plan(self, db_session, test_budget):
+        today = _today()
         await refresh_daily_limit(99999)
-        plan_limit = (await get_daily_limits(99999, _today(), _today()))[_today()]
+        plan_limit = (await get_daily_limits(99999, today, today))[today]
         await create_recovery(99999, test_budget.id, 1000, 300, 10, 5000)
 
         await complete_recovery(99999, "early_success")
@@ -328,3 +355,68 @@ class TestRecoveryMutationTriggers:
         rows = await _rows(db_session)
         assert rows[-1].limit == 300.0
         assert rows[-1].source == SOURCE_RECOVERY
+
+
+class TestGetEffectiveDailyLimitMore:
+    async def test_recovery_of_other_budget_is_ignored(self, db_session, test_budget):
+        old_budget = Budget(
+            telegram_id=99999,
+            month="2020-01",
+            total_income=100000,
+            mandatory_payments=0,
+            black_day_fund=0,
+            period_start_day=1,
+        )
+        db_session.add(old_budget)
+        await db_session.commit()
+        await create_recovery(99999, old_budget.id, 1000, 300, 10, 5000)
+
+        limit, source = await get_effective_daily_limit(99999)
+
+        assert source == SOURCE_PLAN
+        assert limit > 0
+
+    async def test_none_before_period_start(self, db_session):
+        await _seed_user(db_session, 5005)
+        future_budget = Budget(
+            telegram_id=5005,
+            month="2099-01",
+            total_income=100000,
+            mandatory_payments=0,
+            black_day_fund=0,
+            period_start_day=1,
+        )
+        db_session.add(future_budget)
+        await db_session.commit()
+
+        assert await get_effective_daily_limit(5005, future_budget) is None
+
+
+class TestDisplayTriggers:
+    async def test_status_writes_today(self, db_session, test_budget):
+        from src.bot.handlers.menu import _build_status
+
+        today = _today()
+
+        await _build_status(99999)
+
+        assert today in await get_daily_limits(99999, today, today)
+
+    async def test_chart_writes_today(self, db_session, test_budget):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from src.bot.chart_delivery import send_monthly_chart
+        from src.core.config import settings
+
+        today = _today()
+        with (
+            patch.object(settings, "MONTHLY_WIDGET_ENABLED", False),
+            patch(
+                "src.bot.chart_delivery.send_or_update_photo", new_callable=AsyncMock
+            ) as mock_send,
+        ):
+            mock_send.return_value = 123
+            result = await send_monthly_chart(MagicMock(), 99999, 456, test_budget)
+
+        assert result == "png"
+        assert today in await get_daily_limits(99999, today, today)

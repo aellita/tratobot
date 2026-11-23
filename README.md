@@ -63,10 +63,10 @@ Python 3.12 · aiogram 3.x · SQLAlchemy 2.0 (async) · PostgreSQL (prod, asyncp
 
 ```
 src/bot/handlers/   menu, history, categories, evening_flow
-src/bot/            middleware (×4), scheduler (3 cron), rich_api, keyboards
+src/bot/            middleware (×4), scheduler (4 cron), rich_api, keyboards
 src/services/       budget, expense, categorization, morning/evening report,
-                    monthly_report, recovery, goal, user
-src/db/             async engine, hand-rolled кросс-диалектные миграции, 9 таблиц
+                    monthly_report, recovery, goal, daily_limits, user
+src/db/             async engine, hand-rolled кросс-диалектные миграции, 11 таблиц
 src/utils/          math-парсер без eval, safe() для HTML, phrases.py (копирайт)
 ```
 
@@ -108,7 +108,7 @@ echo $?   # 0 — чисто, 1 — есть critical, 2 — не удалось
 
 ## Тесты и качество
 
-**684 теста** (pytest + pytest-asyncio, hermetic in-memory SQLite).
+**725 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -149,7 +149,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 684 теста
+├── tests/               # 725 тестов
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile

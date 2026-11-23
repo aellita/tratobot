@@ -69,6 +69,7 @@ async def get_daily_limits(
 async def get_effective_daily_limit(
     telegram_id: int,
     budget: Budget | None = None,
+    plan_date: date | None = None,
 ) -> tuple[float, str] | None:
     """Return ``(limit, source)`` for today, or ``None`` if there is none.
 
@@ -93,9 +94,9 @@ async def get_effective_daily_limit(
     if budget is None:
         return None
 
-    today = get_msk_now()
+    today = plan_date or get_msk_now().date()
     period_start, period_end = get_period_dates(budget)
-    if not period_start.date() <= today.date() <= period_end.date():
+    if not period_start.date() <= today <= period_end.date():
         return None
     if budget.days_remaining <= 0:
         return None
@@ -120,11 +121,12 @@ async def get_effective_daily_limit(
 async def refresh_daily_limit(telegram_id: int, budget: Budget | None = None) -> None:
     """Snapshot today's effective limit. Never raises into the caller."""
     try:
-        effective = await get_effective_daily_limit(telegram_id, budget)
+        plan_date = get_msk_now().date()
+        effective = await get_effective_daily_limit(telegram_id, budget, plan_date)
         if effective is None:
             return
         limit, source = effective
-        await upsert_daily_limit(telegram_id, get_msk_now().date(), limit, source)
+        await upsert_daily_limit(telegram_id, plan_date, limit, source)
     except Exception:
         logger.warning("Failed to refresh daily limit for %s", telegram_id, exc_info=True)
 

@@ -64,7 +64,7 @@ async def send_monthly_chart(
     """
     from ..services.daily_limits import refresh_daily_limit
 
-    await refresh_daily_limit(telegram_id, budget)
+    await refresh_daily_limit(telegram_id)
     daily_limit = await get_base_daily_limit(budget)
 
     if settings.MONTHLY_WIDGET_ENABLED:

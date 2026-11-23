@@ -7,7 +7,7 @@
 ## Текущий статус и фокус
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (включён с 2026-09-05, `RECOVERY_ENABLED=True`)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B24, U1–U3** (Bug Audit 2026-11-06 + визуал, утренний отчёт и UX-статус).  
-**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2** — снапшоты эффективного дневного плана (`daily_limits`) для честных дней в лимите, серии и скора (720 тестов).  
+**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2** — инфраструктура снапшотов эффективного дневного плана (`daily_limits`) для честных дней/серии/скора; потребитель — C1 (725 тестов).  
 **Активно:** месячный отчёт — **M1–M4** готовы; дальше M5 → M6.  
 **Ближайшее:** «Конверты» (обязательные как отдельный конверт), затем M5/M6. G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
 **В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям.  
@@ -24,12 +24,12 @@
 - Таблица `daily_limits` (`telegram_id`, `plan_date`, `limit`, `source`, `updated_at`), PK `(telegram_id, plan_date)`. `limit` — `plan_today` или Recovery `target`; `source` — `plan` / `recovery`. Таблица добавлена в `ALLOWED_TABLES`; отдельная миграция колонок не нужна — `init_db()` → `create_all` создаёт её на старте.
 - **Последнее значение дня побеждает:** `upsert_daily_limit` обновляет строку; прошлые дни заморожены — сверка и доход меняют только сегодняшнюю запись.
 - `get_effective_daily_limit`: активный Recovery → `target`; иначе `get_plan_today`. Возвращает `None`, если нет активного бюджета, `base_daily_limit <= 0`, `today` вне периода или `days_left <= 0`.
-- `refresh_daily_limit` вызывается после коммита мутаций плана (`save_budget`, `update_budget_field`, `add_income`, `apply_reconciliation`, Recovery create/stop/complete/update) и при показе статуса, утреннего отчёта и карточки. Джоб 00:05 МСК (`refresh_all_daily_limits`) — страховка для тех, кто не открывает бота; сообщений не отправляет.
+- `refresh_daily_limit` вызывается после коммита мутаций плана (`save_budget`, `update_budget_field`, `add_income`, `apply_reconciliation`, Recovery create/stop/complete/update) и при показе статуса, утреннего отчёта и карточки. Джоб 00:05 МСК (`refresh_all_daily_limits`) — страховка для тех, кто не открывает бота; сообщений не отправляет. Если бюджет нового периода ещё не создан (первый день после rollover), джоб ничего не пишет — карточка для этого дня использует fallback на базу.
 - `refresh_daily_limit` ловит исключения с `warning`: снапшот не должен ломать основную логику.
 - **Backfill'а нет:** планы прошлых дней не сохраняли; C1 будет читать снапшоты с fallback на `base_daily_limit`.
 - Сегодняшняя точка карточки полая и не красится, поэтому поздняя сверка не даёт видимого флипа.
 
-**Тесты:** `test_daily_limits.py` (29: insert/update, диапазон, user scoping, plan/recovery, нулевая база, закрытый период, запись из мутаций, обход 00:05). `pytest 720 passed`, `ruff check .` clean. `ruff format --check .` — единственное расхождение в `monthly_report.py` существовало до G2 и не трогалось.
+**Тесты:** `test_daily_limits.py` (34: insert/update, диапазон, user scoping, plan/recovery, нулевая база, закрытый/будущий период, Recovery другого бюджета, запись из мутаций и триггеров статуса/карточки, обход 00:05, глотание ошибок). `pytest 725 passed`, `ruff check .` clean. `ruff format --check .` — единственное расхождение в `monthly_report.py` существовало до G2 и не трогалось.
 **Файлы:** `src/services/daily_limits.py`, `src/db/models/models.py`, `src/db/database.py`, `src/services/budget_service.py`, `src/services/recovery_service.py`, `src/bot/handlers/menu.py`, `src/services/morning_report.py`, `src/bot/chart_delivery.py`, `src/bot/scheduler.py`, `tests/test_daily_limits.py`, `tests/conftest.py`
 
 ### 🐛 Bug Audit 2026-11-06 — P0/P1/P2, 15 пунктов + 5 находок (в работе)
