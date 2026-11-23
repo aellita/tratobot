@@ -7,6 +7,7 @@ never rewritten by later reconciliations.
 
 import logging
 from datetime import date
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +15,9 @@ from sqlalchemy.exc import IntegrityError
 from ..db.database import async_session_maker
 from ..db.models.models import Budget, DailyLimit
 from ..utils.helpers import get_msk_now
+
+if TYPE_CHECKING:
+    from .budget_service import TodayPlan
 
 logger = logging.getLogger(__name__)
 
@@ -37,25 +41,35 @@ async def _write_daily_limit(
     limit: float,
     source: str,
 ) -> None:
-    async with async_session_maker() as session:
-        try:
-            row = await _select_existing(session, telegram_id, plan_date)
-            if row is None:
-                session.add(
-                    DailyLimit(
-                        telegram_id=telegram_id,
-                        plan_date=plan_date,
-                        limit=float(limit),
-                        source=source,
+    """Insert or update one day; retry only an INSERT that lost the PK race."""
+    for attempt in (0, 1):
+        async with async_session_maker() as session:
+            try:
+                row = await _select_existing(session, telegram_id, plan_date)
+                attempted_insert = row is None
+                if attempted_insert:
+                    session.add(
+                        DailyLimit(
+                            telegram_id=telegram_id,
+                            plan_date=plan_date,
+                            limit=float(limit),
+                            source=source,
+                        )
                     )
+                else:
+                    row.limit = float(limit)
+                    row.source = source
+                await session.commit()
+                return
+            except IntegrityError:
+                await session.rollback()
+                if not attempted_insert or attempt == 1:
+                    raise
+                logger.info(
+                    "daily_limits insert race for %s on %s, retrying as update",
+                    telegram_id,
+                    plan_date,
                 )
-            else:
-                row.limit = float(limit)
-                row.source = source
-            await session.commit()
-        except IntegrityError:
-            await session.rollback()
-            raise
 
 
 async def upsert_daily_limit(
@@ -68,17 +82,9 @@ async def upsert_daily_limit(
 
     Two writers can race between the ``SELECT`` and the ``INSERT`` (for
     example the 00:05 job and a status render). The loser gets an
-    ``IntegrityError`` on the primary key; retrying turns it into an update.
+    ``IntegrityError`` on the primary key and retries once as an update.
     """
-    try:
-        await _write_daily_limit(telegram_id, plan_date, limit, source)
-    except IntegrityError:
-        logger.info(
-            "daily_limits insert race for %s on %s, retrying as update",
-            telegram_id,
-            plan_date,
-        )
-        await _write_daily_limit(telegram_id, plan_date, limit, source)
+    await _write_daily_limit(telegram_id, plan_date, limit, source)
 
 
 async def get_daily_limits(
@@ -100,14 +106,23 @@ async def get_daily_limits(
 async def get_effective_daily_limit(
     telegram_id: int,
     budget: Budget | None = None,
-    plan_date: date | None = None,
 ) -> tuple[float, str] | None:
     """Return ``(limit, source)`` for today, or ``None`` if there is none.
 
     Active Recovery wins over the regular plan. Days outside the active
     period, periods already over and zero-base periods are skipped so the
-    snapshot never stores a meaningless value.
+    snapshot never stores a meaningless value. Only today can be resolved:
+    the plan math depends on today's spend and remaining days.
     """
+    return await _effective_daily_limit(telegram_id, budget, get_msk_now().date())
+
+
+async def _effective_daily_limit(
+    telegram_id: int,
+    budget: Budget | None,
+    today: date,
+    plan: "TodayPlan | None" = None,
+) -> tuple[float, str] | None:
     from .budget_service import (
         compute_today_plan,
         get_active_budget,
@@ -121,7 +136,6 @@ async def get_effective_daily_limit(
     if budget is None:
         return None
 
-    today = plan_date or get_msk_now().date()
     period_start, period_end = get_period_dates(budget)
     if not period_start.date() <= today <= period_end.date():
         return None
@@ -134,15 +148,23 @@ async def get_effective_daily_limit(
     if recovery is not None and recovery.budget_id == budget.id:
         return max(float(recovery.target), 0.0), SOURCE_RECOVERY
 
-    today_plan = await compute_today_plan(telegram_id, budget)
+    today_plan = plan if plan is not None else await compute_today_plan(telegram_id, budget)
     return max(float(today_plan.plan_today), 0.0), SOURCE_PLAN
 
 
-async def refresh_daily_limit(telegram_id: int, budget: Budget | None = None) -> None:
-    """Snapshot today's effective limit. Never raises into the caller."""
+async def refresh_daily_limit(
+    telegram_id: int,
+    budget: Budget | None = None,
+    plan: "TodayPlan | None" = None,
+) -> None:
+    """Snapshot today's effective limit. Never raises into the caller.
+
+    ``plan`` lets the caller reuse an already computed ``TodayPlan`` so the
+    status/morning render does not run the canonical chain twice.
+    """
     try:
         plan_date = get_msk_now().date()
-        effective = await get_effective_daily_limit(telegram_id, budget, plan_date)
+        effective = await _effective_daily_limit(telegram_id, budget, plan_date, plan)
         if effective is None:
             return
         limit, source = effective

@@ -6,7 +6,7 @@ from sqlalchemy import delete, select
 from ..db.database import async_session_maker
 from ..db.models.models import Budget, DailyLimit, RecoveryState
 from ..utils import phrases
-from ..utils.helpers import get_msk_now
+from ..utils.helpers import get_msk_now, period_dates
 
 
 class NoActiveBudgetError(LookupError):
@@ -228,6 +228,19 @@ async def _delete_budget_row(session, budget: Budget) -> None:
     await session.delete(budget)
 
 
+async def _delete_budget_with_limits(session, telegram_id: int, budget: Budget) -> None:
+    """Удалить бюджет, его recovery-состояния и снапшоты за его период."""
+    period_start, period_end = period_dates(budget.month, budget.period_start_day or 1)
+    await session.execute(
+        delete(DailyLimit).where(
+            DailyLimit.telegram_id == telegram_id,
+            DailyLimit.plan_date >= period_start.date(),
+            DailyLimit.plan_date <= period_end.date(),
+        )
+    )
+    await _delete_budget_row(session, budget)
+
+
 async def update_budget_field(telegram_id: int, field: str, value) -> Budget:
     """Обновить поле активного бюджета.
 
@@ -265,7 +278,7 @@ async def update_budget_field(telegram_id: int, field: str, value) -> Budget:
                 )
                 stale = conflict.scalar_one_or_none()
                 if stale is not None and stale.id != budget.id:
-                    await _delete_budget_row(session, stale)
+                    await _delete_budget_with_limits(session, telegram_id, stale)
                 budget.month = target_month
 
         if field in _BASE_LIMIT_FIELDS:
@@ -287,7 +300,7 @@ async def update_budget_field(telegram_id: int, field: str, value) -> Budget:
 
 
 async def delete_active_budget(telegram_id: int) -> bool:
-    """Удалить активный бюджет. Возвращает False, если удалять нечего."""
+    """Удалить активный бюджет и снапшоты его периода. False, если удалять нечего."""
     active = await get_active_budget(telegram_id)
     if not active:
         return False
@@ -295,23 +308,13 @@ async def delete_active_budget(telegram_id: int) -> bool:
         budget = await session.get(Budget, active.id)
         if budget is None:
             return False
-        from .monthly_report import get_period_dates
-
-        period_start, period_end = get_period_dates(budget)
-        await session.execute(
-            delete(DailyLimit).where(
-                DailyLimit.telegram_id == telegram_id,
-                DailyLimit.plan_date >= period_start.date(),
-                DailyLimit.plan_date <= period_end.date(),
-            )
-        )
-        await _delete_budget_row(session, budget)
+        await _delete_budget_with_limits(session, telegram_id, budget)
         await session.commit()
         return True
 
 
 async def delete_all_budgets(telegram_id: int) -> int:
-    """Удалить все бюджеты пользователя. Возвращает число удалённых."""
+    """Удалить все бюджеты пользователя и все его снапшоты дневного плана."""
     async with async_session_maker() as session:
         result = await session.execute(select(Budget).where(Budget.telegram_id == telegram_id))
         budgets = result.scalars().all()
@@ -413,9 +416,8 @@ async def get_period_spent(telegram_id: int, budget: Budget) -> float:
     from sqlalchemy import func as _func
 
     from ..db.models.models import Expense as _Expense
-    from ..services.monthly_report import get_period_dates as _get_period_dates
 
-    period_start, period_end = _get_period_dates(budget)
+    period_start, period_end = period_dates(budget.month, budget.period_start_day or 1)
     next_day = period_end + timedelta(days=1)
     async with async_session_maker() as session:
         result = await session.execute(

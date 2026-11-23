@@ -246,18 +246,17 @@ async def send_morning_reports(bot: Bot):
                 if not budget:
                     continue
 
-                from .daily_limits import refresh_daily_limit
-
-                await refresh_daily_limit(tg_id)
-
                 yesterday_spent = await get_yesterday_expenses_sum(tg_id)
                 from .budget_service import (
                     compute_today_plan,
                     get_free_today,
                     get_overrun_today,
                 )
+                from .daily_limits import refresh_daily_limit
 
                 today_plan = await compute_today_plan(tg_id, budget)
+                await refresh_daily_limit(tg_id, budget, today_plan)
+
                 money_for_life_raw = today_plan.money_for_life_raw
                 spent_today = today_plan.spent_today
                 money_for_life = today_plan.money_for_life

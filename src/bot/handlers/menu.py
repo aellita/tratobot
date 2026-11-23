@@ -509,18 +509,17 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if not budget:
         return phrases.NO_BUDGET, await get_main_menu_keyboard(tg_id)
 
-    from ...services.daily_limits import refresh_daily_limit
-
-    await refresh_daily_limit(tg_id)
-
     from ...services.budget_service import (
         compute_today_plan,
         get_free_today,
         get_overrun_today,
     )
+    from ...services.daily_limits import refresh_daily_limit
     from ...services.monthly_report import get_period_dates
 
     today_plan = await compute_today_plan(tg_id, budget)
+    await refresh_daily_limit(tg_id, budget, today_plan)
+
     spent_today = today_plan.spent_today
     days_left = today_plan.days_left
     dl_base = today_plan.base_limit

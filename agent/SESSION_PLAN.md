@@ -631,11 +631,11 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 
 **Зачем:** C1 — первый потребитель снапшотов. До него закрываем три вещи, которые иначе всплывут уже в видимой карточке.
 
-- **Единый расчёт плана.** `TodayPlan` + `compute_today_plan(telegram_id, budget)` в `budget_service` — единственный канон `spent_period → spent_today → money_for_life_raw → plan_today → base_limit`. Статус, утренний отчёт и `get_effective_daily_limit` берут значения только оттуда; поведение не менялось (G2.1a).
-- **Reset не оставляет снапшоты.** `delete_all_budgets` удаляет все `daily_limits` пользователя (сброс = с чистого листа). `delete_active_budget` удаляет строки только за период этого бюджета. (G2.1b)
-- **Гонка upsert.** `upsert_daily_limit` ловит `IntegrityError` от параллельного INSERT, делает `rollback` и повторяет запись как UPDATE; если конфликт повторился — исключение уходит наверх, а `refresh_daily_limit` его глотает. Портируемо для SQLite/PostgreSQL без dialect-specific `ON CONFLICT`. (G2.1c)
-- **Тест схемы.** `test_db_schema.py`: `create_all` создаёт все таблицы `Base.metadata`; у `daily_limits` проверены колонки, PK `(telegram_id, plan_date)` и FK на `users`. Это заменяет бессмысленный локальный `schema_audit` на пустом `tratobot.db`.
-- Тесты: `test_today_plan.py` (3), `test_daily_limits_cleanup.py` (3), `test_db_schema.py` (2), retry-кейсы в `test_daily_limits.py` (+2). Итог — `735 passed`.
+- **Единый расчёт плана.** `TodayPlan` + `compute_today_plan(telegram_id, budget)` в `budget_service` — единственный канон `spent_period → spent_today → money_for_life_raw → plan_today → base_limit`. Статус и утро считают план один раз и передают его в `refresh_daily_limit`; `get_effective_daily_limit` умеет только «сегодня». Поведение не менялось (G2.1a).
+- **Reset не оставляет снапшоты.** `delete_all_budgets` удаляет все `daily_limits` пользователя (сброс = с чистого листа). `delete_active_budget` удаляет строки только за период этого бюджета; та же чистка — для stale-бюджета при смене `period_start_day`. (G2.1b)
+- **Гонка upsert.** `upsert_daily_limit` ловит `IntegrityError` только от INSERT, делает `rollback` и повторяет запись как UPDATE (две попытки); ошибка UPDATE и второй конфликт уходят наверх, а `refresh_daily_limit` их глотает. Портируемо для SQLite/PostgreSQL без dialect-specific `ON CONFLICT`. (G2.1c)
+- **Тест схемы.** `test_db_schema.py`: созданные таблицы и `Base.metadata` сверяются с `ALLOWED_TABLES`; у `daily_limits` проверены колонки, PK `(telegram_id, plan_date)`, FK на `users` и реальный `IntegrityError` на дубль дня. Это заменяет бессмысленный локальный `schema_audit` на пустом `tratobot.db`.
+- Тесты: `test_today_plan.py` (3), `test_daily_limits_cleanup.py` (5), `test_db_schema.py` (3), retry-кейсы в `test_daily_limits.py` (+2). Итог — `738 passed`.
 
 ### G3: Tier 2 — локальные переключатели
 
