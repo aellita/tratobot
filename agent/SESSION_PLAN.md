@@ -8,11 +8,11 @@
 
 | Статус | Кол-во задач |
 |--------|:------------:|
-| ✅ Готово | 218 |
+| ✅ Готово | 219 |
 | 🔧 В работе | 0 |
-| ⏳ Ожидает | 39 |
+| ⏳ Ожидает | 38 |
 
-**Следующая задача:** «Конверты», M5 → M6. G2 и G2.1 (снапшоты дневного плана) готовы; карточка C1–C3 — отдельная задача после G2.1.
+**Следующая задача:** «Конверты», M5 → M6. G2, G2.1 и карточка C1–C3 готовы; остались ассеты лягушек и ручная проверка карточки в Telegram.
 
 > Контекст, цитаты пользователя и цифры для тестов — `agent/bugs_2026-11-06.md`.
 
@@ -584,7 +584,7 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 
 ### ✅ G1: график «Траты по дням» + Tier 1 (PNG основной, виджет за флагом) — ✅ Готово
 
-**Продукт:** PNG-карточка «Financial Bro» (900×620) как основной путь: столбики трат по дням, пунктир базового дневного лимита (`get_base_daily_limit`), дни выше лимита — акцентным цветом, инсайты (пик, серия в лимите, топ-3 дня, ночной дожор и т.п.). В активном периоде — только прошедшие дни включая сегодня; закрытый — все 28–31 день. Нативный HTML-виджет + Tier 1 тап-тултип сохранён в коде, но выключен флагом `MONTHLY_WIDGET_ENABLED=False` до возврата виджетов. PNG не отправляет суммы третьим лицам.
+**Продукт:** PNG-карточка «Financial Bro» (900×620) как основной путь: столбики трат по дням, пунктир базового дневного лимита (`get_base_daily_limit`), дни выше лимита — акцентным цветом, инсайты (пик, серия в лимите, топ-3 дня, ночной дожор и т.п.). В активном периоде — только прошедшие дни включая сегодня; закрытый — все 28–31 день. Нативный HTML-виджет + Tier 1 тап-тултип сохранён в коде, но выключен флагом `MONTHLY_WIDGET_ENABLED=False` до возврата виджетов. PNG не отправляет суммы третьим лицам. **Заменено C1–C3 на 900×840.**
 
 **Реализация:**
 - `src/services/monthly_chart.py` — `_chart_window()`, `build_chart_data()` (агрегация по дням), `build_chart_state()` (JSON ≤ 1024 байт: `m`, `s`, `d[]`, `lim`, `a`), `build_monthly_card_input()` (реальные расходы, прошлый период, лимит), `render_monthly_card_png()`, `CHART_WIDGET_HTML` (inline SVG/JS ≤ 4096 байт zlib).
@@ -648,6 +648,20 @@ plan_yesterday = (money_for_life_raw + yesterday_spent + spent_today) / (days_le
 - [ ] **SQLite не проверяет FK.** В тестах `PRAGMA foreign_keys` выключен, поэтому порядок удаления `RecoveryState`/`DailyLimit` перед `Budget` проверен только логикой. При C1 либо включить FK в тестовом engine, либо явно прогнать сценарий на PostgreSQL.
 - [ ] **Остаточный риск L2.** Если конкурент ещё не закоммитил INSERT, повторная попытка может снова получить `IntegrityError`, и день останется без снапшота (только `warning`). Для C1 это дырка в графике — решить, нужен ли UPDATE-only последний шаг.
 - [ ] **Известное, не блокирует:** `morning_report` импортирует aiogram (нарушение слоёв, предсуществующее); `daily_limits` и `budget_service` связаны ленивыми импортами — не делать их модульными без разрыва цикла.
+
+### ✅ C1–C3: Bento-карточка 900×840 (2026-11-23)
+
+**Зачем:** старая карточка 900×620 судила историю по текущему плану и теряла контекст: сколько дней реально в лимите, какая серия, что съело деньги. Новая карточка читает посуточные снапшоты и показывает 4 понятных блока.
+
+- **C1 — данные и метрики.** `MonthlyCardInput` + `compute_card_metrics()`: `daily_limits[]` (снапшот или база), завершённые дни без сегодня, `green/tracked`, скор `70·green/tracked + 30·(1 − overspend/Σlimits)` с гейтом `base > 0`, `tracked ≥ 3`, лиги 55/75/90; серия с нейтральным `0 ₽`; `peak_days` только закрытый, порог 45%, минимальное k ∈ {1,2,3}, гейт `tracked ≥ 7`; `weekend_tax` — доля трат на выходных ≥40% и только при наличии и будней, и выходных; `night_food`/`latte_effect` — ≥15%; `top_expense` — самая дорогая покупка.
+- **C2 — рендер.** 900×840, фон `#0B0F14`, карточка `#111822`/`#1E293B`/r16, линия `#1C6CFF` + заливка, ступенчатый пунктир `#FACC15`, перерасход/пик `#FF4433`; шапка с двумя пилюлями; nice-step Y-ось; полая точка сегодня; callout пика одной строкой без категории; bento 2×2 с микро-барами.
+- **C3 — лягушки и закрытые состояния.** `src/assets/frogs/{metric_id}.png`, 48×48 RGBA, тихий пропуск при отсутствии, fallback на generic; `quiet_mode_closed` с подписью `за период — ни одной траты`; до старта — `upcoming` без пилюль.
+- **Ассеты:** полный набор 25 файлов: `limit_streak_first`, `limit_streak_chasing`, `limit_streak_repeat`, `limit_streak_record`, `limit_streak_zero`, `limit_winrate_clean`, `limit_winrate`, `limit_winrate_rough`, `avg_day`, `bro_score_novice`, `bro_score_own`, `bro_score_pro`, `bro_score_ninja`, `forecast`, `forecast_early`, `top_category`, `top_expense`, `peak_days`, `night_food`, `latte_effect`, `weekend_tax`, `tx_per_day`, `quiet_mode`, `quiet_mode_closed`, `upcoming`.
+- **Минимальный набор 16 + 1:** `limit_streak`, `limit_streak_record`, `limit_streak_zero`, `limit_winrate`, `avg_day`, `bro_score`, `forecast`, `top_category`, `top_expense`, `peak_days`, `night_food`, `latte_effect`, `weekend_tax`, `tx_per_day`, `quiet_mode`, `upcoming` (+ `quiet_mode_closed`).
+- [x] ✅ C1 — input + метрики + тесты
+- [x] ✅ C2 — рендер 900×840 + тесты
+- [x] ✅ C3 — лягушки, closed/quiet, доки
+- [ ] ⏳ Добавить ассеты лягушек и проверить карточку в Telegram (активный, закрытый, quiet_mode, upcoming)
 
 ### G3: Tier 2 — локальные переключатели
 

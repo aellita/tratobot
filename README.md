@@ -45,6 +45,7 @@ Telegram-бот для учёта личных финансов. Отвечае�
 | Утренний отчёт 08:00 МСК | план + вчерашний итог + зона + recovery-контекст, дедупликация через `daily_reports_log` |
 | Вечерняя сессия 22:00 + автозакрытие 23:30 | контейнер с живым списком, итог дня, recovery-фидбек |
 | Месячный отчёт | Rich HTML: разбивка по категориям, тотем топ-категории, «Сэкономлено/Перерасход» от доступного лимита, добавленный доход, навигация по периодам |
+| Bento-карточка 900×840 | Траты по дням, ступенчатый лимит из посуточных снапшотов, серия/зелёные дни, фин-скор, привычки, `top_expense`; лягушки — опциональные PNG |
 | Recovery mode | Decimal-математика, cooldown 3 дня, пересчёт при изменении бюджета, авто-завершение при успехе |
 | Ролловер периода | «Оставить всё» / «Изменить» с умными дефолтами из прошлого месяца |
 | Пересчёт по реальному балансу | снапшот `free_money + spent_at_recalc` в одной транзакции |
@@ -65,7 +66,7 @@ Python 3.12 · aiogram 3.x · SQLAlchemy 2.0 (async) · PostgreSQL (prod, asyncp
 src/bot/handlers/   menu, history, categories, evening_flow
 src/bot/            middleware (×4), scheduler (4 cron), rich_api, keyboards
 src/services/       budget, expense, categorization, morning/evening report,
-                    monthly_report, recovery, goal, daily_limits, user
+                    monthly_report, monthly_chart, recovery, goal, daily_limits, user
 src/db/             async engine, hand-rolled кросс-диалектные миграции, 11 таблиц
 src/utils/          math-парсер без eval, safe() для HTML, phrases.py (копирайт)
 ```
@@ -108,7 +109,7 @@ echo $?   # 0 — чисто, 1 — есть critical, 2 — не удалось
 
 ## Тесты и качество
 
-**738 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
+**776 тестов** (pytest + pytest-asyncio, hermetic in-memory SQLite).
 
 CI (GitHub Actions, Python 3.12): `ruff check` → `ruff format --check` → `mypy` → `pytest`. Pre-commit: те же проверки + полный прогон тестов.
 
@@ -140,6 +141,7 @@ tratobot/
 │   │   ├── scheduler.py
 │   │   └── main.py
 │   ├── assets/fonts/   # Nunito (variable TTF) для PNG-карточки
+│   ├── assets/frogs/   # опциональные 48×48 PNG-лягушки для bento-карточки
 │   ├── services/        # budget, expense, categorization, category, morning/evening report,
 │   │                    # monthly_report, monthly_chart, recovery, goal, user
 │   ├── db/
@@ -149,7 +151,7 @@ tratobot/
 │   └── core/
 │       └── config.py
 ├── assets/readme/       # hero.svg
-├── tests/               # 738 тестов
+├── tests/               # 776 тестов
 ├── .github/workflows/   # CI (GitHub Actions)
 ├── .pre-commit-config.yaml
 ├── Dockerfile
