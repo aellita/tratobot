@@ -254,7 +254,11 @@ async def create_recovery(
         session.add(rs)
         await session.commit()
         await session.refresh(rs)
-        return rs
+
+    from .daily_limits import refresh_daily_limit
+
+    await refresh_daily_limit(telegram_id)
+    return rs
 
 
 async def stop_recovery(telegram_id: int) -> RecoveryState | None:
@@ -271,7 +275,11 @@ async def stop_recovery(telegram_id: int) -> RecoveryState | None:
         rs.stopped_at = get_msk_now()
         rs.updated_at = get_msk_now()
         await session.commit()
-        return rs
+
+    from .daily_limits import refresh_daily_limit
+
+    await refresh_daily_limit(telegram_id)
+    return rs
 
 
 async def complete_recovery(telegram_id: int, reason: str) -> RecoveryState | None:
@@ -289,10 +297,15 @@ async def complete_recovery(telegram_id: int, reason: str) -> RecoveryState | No
         rs.completed_at = get_msk_now()
         rs.updated_at = get_msk_now()
         await session.commit()
-        return rs
+
+    from .daily_limits import refresh_daily_limit
+
+    await refresh_daily_limit(telegram_id)
+    return rs
 
 
 async def update_recovery_days(telegram_id: int, new_days: int) -> RecoveryState | None:
+    changed = False
     async with async_session_maker() as session:
         result = await session.execute(
             select(RecoveryState)
@@ -306,7 +319,13 @@ async def update_recovery_days(telegram_id: int, new_days: int) -> RecoveryState
             rs.total_days = new_days
             rs.updated_at = get_msk_now()
             await session.commit()
-        return rs
+            changed = True
+
+    if changed:
+        from .daily_limits import refresh_daily_limit
+
+        await refresh_daily_limit(telegram_id)
+    return rs
 
 
 async def expire_active_recoveries_for_budget(budget_id: int) -> None:

@@ -145,6 +145,10 @@ async def save_budget(
 
         await session.commit()
 
+    from .daily_limits import refresh_daily_limit
+
+    await refresh_daily_limit(telegram_id)
+
 
 async def add_income(telegram_id: int, amount: float) -> Budget:
     """Добавить доход в активный период и запомнить сумму добавки."""
@@ -172,7 +176,11 @@ async def add_income(telegram_id: int, amount: float) -> Budget:
 
         await session.commit()
         await session.refresh(budget)
-        return budget
+
+    from .daily_limits import refresh_daily_limit
+
+    await refresh_daily_limit(telegram_id)
+    return budget
 
 
 ALLOWED_FIELDS = {
@@ -257,7 +265,11 @@ async def update_budget_field(telegram_id: int, field: str, value) -> Budget:
 
         await session.commit()
         await session.refresh(budget)
-        return budget
+
+    from .daily_limits import refresh_daily_limit
+
+    await refresh_daily_limit(telegram_id)
+    return budget
 
 
 async def delete_active_budget(telegram_id: int) -> bool:
@@ -460,3 +472,7 @@ async def apply_reconciliation(
         if new_black_day is not None:
             budget.black_day_fund = new_black_day
         await session.commit()
+
+    from .daily_limits import refresh_daily_limit
+
+    await refresh_daily_limit(telegram_id)

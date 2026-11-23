@@ -511,6 +511,10 @@ async def _build_status(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if not budget:
         return phrases.NO_BUDGET, await get_main_menu_keyboard(tg_id)
 
+    from ...services.daily_limits import refresh_daily_limit
+
+    await refresh_daily_limit(tg_id)
+
     spent_today = await get_today_expenses_sum(tg_id)
 
     async with async_session_maker() as session:
