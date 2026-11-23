@@ -181,7 +181,7 @@ class TestRenderMonthlyCardPng:
 
         png_bytes = render_monthly_card_png(_make_input())
         img = Image.open(BytesIO(png_bytes))
-        assert img.size == (900, 620)
+        assert img.size == (900, 840)
 
     def test_zero_spent_quiet_mode(self):
         png_bytes = render_monthly_card_png(_make_input(daily_spent=[0.0] * 30, total_spent=0.0))
@@ -254,6 +254,22 @@ class TestChartWidgetHtml:
         """showTooltip must not reference render()-local w/barH."""
         assert "svgW - 55" in CHART_WIDGET_HTML
         assert "barRect.height" in CHART_WIDGET_HTML
+
+
+class TestFrogs:
+    """Frogs are optional assets; missing files must never break the card."""
+
+    def test_missing_asset_returns_none(self):
+        from src.services.monthly_chart import _load_frog
+
+        assert _load_frog("definitely_missing_frog") is None
+
+    def test_specific_frogs_fall_back_to_generic(self):
+        from src.services.monthly_chart import FROG_FALLBACKS
+
+        assert FROG_FALLBACKS["bro_score_pro"] == "bro_score"
+        assert FROG_FALLBACKS["limit_streak_record"] == "limit_streak"
+        assert FROG_FALLBACKS["quiet_mode_closed"] == "quiet_mode"
 
 
 class TestFonts:

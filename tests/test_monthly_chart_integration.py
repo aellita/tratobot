@@ -7,8 +7,10 @@ import pytest
 
 from src.bot.chart_delivery import send_monthly_chart
 from src.core.config import settings
-from src.db.models.models import Budget, Expense
+from src.db.models.models import Budget, Category, Expense
+from src.services.daily_limits import upsert_daily_limit
 from src.services.monthly_chart import build_monthly_card_input, render_monthly_card_png
+from src.services.recovery_service import create_recovery
 from src.utils.helpers import get_msk_now
 
 
@@ -35,6 +37,9 @@ async def test_build_monthly_card_input_uses_dates_and_real_expenses(db_session,
     assert isinstance(input_data.period_start, date)
     assert not isinstance(input_data.period_start, datetime)
     assert isinstance(input_data.period_end, date)
+    assert input_data.is_active is True
+    assert input_data.upcoming is False
+    assert input_data.as_of == get_msk_now().date()
     assert input_data.expenses_count == 1
     assert input_data.expenses[0]["amount"] == 500.0
     assert input_data.total_spent == 500.0
@@ -80,6 +85,54 @@ async def test_build_monthly_card_input_passes_previous_period(db_session, test_
     assert isinstance(input_data.prev_period_start, date)
     assert input_data.prev_period_start < input_data.period_start
     assert input_data.prev_income > 0
+
+
+@pytest.mark.asyncio
+async def test_build_monthly_card_input_uses_daily_limit_snapshots(db_session, test_budget):
+    today = get_msk_now().date()
+    period_start = today.replace(day=1)
+    await upsert_daily_limit(99999, period_start, 111.0)
+
+    input_data = await build_monthly_card_input(99999, test_budget)
+
+    assert len(input_data.daily_limits) == len(input_data.daily_spent)
+    assert input_data.daily_limits[0] == 111.0
+    if len(input_data.daily_limits) > 1:
+        assert input_data.daily_limits[1] == input_data.daily_limit
+
+
+@pytest.mark.asyncio
+async def test_build_monthly_card_input_uses_recovery_target_as_current_limit(
+    db_session, test_budget
+):
+    await create_recovery(99999, test_budget.id, 1000, 300, 10, 5000)
+
+    input_data = await build_monthly_card_input(99999, test_budget)
+
+    assert input_data.current_limit == 300.0
+    assert input_data.daily_limit != input_data.current_limit
+
+
+@pytest.mark.asyncio
+async def test_build_monthly_card_input_includes_expense_category(db_session, test_budget):
+    category = Category(telegram_id=99999, name="Еда")
+    db_session.add(category)
+    await db_session.commit()
+    start = _period_start_date(test_budget)
+    db_session.add(
+        Expense(
+            telegram_id=99999,
+            category_id=category.id,
+            amount=700.0,
+            description="обед",
+            date=start.replace(hour=12, minute=0, second=0, microsecond=0),
+        )
+    )
+    await db_session.commit()
+
+    input_data = await build_monthly_card_input(99999, test_budget)
+
+    assert input_data.expenses[0]["category"] == "Еда"
 
 
 @pytest.mark.asyncio
