@@ -45,6 +45,8 @@
 
 **Файлы:** `src/services/budget_service.py`, `src/services/daily_limits.py`, `src/bot/handlers/menu.py`, `src/services/morning_report.py`, `tests/test_today_plan.py`, `tests/test_daily_limits_cleanup.py`, `tests/test_db_schema.py`, `tests/test_daily_limits.py`
 
+**Процесс:** review-фиксы (`b443c46`) запушены без повторного `@review` по решению пользователя (ревью дорогое). Чек-лист отложенной проверки этих мест — в `SESSION_PLAN.md`, раздел «Отложенная проверка G2.1».
+
 ### 🐛 Bug Audit 2026-11-06 — P0/P1/P2, 15 пунктов + 5 находок (в работе)
 
 **Что произошло:** пользователь принёс 15 визуальных/логических багов. Аудит по коду подтвердил 11, ещё 2 требуют продуктового решения, 1 — фича, 1 — не баг в заявленной формулировке. Полный разбор с цитатами и цифрами — `agent/bugs_2026-11-06.md`.
