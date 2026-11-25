@@ -3,7 +3,7 @@ from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 
 from src.db.database import ALLOWED_TABLES
-from src.db.models.models import Base, DailyLimit
+from src.db.models.models import Base, Budget, DailyLimit, RecoveryState, User
 from src.utils.helpers import get_msk_now
 
 
@@ -40,8 +40,6 @@ def test_daily_limits_columns_primary_key_and_foreign_key():
 
 
 async def test_duplicate_day_is_rejected_by_primary_key(db_session):
-    from src.db.models.models import User
-
     db_session.add(User(telegram_id=1001))
     await db_session.commit()
     today = get_msk_now().date()
@@ -52,3 +50,54 @@ async def test_duplicate_day_is_rejected_by_primary_key(db_session):
     with pytest.raises(IntegrityError):
         await db_session.commit()
     await db_session.rollback()
+
+
+async def test_fk_rejects_orphan_daily_limit(fk_session_maker):
+    async with fk_session_maker() as session:
+        session.add(
+            DailyLimit(
+                telegram_id=404,
+                plan_date=get_msk_now().date(),
+                limit=1000.0,
+                source="plan",
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.commit()
+        await session.rollback()
+
+
+async def test_fk_rejects_budget_delete_with_recovery(fk_session_maker):
+    async with fk_session_maker() as session:
+        session.add(User(telegram_id=1001))
+        await session.commit()
+        budget = Budget(
+            telegram_id=1001,
+            month=get_msk_now().strftime("%Y-%m"),
+            total_income=100000.0,
+            mandatory_payments=0.0,
+            black_day_fund=0.0,
+            period_start_day=1,
+        )
+        session.add(budget)
+        await session.commit()
+        await session.refresh(budget)
+        session.add(
+            RecoveryState(
+                telegram_id=1001,
+                budget_id=budget.id,
+                status="active",
+                baseline=1000.0,
+                target=500.0,
+                total_days=5,
+                initial_deficit=1000.0,
+                initial_target=500.0,
+                initial_total_days=5,
+            )
+        )
+        await session.commit()
+
+        await session.delete(budget)
+        with pytest.raises(IntegrityError):
+            await session.commit()
+        await session.rollback()

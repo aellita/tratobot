@@ -10,6 +10,8 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 
 from ..db.database import async_session_maker
@@ -35,13 +37,43 @@ async def _select_existing(session, telegram_id: int, plan_date: date) -> DailyL
     return result.scalar_one_or_none()
 
 
-async def _write_daily_limit(
+def _supports_on_conflict(dialect_name: str) -> bool:
+    return dialect_name in {"sqlite", "postgresql"}
+
+
+def _build_upsert_statement(
+    dialect_name: str,
+    telegram_id: int,
+    plan_date: date,
+    limit: float,
+    source: str,
+    now,
+):
+    insert_fn = sqlite_insert if dialect_name == "sqlite" else pg_insert
+    statement = insert_fn(DailyLimit).values(
+        telegram_id=telegram_id,
+        plan_date=plan_date,
+        limit=float(limit),
+        source=source,
+        updated_at=now,
+    )
+    return statement.on_conflict_do_update(
+        index_elements=[DailyLimit.telegram_id, DailyLimit.plan_date],
+        set_={
+            "limit": float(limit),
+            "source": source,
+            "updated_at": now,
+        },
+    )
+
+
+async def _write_daily_limit_fallback(
     telegram_id: int,
     plan_date: date,
     limit: float,
     source: str,
 ) -> None:
-    """Insert or update one day; retry only an INSERT that lost the PK race."""
+    """Portable SELECT→INSERT retry for dialects without ON CONFLICT."""
     for attempt in (0, 1):
         async with async_session_maker() as session:
             attempted_insert = False
@@ -71,6 +103,33 @@ async def _write_daily_limit(
                     telegram_id,
                     plan_date,
                 )
+
+
+async def _write_daily_limit(
+    telegram_id: int,
+    plan_date: date,
+    limit: float,
+    source: str,
+) -> None:
+    """Insert or update one day atomically where the dialect supports it."""
+    async with async_session_maker() as session:
+        bind = session.bind or session.get_bind()
+        dialect_name = bind.dialect.name if bind is not None else ""
+        if _supports_on_conflict(dialect_name):
+            now = get_msk_now()
+            statement = _build_upsert_statement(
+                dialect_name,
+                telegram_id,
+                plan_date,
+                limit,
+                source,
+                now,
+            )
+            await session.execute(statement)
+            await session.commit()
+            return
+
+    await _write_daily_limit_fallback(telegram_id, plan_date, limit, source)
 
 
 async def upsert_daily_limit(

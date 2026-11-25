@@ -100,6 +100,7 @@ class TestUpsertDailyLimit:
     async def test_retries_as_update_after_insert_race(self, db_session, monkeypatch):
         from src.services import daily_limits as dl
 
+        monkeypatch.setattr(dl, "_supports_on_conflict", lambda _name: False)
         await _seed_user(db_session, 1001)
         plan_date = date(2026, 11, 20)
         await upsert_daily_limit(1001, plan_date, 5000.0)
@@ -128,6 +129,7 @@ class TestUpsertDailyLimit:
 
         from src.services import daily_limits as dl
 
+        monkeypatch.setattr(dl, "_supports_on_conflict", lambda _name: False)
         await _seed_user(db_session, 1001)
         plan_date = date(2026, 11, 20)
         await upsert_daily_limit(1001, plan_date, 5000.0)
@@ -143,6 +145,35 @@ class TestUpsertDailyLimit:
         rows = await _rows(db_session)
         assert len(rows) == 1
         assert rows[0].limit == 5000.0
+
+
+class TestUpsertDialects:
+    def test_supports_on_conflict(self):
+        from src.services.daily_limits import _supports_on_conflict
+
+        assert _supports_on_conflict("sqlite") is True
+        assert _supports_on_conflict("postgresql") is True
+        assert _supports_on_conflict("mysql") is False
+
+    @pytest.mark.parametrize("dialect_name", ["sqlite", "postgresql"])
+    def test_upsert_statement_compiles(self, dialect_name):
+        from sqlalchemy.dialects import postgresql, sqlite
+
+        from src.services.daily_limits import _build_upsert_statement
+
+        dialect = sqlite.dialect() if dialect_name == "sqlite" else postgresql.dialect()
+        statement = _build_upsert_statement(
+            dialect_name,
+            1001,
+            date(2026, 11, 20),
+            5000.0,
+            SOURCE_PLAN,
+            get_msk_now(),
+        )
+
+        compiled = str(statement.compile(dialect=dialect))
+
+        assert "ON CONFLICT" in compiled
 
 
 class TestGetDailyLimits:
