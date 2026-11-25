@@ -2,6 +2,9 @@ from datetime import date, timedelta
 
 from src.services.monthly_chart import (
     MonthlyCardInput,
+    _discipline_pill_text,
+    _limit_delta_text,
+    _pills_enabled,
     _x_label_indices,
     compute_card_metrics,
 )
@@ -509,6 +512,41 @@ def test_pills_and_delta():
     assert closed.current_limit == 5000.0
     assert closed.limit_delta is None
     assert closed.budget_saved == 145000.0
+
+
+def test_pills_are_hidden_without_base_or_before_start():
+    base_zero = _make_input([1000.0], base=0.0)
+    upcoming = _make_input(
+        [],
+        start=date(2026, 12, 1),
+        period_end=date(2026, 12, 31),
+        as_of=date(2026, 11, 20),
+        active=False,
+        upcoming=True,
+    )
+
+    assert _pills_enabled(base_zero) is False
+    assert _pills_enabled(upcoming) is False
+    assert _pills_enabled(_make_input([1000.0])) is True
+
+
+def test_discipline_pill_text():
+    quiet = compute_card_metrics(_make_input([0.0]))
+    active = compute_card_metrics(_make_input([1000.0, 0.0]))
+    closed_ok = compute_card_metrics(_make_input([1000.0], active=False))
+    closed_over = compute_card_metrics(_make_input([1000.0], active=False, available_income=0.0))
+
+    assert _discipline_pill_text(quiet, True) == "пока без трат"
+    assert _discipline_pill_text(active, True) == "100% в лимите (1/1 дн.)"
+    assert _discipline_pill_text(closed_ok, False) == "в бюджете"
+    assert _discipline_pill_text(closed_over, False) == "перерасход: 1 000 ₽"
+
+
+def test_limit_delta_text_omits_zero():
+    assert _limit_delta_text(None) is None
+    assert _limit_delta_text(0.0) is None
+    assert _limit_delta_text(1500.0) == (" (+1 500 ₽)", "up")
+    assert _limit_delta_text(-1500.0) == (" (-1 500 ₽)", "down")
 
 
 def test_weekend_tax_uses_completed_total_on_active_period():

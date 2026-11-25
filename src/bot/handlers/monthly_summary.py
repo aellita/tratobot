@@ -71,8 +71,7 @@ async def _send_chart_for_index(
     if idx < 0 or idx >= len(budgets):
         return
     budget = budgets[idx]
-    prev_budget = budgets[idx + 1] if idx + 1 < len(budgets) else None
-    await send_monthly_chart(bot, telegram_id, chat_id, budget, prev_budget, force_new=force_new)
+    await send_monthly_chart(bot, telegram_id, chat_id, budget, force_new=force_new)
 
 
 @router.callback_query(F.data == "menu_monthly_report")

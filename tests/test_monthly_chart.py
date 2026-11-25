@@ -30,7 +30,6 @@ def _make_input(**overrides) -> MonthlyCardInput:
         expenses=[],
         expenses_count=0,
         current_income=100000.0,
-        prev_income=0.0,
     )
     defaults.update(overrides)
     return MonthlyCardInput(**defaults)
@@ -225,22 +224,15 @@ class TestRenderMonthlyCardPng:
         png_bytes = render_monthly_card_png(_make_input(daily_spent=[0.0] * 30, total_spent=0.0))
         assert len(png_bytes) > 1000
 
-    def test_non_empty_expenses_and_prev_period(self):
+    def test_non_empty_expenses(self):
         expenses = [
             {"date": "2026-11-05T22:30:00", "amount": 500.0},
             {"date": "2026-11-06T10:00:00", "amount": 1500.0},
-        ]
-        prev_expenses = [
-            {"date": "2026-10-05T22:30:00", "amount": 900.0},
         ]
         png_bytes = render_monthly_card_png(
             _make_input(
                 expenses=expenses,
                 expenses_count=len(expenses),
-                prev_expenses=prev_expenses,
-                prev_period_start=date(2026, 10, 1),
-                prev_period_end=date(2026, 10, 31),
-                prev_income=90000.0,
             )
         )
         assert len(png_bytes) > 1000

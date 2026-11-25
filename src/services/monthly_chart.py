@@ -149,11 +149,7 @@ class MonthlyCardInput:
     total_spent: float
     expenses: list[CardExpense]
     expenses_count: int
-    prev_expenses: list[CardExpense] | None = None
-    prev_period_start: date | None = None
-    prev_period_end: date | None = None
     current_income: float = 0.0
-    prev_income: float = 0.0
     as_of: date | None = None
     is_active: bool = False
     upcoming: bool = False
@@ -219,7 +215,6 @@ async def _fetch_card_expenses(
 async def build_monthly_card_input(
     telegram_id: int,
     budget: Budget,
-    prev_budget: Budget | None = None,
     daily_limit: float | None = None,
     current_limit: float | None = None,
 ) -> MonthlyCardInput:
@@ -253,19 +248,6 @@ async def build_monthly_card_input(
     next_day_start = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
     expenses = await _fetch_card_expenses(telegram_id, period_start, next_day_start)
 
-    prev_expenses = None
-    prev_period_start = None
-    prev_period_end = None
-    prev_income = 0.0
-    if prev_budget is not None:
-        prev_start, prev_end = period_dates(prev_budget.month, prev_budget.period_start_day or 1)
-        prev_days = max(len(daily_spent), 1)
-        prev_cutoff = min(prev_start + timedelta(days=prev_days), prev_end + timedelta(days=1))
-        prev_expenses = await _fetch_card_expenses(telegram_id, prev_start, prev_cutoff)
-        prev_period_start = prev_start.date()
-        prev_period_end = prev_end.date()
-        prev_income = float((prev_budget.total_income or 0) + (prev_budget.added_income or 0))
-
     available_income = max(
         0.0,
         float(
@@ -284,11 +266,7 @@ async def build_monthly_card_input(
         total_spent=round(sum(daily_spent), 2),
         expenses=expenses,
         expenses_count=len(expenses),
-        prev_expenses=prev_expenses,
-        prev_period_start=prev_period_start,
-        prev_period_end=prev_period_end,
         current_income=float((budget.total_income or 0) + (budget.added_income or 0)),
-        prev_income=prev_income,
         as_of=today,
         is_active=is_active,
         upcoming=today < period_start.date(),
@@ -399,6 +377,30 @@ def _is_night_expense(expense: CardExpense) -> bool:
 
 def _fmt_money(value: float) -> str:
     return f"{int(round(value)):,}".replace(",", " ")
+
+
+def _pills_enabled(input: MonthlyCardInput) -> bool:
+    return input.daily_limit > 0 and not input.upcoming
+
+
+def _limit_delta_text(delta: float | None) -> tuple[str, str] | None:
+    """Return the delta segment and its tone, or nothing when delta is zero."""
+    if delta is None or delta == 0:
+        return None
+    if delta > 0:
+        return f" (+{_fmt_money(delta)} ₽)", "up"
+    return f" (-{_fmt_money(abs(delta))} ₽)", "down"
+
+
+def _discipline_pill_text(metrics: CardMetrics, is_active: bool) -> str:
+    if is_active:
+        if metrics.tracked == 0:
+            return "пока без трат"
+        return f"{metrics.green_pct}% в лимите ({metrics.green}/{metrics.tracked} дн.)"
+    saved = metrics.budget_saved or 0.0
+    if saved >= 0:
+        return "в бюджете"
+    return f"перерасход: {_fmt_money(abs(saved))} ₽"
 
 
 def _month_short(value: date) -> str:
@@ -894,22 +896,7 @@ def _input_to_json(input: MonthlyCardInput) -> str:
                 }
                 for e in input.expenses
             ],
-            "prev_expenses": [
-                {
-                    "date": e["date"],
-                    "amount": round(e["amount"], 2),
-                    "category": e.get("category"),
-                }
-                for e in (input.prev_expenses or [])
-            ],
-            "prev_period_start": (
-                _date_str(input.prev_period_start) if input.prev_period_start else None
-            ),
-            "prev_period_end": (
-                _date_str(input.prev_period_end) if input.prev_period_end else None
-            ),
             "current_income": round(input.current_income, 2),
-            "prev_income": round(input.prev_income, 2),
             "as_of": _date_str(input.as_of) if input.as_of else None,
             "is_active": input.is_active,
             "upcoming": input.upcoming,
@@ -1103,7 +1090,6 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
             float(data["available_income"]) if data.get("available_income") is not None else None
         ),
         current_income=float(data.get("current_income") or 0),
-        prev_income=float(data.get("prev_income") or 0),
     )
     metrics = compute_card_metrics(input_data)
 
@@ -1184,40 +1170,30 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
         fill=text_secondary,
     )
 
-    if input_data.daily_limit > 0 and not input_data.upcoming:
+    if _pills_enabled(input_data):
         limit_segments = [
             ("Лимит: ", text_primary),
             (f"{_fmt_money(metrics.current_limit)} ₽/д", limit_yellow),
         ]
-        if metrics.limit_delta is not None:
-            delta = metrics.limit_delta
-            if delta > 0:
-                delta_color = accent_green
-                sign = "+"
-            elif delta < 0:
-                delta_color = accent_red
-                sign = "-"
-            else:
-                delta_color = text_secondary
-                sign = ""
-            limit_segments.append((f" ({sign}{_fmt_money(abs(delta))} ₽)", delta_color))
+        delta_segment = _limit_delta_text(metrics.limit_delta)
+        if delta_segment is not None:
+            delta_text, delta_tone = delta_segment
+            delta_color = accent_green if delta_tone == "up" else accent_red
+            limit_segments.append((delta_text, delta_color))
 
         if input_data.is_active:
-            if metrics.green_pct >= 70:
+            if metrics.tracked == 0:
+                discipline_color = text_secondary
+            elif metrics.green_pct >= 70:
                 discipline_color = accent_green
             elif metrics.green_pct >= 50:
                 discipline_color = limit_yellow
             else:
                 discipline_color = accent_red
-            discipline = f"{metrics.green_pct}% в лимите ({metrics.green}/{metrics.tracked} дн.)"
         else:
             saved = metrics.budget_saved or 0.0
-            if saved >= 0:
-                discipline_color = accent_green
-                discipline = "в бюджете"
-            else:
-                discipline_color = accent_red
-                discipline = f"перерасход: {_fmt_money(abs(saved))} ₽"
+            discipline_color = accent_green if saved >= 0 else accent_red
+        discipline = _discipline_pill_text(metrics, input_data.is_active)
         discipline_segments = [(discipline, discipline_color)]
 
         def pill_width(segments):

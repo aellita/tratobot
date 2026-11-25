@@ -1,6 +1,6 @@
 """Integration tests for monthly chart data building and delivery."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -49,42 +49,6 @@ async def test_build_monthly_card_input_uses_dates_and_real_expenses(db_session,
     assert input_data.daily_limit > 0
     # The renderer must accept the service-produced input without errors.
     assert len(render_monthly_card_png(input_data)) > 1000
-
-
-@pytest.mark.asyncio
-async def test_build_monthly_card_input_passes_previous_period(db_session, test_budget):
-    today = get_msk_now()
-    prev_month = (today.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
-    prev_budget = Budget(
-        telegram_id=99999,
-        month=prev_month,
-        total_income=90000.0,
-        mandatory_payments=20000.0,
-        black_day_fund=10000.0,
-        period_start_day=1,
-    )
-    db_session.add(prev_budget)
-    await db_session.commit()
-
-    prev_start = _period_start_date(prev_budget)
-    db_session.add(
-        Expense(
-            telegram_id=99999,
-            amount=700.0,
-            description="прошлый период",
-            date=prev_start.replace(hour=12, minute=0, second=0, microsecond=0),
-        )
-    )
-    await db_session.commit()
-
-    input_data = await build_monthly_card_input(99999, test_budget, prev_budget)
-
-    assert input_data.prev_expenses is not None
-    assert len(input_data.prev_expenses) == 1
-    assert input_data.prev_expenses[0]["amount"] == 700.0
-    assert isinstance(input_data.prev_period_start, date)
-    assert input_data.prev_period_start < input_data.period_start
-    assert input_data.prev_income > 0
 
 
 @pytest.mark.asyncio

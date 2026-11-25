@@ -55,7 +55,6 @@ async def send_monthly_chart(
     telegram_id: int,
     chat_id: int,
     budget: Budget,
-    prev_budget: Budget | None = None,
     force_new: bool = False,
 ) -> str:
     """Send or update the monthly chart.
@@ -91,7 +90,6 @@ async def send_monthly_chart(
     input_data = await build_monthly_card_input(
         telegram_id,
         budget,
-        prev_budget,
         daily_limit=daily_limit,
         current_limit=current_limit,
     )
