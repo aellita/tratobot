@@ -346,6 +346,7 @@ class TestFrogs:
         mc._cached_render.cache_clear()
         png_bytes = render_monthly_card_png(_make_input(expenses=[], expenses_count=0))
         assert png_bytes[:8] == b"\x89PNG\r\n\x1a\n"
+        mc._cached_render.cache_clear()
 
     def test_committed_frog_assets_are_png_rgba(self):
         from pathlib import Path

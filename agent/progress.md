@@ -7,7 +7,7 @@
 ## Текущий статус и фокус
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (включён с 2026-09-05, `RECOVERY_ENABLED=True`)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B24, U1–U3** (Bug Audit 2026-11-06 + визуал, утренний отчёт и UX-статус).  
-**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2 + G2.1** — снапшоты эффективного дневного плана (`daily_limits`), единый `compute_today_plan`, чистка при reset, retry; **C1–C3** — Bento-карточка (PNG 1280×1195, 2× supersampling) с метриками от посуточных лимитов (813 тестов).  
+**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2 + G2.1** — снапшоты эффективного дневного плана (`daily_limits`), единый `compute_today_plan`, чистка при reset, retry; **C1–C3** — Bento-карточка (PNG 1280×1195, 2× supersampling) с метриками от посуточных лимитов (817 тестов).  
 **Активно:** месячный отчёт — **M1–M4** готовы; дальше M5 → M6.  
 **Ближайшее:** «Конверты» (обязательные как отдельный конверт), затем M5/M6. G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
 **В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям.  
@@ -38,7 +38,7 @@
 
 - **Один канон плана.** `TodayPlan` + `compute_today_plan(telegram_id, budget)` в `budget_service` собирают `spent_period → spent_today → money_for_life_raw → plan_today`, `base_limit` и `days_left`. Статус и утренний отчёт считают план один раз и передают его в `refresh_daily_limit`, поэтому цепочка не выполняется дважды; `get_effective_daily_limit` без готового плана считает сам. Поведение не менялось: это вынос уже работавшей цепочки, а не новая формула. `get_effective_daily_limit` умеет только «сегодня» — история не пересчитывается задним числом.
 - **Reset чистит снапшоты.** Полный `reset_budget` → `delete_all_budgets` удаляет все `daily_limits` пользователя: сброс означает «начать с нуля», старые лимиты не должны всплыть в новой карточке. `delete_active_budget` удаляет строки только за период своего бюджета и не трогает чужие/внешние даты; та же чистка применяется к stale-бюджету при смене `period_start_day`.
-- **Гонка upsert.** `upsert_daily_limit` → `_write_daily_limit`: при `IntegrityError` именно от INSERT внутренний слой делает `rollback`, логирует и повторяет запись как UPDATE (не более двух попыток). Ошибка UPDATE сразу пробрасывается. Второй конфликт тоже пробрасывается, но `refresh_daily_limit` его глотает с `warning` — прод не падает. Без dialect-specific `ON CONFLICT`, одинаково для SQLite и PostgreSQL.
+- **Гонка upsert.** `upsert_daily_limit` → `_write_daily_limit`: при `IntegrityError` именно от INSERT внутренний слой делает `rollback`, логирует и повторяет запись как UPDATE (не более двух попыток). Ошибка UPDATE сразу пробрасывается. Второй конфликт тоже пробрасывается, но `refresh_daily_limit` его глотает с `warning` — прод не падает. **Заменено в backlog A3 (2026-11-25):** SQLite/PostgreSQL пишутся через атомарный `ON CONFLICT DO UPDATE`; retry остался fallback для прочих диалектов.
 - **Тест схемы вместо пустого локального аудита.** `test_db_schema.py` сверяет созданные таблицы и `Base.metadata` с `ALLOWED_TABLES`, проверяет колонки, PK `(telegram_id, plan_date)` и FK на `users` у `daily_limits`, а также что дубль дня реально ловится `IntegrityError`. Локальный `tratobot.db` остаётся пустым артефактом; на проде таблицу создаёт `init_db()`.
 
 **Тесты:** `test_today_plan.py` (3), `test_daily_limits_cleanup.py` (5), `test_db_schema.py` (3), retry-кейсы в `test_daily_limits.py` (+2). Итог — `738 passed`, `ruff check .` clean; форматирование изменённых файлов чистое.
@@ -75,7 +75,7 @@
 - Закрытый `quiet_mode`: `quiet_mode_closed` с fallback на `quiet_mode`, подпись `за период — ни одной траты`, без обвинений.
 - **Ассеты:** в `src/assets/frogs/` лежат 23 PNG 100×100 RGBA. Alias/fallback: `top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`. `tx_per_day_zero` не добавляли — код его не использует. В широких карточках лягушка рисуется 96×96, в bento — 48×48.
 
-**Тесты:** `test_monthly_card_metrics.py` (52: все состояния, серия/0-дни, скор, границы, peak_days/k, weekend-гейт, night/latte, callout, пилюли, дедуп, x-ось), обновлены `test_monthly_chart.py` и `test_monthly_chart_integration.py`. `pytest 813 passed`, `ruff check .` clean.
+**Тесты:** `test_monthly_card_metrics.py` (52: все состояния, серия/0-дни, скор, границы, peak_days/k, weekend-гейт, night/latte, callout, пилюли, дедуп, x-ось), обновлены `test_monthly_chart.py` и `test_monthly_chart_integration.py`. `pytest 817 passed`, `ruff check .` clean.
 **Файлы:** `src/services/monthly_chart.py`, `tests/test_monthly_card_metrics.py`, `tests/test_monthly_chart.py`, `tests/test_monthly_chart_integration.py`
 
 ### ✅ Backlog G2.1 + карточки (2026-11-25)

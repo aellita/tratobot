@@ -49,7 +49,12 @@ def _build_upsert_statement(
     source: str,
     now,
 ):
-    insert_fn = sqlite_insert if dialect_name == "sqlite" else pg_insert
+    if dialect_name == "sqlite":
+        insert_fn = sqlite_insert
+    elif dialect_name == "postgresql":
+        insert_fn = pg_insert
+    else:
+        raise ValueError(f"Unsupported dialect for upsert: {dialect_name}")
     statement = insert_fn(DailyLimit).values(
         telegram_id=telegram_id,
         plan_date=plan_date,
@@ -113,7 +118,7 @@ async def _write_daily_limit(
 ) -> None:
     """Insert or update one day atomically where the dialect supports it."""
     async with async_session_maker() as session:
-        bind = session.bind or session.get_bind()
+        bind = session.get_bind()
         dialect_name = bind.dialect.name if bind is not None else ""
         if _supports_on_conflict(dialect_name):
             now = get_msk_now()
@@ -140,9 +145,8 @@ async def upsert_daily_limit(
 ) -> None:
     """Write the effective limit for ``plan_date``. Last write wins.
 
-    Two writers can race between the ``SELECT`` and the ``INSERT`` (for
-    example the 00:05 job and a status render). The loser gets an
-    ``IntegrityError`` on the primary key and retries once as an update.
+    SQLite and PostgreSQL use a single atomic ``INSERT … ON CONFLICT DO UPDATE``.
+    Other dialects fall back to SELECT→INSERT with one retry on a PK race.
     """
     await _write_daily_limit(telegram_id, plan_date, limit, source)
 

@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from src.db.database import ALLOWED_TABLES
@@ -50,6 +50,12 @@ async def test_duplicate_day_is_rejected_by_primary_key(db_session):
     with pytest.raises(IntegrityError):
         await db_session.commit()
     await db_session.rollback()
+
+
+async def test_fk_fixture_enables_pragma(fk_session_maker):
+    async with fk_session_maker() as session:
+        result = await session.execute(text("PRAGMA foreign_keys"))
+        assert result.scalar() == 1
 
 
 async def test_fk_rejects_orphan_daily_limit(fk_session_maker):

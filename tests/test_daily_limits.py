@@ -1,5 +1,5 @@
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -66,6 +66,26 @@ class TestUpsertDailyLimit:
         rows = await _rows(db_session)
         assert len(rows) == 1
         assert rows[0].limit == 7500.0
+
+    async def test_update_path_refreshes_updated_at(self, db_session):
+        await _seed_user(db_session, 1001)
+        plan_date = date(2026, 11, 20)
+        old = datetime(2020, 1, 1)
+        db_session.add(
+            DailyLimit(
+                telegram_id=1001,
+                plan_date=plan_date,
+                limit=5000.0,
+                source=SOURCE_PLAN,
+                updated_at=old,
+            )
+        )
+        await db_session.commit()
+
+        await upsert_daily_limit(1001, plan_date, 7500.0)
+
+        rows = await _rows(db_session)
+        assert rows[0].updated_at > old
 
     async def test_last_write_wins_source(self, db_session):
         await _seed_user(db_session, 1001)
@@ -174,6 +194,23 @@ class TestUpsertDialects:
         compiled = str(statement.compile(dialect=dialect))
 
         assert "ON CONFLICT" in compiled
+        assert "DO UPDATE" in compiled
+        assert "telegram_id" in compiled
+        assert "plan_date" in compiled
+        assert "updated_at" in compiled
+
+    def test_upsert_statement_rejects_unknown_dialect(self):
+        from src.services.daily_limits import _build_upsert_statement
+
+        with pytest.raises(ValueError):
+            _build_upsert_statement(
+                "mysql",
+                1001,
+                date(2026, 11, 20),
+                5000.0,
+                SOURCE_PLAN,
+                get_msk_now(),
+            )
 
 
 class TestGetDailyLimits:

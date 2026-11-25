@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 
-from src.db.models.models import Budget, User
+from src.db.models.models import Budget, DailyLimit, RecoveryState, User
 from src.services.budget_service import (
     delete_active_budget,
     delete_all_budgets,
@@ -144,3 +144,53 @@ async def test_period_start_change_keeps_snapshots_of_new_period(db_session, mon
     assert await get_daily_limits(1001, inside, inside) == {inside: 222.0}
     remaining = (await db_session.execute(select(Budget))).scalars().all()
     assert len(remaining) == 1
+
+
+async def test_delete_all_budgets_under_foreign_keys(fk_session_maker, monkeypatch):
+    import src.services.budget_service as bs
+
+    monkeypatch.setattr(bs, "async_session_maker", fk_session_maker)
+    async with fk_session_maker() as session:
+        session.add(User(telegram_id=5005))
+        await session.commit()
+        budget = Budget(
+            telegram_id=5005,
+            month=get_msk_now().strftime("%Y-%m"),
+            total_income=100000.0,
+            mandatory_payments=0.0,
+            black_day_fund=0.0,
+            period_start_day=1,
+        )
+        session.add(budget)
+        await session.commit()
+        await session.refresh(budget)
+        session.add(
+            RecoveryState(
+                telegram_id=5005,
+                budget_id=budget.id,
+                status="active",
+                baseline=1000.0,
+                target=500.0,
+                total_days=5,
+                initial_deficit=1000.0,
+                initial_target=500.0,
+                initial_total_days=5,
+            )
+        )
+        session.add(
+            DailyLimit(
+                telegram_id=5005,
+                plan_date=get_msk_now().date(),
+                limit=1000.0,
+                source="plan",
+            )
+        )
+        await session.commit()
+
+    removed = await bs.delete_all_budgets(5005)
+
+    assert removed == 1
+    async with fk_session_maker() as session:
+        assert (await session.execute(select(Budget))).scalars().all() == []
+        assert (await session.execute(select(RecoveryState))).scalars().all() == []
+        assert (await session.execute(select(DailyLimit))).scalars().all() == []
