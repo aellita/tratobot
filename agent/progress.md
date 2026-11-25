@@ -7,7 +7,7 @@
 ## Текущий статус и фокус
 
 **Стабильная основа:** парсинг расходов, категории, дубликаты, утренние/вечерние отчёты, онбординг (2 шага), составные emoji, daily_limit, математические выражения, **Recovery v1-infra (включён с 2026-09-05, `RECOVERY_ENABLED=True`)**, B6–B10 (`is_active` default, schema audit, `/test_*` удалены), **B11–B24, U1–U3** (Bug Audit 2026-11-06 + визуал, утренний отчёт и UX-статус).  
-**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2 + G2.1** — снапшоты эффективного дневного плана (`daily_limits`), единый `compute_today_plan`, чистка при reset, retry; **C1–C3** — Bento-карточка (PNG 1280×1195, 2× supersampling) с метриками от посуточных лимитов (792 теста).  
+**Готово:** **G1** — график трат по дням: PNG-карточка как основной путь, нативный виджет за `MONTHLY_WIDGET_ENABLED`; **G2 + G2.1** — снапшоты эффективного дневного плана (`daily_limits`), единый `compute_today_plan`, чистка при reset, retry; **C1–C3** — Bento-карточка (PNG 1280×1195, 2× supersampling) с метриками от посуточных лимитов (813 тестов).  
 **Активно:** месячный отчёт — **M1–M4** готовы; дальше M5 → M6.  
 **Ближайшее:** «Конверты» (обязательные как отдельный конверт), затем M5/M6. G3 (локальные переключатели) и G4 (детали дня) — отдельные задачи в `SESSION_PLAN.md`. WeeklyStats отложен в локальной ветке `backup-weekly` (`ff4c813`).  
 **В планах:** Dogfooding Recovery, Dogfooding AI, релиз 5-10 пользователям.  
@@ -75,8 +75,17 @@
 - Закрытый `quiet_mode`: `quiet_mode_closed` с fallback на `quiet_mode`, подпись `за период — ни одной траты`, без обвинений.
 - **Ассеты:** в `src/assets/frogs/` лежат 23 PNG 100×100 RGBA. Alias/fallback: `top_expense → weekend_tax`, `tx_per_day → avg_day`, `forecast_early → forecast`, `quiet_mode_closed → quiet_mode`. `tx_per_day_zero` не добавляли — код его не использует. В широких карточках лягушка рисуется 96×96, в bento — 48×48.
 
-**Тесты:** `test_monthly_card_metrics.py` (37: все состояния, серия/0-дни, скор, границы, peak_days/k, weekend-гейт, night/latte, callout, пилюли, дедуп, x-ось), обновлены `test_monthly_chart.py` и `test_monthly_chart_integration.py`. `pytest 792 passed`, `ruff check .` clean.
+**Тесты:** `test_monthly_card_metrics.py` (52: все состояния, серия/0-дни, скор, границы, peak_days/k, weekend-гейт, night/latte, callout, пилюли, дедуп, x-ось), обновлены `test_monthly_chart.py` и `test_monthly_chart_integration.py`. `pytest 813 passed`, `ruff check .` clean.
 **Файлы:** `src/services/monthly_chart.py`, `tests/test_monthly_card_metrics.py`, `tests/test_monthly_chart.py`, `tests/test_monthly_chart_integration.py`
+
+### ✅ Backlog G2.1 + карточки (2026-11-25)
+
+- **A3:** `daily_limits` теперь пишется через атомарный `INSERT … ON CONFLICT DO UPDATE` для SQLite/PostgreSQL; старый SELECT→INSERT retry остался fallback для других диалектов. Гонка не оставляет день без снапшота.
+- **A5:** добавлена отдельная FK-фикстура (`PRAGMA foreign_keys=ON`) и тесты orphan-`DailyLimit` / удаления бюджета с `RecoveryState`.
+- **B3:** удалены `prev_expenses`/`prev_income`/`prev_period_*` и лишний запрос прошлого периода; `send_monthly_chart` больше не принимает `prev_budget`.
+- **B6:** при `base_limit == 0` обе пилюли скрыты; активный `tracked == 0` пишет `пока без трат`; нулевая дельта не печатается.
+- **B10:** добавлены границы `peak_days` 44/45, `weekend_tax` 39/40, `night_food`/`latte_effect` 14/15, лиги 54/55/74/75/89/90, tie-break категории, fallback `forecast_early`, рендер без лягушек, пилюли.
+- Осталась только ручная проверка в Telegram по чек-листу из `SESSION_PLAN.md`.
 
 ### 🐛 Bug Audit 2026-11-06 — P0/P1/P2, 15 пунктов + 5 находок (в работе)
 

@@ -334,6 +334,19 @@ class TestFrogs:
         names = {path.stem for path in root.glob("*.png")}
         assert set(FROG_FALLBACKS.values()) <= names
 
+    def test_forecast_early_loads_forecast_asset(self):
+        from src.services.monthly_chart import _load_frog
+
+        assert _load_frog("forecast_early") is not None
+
+    def test_render_with_missing_frogs(self, monkeypatch):
+        from src.services import monthly_chart as mc
+
+        monkeypatch.setattr(mc, "_load_frog", lambda _frog_id: None)
+        mc._cached_render.cache_clear()
+        png_bytes = render_monthly_card_png(_make_input(expenses=[], expenses_count=0))
+        assert png_bytes[:8] == b"\x89PNG\r\n\x1a\n"
+
     def test_committed_frog_assets_are_png_rgba(self):
         from pathlib import Path
 

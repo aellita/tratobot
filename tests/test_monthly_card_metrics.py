@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from src.services.monthly_chart import (
     MonthlyCardInput,
     _discipline_pill_text,
+    _league_for,
     _limit_delta_text,
     _pills_enabled,
     _x_label_indices,
@@ -345,6 +346,36 @@ def test_peak_days_requires_45_percent_of_spend():
     assert metrics.cards[2].id == "top_category"
 
 
+def test_peak_days_exact_45_percent_is_shown():
+    spent = [3000.0, 1500.0] + [1100.0] * 5
+    metrics = compute_card_metrics(
+        _make_input(
+            spent,
+            start=date(2026, 11, 2),
+            period_end=date(2026, 11, 8),
+            active=False,
+        )
+    )
+
+    assert metrics.cards[2].id == "peak_days"
+    assert metrics.cards[2].value == "45%"
+
+
+def test_peak_days_just_below_45_percent_is_hidden():
+    spent = [1400.0, 1400.0] + [1300.0] * 5
+    metrics = compute_card_metrics(
+        _make_input(
+            spent,
+            start=date(2026, 11, 2),
+            period_end=date(2026, 11, 8),
+            active=False,
+        )
+    )
+
+    assert "peak_days" not in _ids(metrics)
+    assert metrics.cards[2].id == "top_category"
+
+
 def test_closed_without_plan_can_put_peak_days_in_slot_two():
     spent = [10000.0, 10000.0, 10000.0, 1000.0, 1000.0, 1000.0, 1000.0, 0.0]
     metrics = compute_card_metrics(
@@ -407,6 +438,51 @@ def test_weekend_tax_is_not_shown_below_40_percent():
     assert metrics.cards[2].id == "top_category"
 
 
+def test_weekend_tax_exact_40_percent_is_shown():
+    spent = [1500.0, 2000.0, 2000.0, 1500.0, 1500.0, 1500.0]
+    metrics = compute_card_metrics(
+        _make_input(
+            spent,
+            start=date(2026, 11, 6),
+            period_end=date(2026, 11, 11),
+            active=False,
+        )
+    )
+
+    assert metrics.cards[2].id == "weekend_tax"
+    assert metrics.cards[2].value == "40%"
+
+
+def test_weekend_tax_just_below_40_percent_is_hidden():
+    spent = [1525.0, 1950.0, 1950.0, 1525.0, 1525.0, 1525.0]
+    metrics = compute_card_metrics(
+        _make_input(
+            spent,
+            start=date(2026, 11, 6),
+            period_end=date(2026, 11, 11),
+            active=False,
+        )
+    )
+
+    assert "weekend_tax" not in _ids(metrics)
+    assert metrics.cards[2].id == "top_category"
+
+
+def test_weekend_tax_active_uses_completed_total_at_40_percent():
+    spent = [1500.0, 2000.0, 2000.0, 1500.0, 1500.0, 1500.0, 50000.0]
+    metrics = compute_card_metrics(
+        _make_input(
+            spent,
+            start=date(2026, 11, 6),
+            as_of=date(2026, 11, 12),
+            active=True,
+        )
+    )
+
+    assert metrics.cards[2].id == "weekend_tax"
+    assert metrics.cards[2].value == "40%"
+
+
 def test_night_food_uses_15_percent_threshold():
     expenses = [{"date": "2026-11-02T22:00:00", "amount": 500.0}]
     metrics = compute_card_metrics(
@@ -423,13 +499,44 @@ def test_night_food_uses_15_percent_threshold():
     assert metrics.cards[2].subtitle == "с 21:00 до 5:00"
 
 
+def test_night_food_active_exact_15_percent_shown():
+    expenses = [{"date": "2026-11-02T22:00:00", "amount": 450.0}]
+    metrics = compute_card_metrics(
+        _make_input(
+            [1000.0, 1000.0, 1000.0, 0.0],
+            start=date(2026, 11, 2),
+            as_of=date(2026, 11, 5),
+            active=True,
+            expenses=expenses,
+        )
+    )
+
+    assert metrics.cards[2].id == "night_food"
+
+
+def test_night_food_active_below_15_percent_hidden():
+    expenses = [{"date": "2026-11-02T22:00:00", "amount": 420.0}]
+    metrics = compute_card_metrics(
+        _make_input(
+            [1000.0, 1000.0, 1000.0, 0.0],
+            start=date(2026, 11, 2),
+            as_of=date(2026, 11, 5),
+            active=True,
+            expenses=expenses,
+        )
+    )
+
+    assert "night_food" not in _ids(metrics)
+    assert metrics.cards[2].id == "top_category"
+
+
 def test_latte_effect_requires_five_checks_and_15_percent():
     expenses = [
-        {"date": "2026-11-02T12:00:00", "amount": 200.0},
-        {"date": "2026-11-03T12:00:00", "amount": 200.0},
-        {"date": "2026-11-04T12:00:00", "amount": 200.0},
-        {"date": "2026-11-05T12:00:00", "amount": 200.0},
-        {"date": "2026-11-06T12:00:00", "amount": 200.0},
+        {"date": "2026-11-02T12:00:00", "amount": 150.0},
+        {"date": "2026-11-03T12:00:00", "amount": 150.0},
+        {"date": "2026-11-04T12:00:00", "amount": 150.0},
+        {"date": "2026-11-05T12:00:00", "amount": 150.0},
+        {"date": "2026-11-06T12:00:00", "amount": 150.0},
     ]
     metrics = compute_card_metrics(
         _make_input(
@@ -451,6 +558,53 @@ def test_latte_effect_needs_five_checks():
         {"date": "2026-11-04T12:00:00", "amount": 250.0},
         {"date": "2026-11-05T12:00:00", "amount": 250.0},
     ]
+    metrics = compute_card_metrics(
+        _make_input(
+            [1000.0] * 5,
+            start=date(2026, 11, 2),
+            period_end=date(2026, 11, 6),
+            active=False,
+            expenses=expenses,
+        )
+    )
+
+    assert "latte_effect" not in _ids(metrics)
+    assert metrics.cards[2].id == "top_category"
+
+
+def test_latte_effect_exact_15_percent_is_shown():
+    expenses = [{"date": f"2026-11-{day:02d}T12:00:00", "amount": 150.0} for day in range(2, 7)]
+    metrics = compute_card_metrics(
+        _make_input(
+            [1000.0] * 5,
+            start=date(2026, 11, 2),
+            period_end=date(2026, 11, 6),
+            active=False,
+            expenses=expenses,
+        )
+    )
+
+    assert metrics.cards[2].id == "latte_effect"
+
+
+def test_latte_effect_just_below_15_percent_is_hidden():
+    expenses = [{"date": f"2026-11-{day:02d}T12:00:00", "amount": 140.0} for day in range(2, 7)]
+    metrics = compute_card_metrics(
+        _make_input(
+            [1000.0] * 5,
+            start=date(2026, 11, 2),
+            period_end=date(2026, 11, 6),
+            active=False,
+            expenses=expenses,
+        )
+    )
+
+    assert "latte_effect" not in _ids(metrics)
+    assert metrics.cards[2].id == "top_category"
+
+
+def test_latte_effect_exact_15_percent_needs_five_checks():
+    expenses = [{"date": f"2026-11-{day:02d}T12:00:00", "amount": 187.5} for day in range(2, 6)]
     metrics = compute_card_metrics(
         _make_input(
             [1000.0] * 5,
@@ -547,6 +701,35 @@ def test_limit_delta_text_omits_zero():
     assert _limit_delta_text(0.0) is None
     assert _limit_delta_text(1500.0) == (" (+1 500 ₽)", "up")
     assert _limit_delta_text(-1500.0) == (" (-1 500 ₽)", "down")
+
+
+def test_score_league_boundaries():
+    assert _league_for(54) == ("Новичок", "Свой", 1, "novice")
+    assert _league_for(55) == ("Свой", "Профи", 20, "own")
+    assert _league_for(74) == ("Свой", "Профи", 1, "own")
+    assert _league_for(75) == ("Профи", "Ниндзя", 15, "pro")
+    assert _league_for(89) == ("Профи", "Ниндзя", 1, "pro")
+    assert _league_for(90) == ("Ниндзя", None, None, "ninja")
+
+
+def test_top_category_tie_breaks_by_check_count():
+    expenses = [
+        {"date": "2026-11-02T12:00:00", "amount": 1500.0, "category": "Еда"},
+        {"date": "2026-11-02T13:00:00", "amount": 1500.0, "category": "Еда"},
+        {"date": "2026-11-02T14:00:00", "amount": 3000.0, "category": "Такси"},
+    ]
+    metrics = compute_card_metrics(
+        _make_input(
+            [3000.0],
+            start=date(2026, 11, 2),
+            period_end=date(2026, 11, 2),
+            active=False,
+            expenses=expenses,
+        )
+    )
+
+    assert metrics.cards[2].id == "top_category"
+    assert metrics.cards[2].value == "Еда"
 
 
 def test_weekend_tax_uses_completed_total_on_active_period():
