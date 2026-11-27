@@ -5,6 +5,7 @@ from src.services.monthly_chart import (
     _discipline_pill_text,
     _league_for,
     _limit_delta_text,
+    _milestone_states,
     _pills_enabled,
     _score_subtitle,
     _streak_milestones,
@@ -107,6 +108,7 @@ def test_active_cards_include_streak_and_score():
     assert metrics.score == 85
     assert metrics.league == "Профи"
     assert _ids(metrics)[:2] == ["limit_streak", "bro_score"]
+    assert metrics.cards[0].subtitle == "серия сброшена · рекорд 8 дней"
     assert metrics.cards[1].subtitle == "Лига: Профи · до Ниндзя 5 баллов"
     assert metrics.streak == 0
     assert metrics.best_streak == 8
@@ -198,7 +200,7 @@ def test_streak_breaks_on_overrun():
 
     assert metrics.streak == 1
     assert metrics.best_streak == 2
-    assert metrics.cards[0].subtitle == "до рекорда (2 дн.) — 1 дн."
+    assert metrics.cards[0].subtitle == "до рекорда (2 дня) — 1 день"
 
 
 def test_best_streak_excludes_current_run():
@@ -213,18 +215,44 @@ def test_best_streak_excludes_current_run():
 
 def test_streak_subtitles_for_zero_and_chasing_states():
     assert _streak_subtitle(0, 0) == "день в лимите запустит серию"
-    assert _streak_subtitle(0, 8) == "серия сброшена · рекорд 8 дн."
-    assert _streak_subtitle(2, 8) == "до рекорда (8 дн.) — 6 дн."
+    assert _streak_subtitle(0, 1) == "серия сброшена · рекорд 1 день"
+    assert _streak_subtitle(0, 2) == "серия сброшена · рекорд 2 дня"
+    assert _streak_subtitle(0, 8) == "серия сброшена · рекорд 8 дней"
+    assert _streak_subtitle(2, 8) == "до рекорда (8 дней) — 6 дней"
+    assert _streak_subtitle(7, 8) == "до рекорда (8 дней) — 1 день"
     assert _streak_subtitle(8, 8) == "повторяешь лучшую"
     assert _streak_subtitle(9, 8) == "новая лучшая серия"
 
 
-def test_streak_milestones_switch_after_ten_days():
-    assert _streak_milestones(0) == ((1, 3, 5, 7, 10), 1)
-    assert _streak_milestones(4) == ((1, 3, 5, 7, 10), 5)
-    assert _streak_milestones(10) == ((1, 3, 5, 7, 10), None)
-    assert _streak_milestones(11) == ((3, 7, 14, 21, 30), 14)
-    assert _streak_milestones(30) == ((3, 7, 14, 21, 30), None)
+def test_streak_milestones_slide_by_four_points():
+    assert _streak_milestones(0) == ((1, 3, 5, 7), 1)
+    assert _streak_milestones(5) == ((1, 3, 5, 7), 7)
+    assert _streak_milestones(6) == ((3, 5, 7, 10), 7)
+    assert _streak_milestones(7) == ((3, 5, 7, 10), 10)
+    assert _streak_milestones(8) == ((5, 7, 10, 14), 10)
+    assert _streak_milestones(10) == ((5, 7, 10, 14), 14)
+    assert _streak_milestones(11) == ((7, 10, 14, 21), 14)
+    assert _streak_milestones(14) == ((7, 10, 14, 21), 21)
+    assert _streak_milestones(15) == ((10, 14, 21, 30), 21)
+    assert _streak_milestones(30) == ((10, 14, 21, 30), None)
+    assert _streak_milestones(31) == ((10, 14, 21, 30), None)
+
+
+def test_milestone_states_apply_fog_of_war():
+    assert _milestone_states((1, 3, 5, 7), 0) == ("next", "horizon", "fog", "fog")
+    assert _milestone_states((1, 3, 5, 7), 1) == ("passed", "next", "horizon", "fog")
+    assert _milestone_states((1, 3, 5, 7), 4) == ("passed", "passed", "next", "horizon")
+    assert _milestone_states((3, 5, 7, 10), 6) == ("passed", "passed", "next", "horizon")
+    assert _milestone_states((3, 5, 7, 10), 7) == ("passed", "passed", "passed", "next")
+    assert _milestone_states((10, 14, 21, 30), 30) == ("passed", "passed", "passed", "passed")
+    assert _milestone_states((10, 14, 21, 30), 31) == ("passed", "passed", "passed", "passed")
+
+
+def test_streak_card_value_pluralizes_days():
+    metrics = compute_card_metrics(_make_input([1000.0] * 21 + [0.0], as_of=date(2026, 11, 23)))
+
+    assert metrics.streak == 21
+    assert metrics.cards[0].value == "21 день"
 
 
 def test_streak_card_uses_milestones_without_bar():
@@ -827,16 +855,17 @@ def test_weekend_tax_uses_completed_total_on_active_period():
 
 
 def test_x_axis_labels_show_every_day_for_short_windows():
-    for n in (0, 1, 2, 5, 6, 7):
+    for n in (0, 1, 2, 5, 6, 7, 8, 9, 10):
         indices = _x_label_indices(n)
         assert indices == list(range(n))
 
-    for n in (8, 10, 20, 30, 31):
+    for n in (11, 20, 30, 31):
         indices = _x_label_indices(n)
         assert indices[0] == 0
         assert indices[-1] == n - 1
         assert len(indices) <= 6
         assert len(indices) >= 5
+        assert all(right - left >= 2 for left, right in zip(indices, indices[1:]))
 
 
 def test_no_duplicate_metric_ids_across_states():

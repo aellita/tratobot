@@ -260,8 +260,21 @@ class TestRenderMonthlyCardPng:
         )
         assert len(png_bytes) > 1000
 
+    def test_active_zero_streak_renders_fog_milestones(self):
+        png_bytes = render_monthly_card_png(
+            _make_input(
+                daily_spent=[6000.0, 0.0],
+                total_spent=6000.0,
+                expenses_count=1,
+                as_of=date(2026, 11, 3),
+                is_active=True,
+                daily_limits=[5000.0, 5000.0],
+            )
+        )
+        assert len(png_bytes) > 1000
+
     def test_short_windows_render_all_axis_labels(self):
-        for days in (7, 8):
+        for days in (7, 8, 9, 10):
             png_bytes = render_monthly_card_png(
                 _make_input(
                     daily_spent=[100.0] * days,

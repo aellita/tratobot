@@ -413,9 +413,9 @@ def _x_label_indices(n: int) -> list[int]:
     """Return every index for short windows and 5–6 evenly spaced labels otherwise."""
     if n <= 0:
         return []
-    if n <= 7:
+    if n <= 10:
         return list(range(n))
-    target = min(n, 6)
+    target = 6
     return sorted({round(i * (n - 1) / (target - 1)) for i in range(target)})
 
 
@@ -435,23 +435,49 @@ def _league_for(score: int) -> tuple[str, str | None, int | None, str]:
     return "Ниндзя", None, None, "ninja"
 
 
-STREAK_MILESTONES = (1, 3, 5, 7, 10)
-STREAK_MILESTONES_LONG = (3, 7, 14, 21, 30)
+STREAK_MILESTONES = (1, 3, 5, 7, 10, 14, 21, 30)
 
 
 def _streak_milestones(streak: int) -> tuple[tuple[int, ...], int | None]:
-    thresholds = STREAK_MILESTONES_LONG if streak > 10 else STREAK_MILESTONES
+    if streak <= 5:
+        thresholds = STREAK_MILESTONES[0:4]
+    elif streak <= 7:
+        thresholds = STREAK_MILESTONES[1:5]
+    elif streak <= 10:
+        thresholds = STREAK_MILESTONES[2:6]
+    elif streak <= 14:
+        thresholds = STREAK_MILESTONES[3:7]
+    else:
+        thresholds = STREAK_MILESTONES[4:8]
     next_target = next((value for value in thresholds if value > streak), None)
     return thresholds, next_target
+
+
+def _milestone_states(thresholds: tuple[int, ...], streak: int) -> tuple[str, ...]:
+    next_index = next((index for index, value in enumerate(thresholds) if value > streak), None)
+    states: list[str] = []
+    for index, value in enumerate(thresholds):
+        if value <= streak:
+            states.append("passed")
+        elif index == next_index:
+            states.append("next")
+        elif next_index is not None and index == next_index + 1:
+            states.append("horizon")
+        else:
+            states.append("fog")
+    return tuple(states)
 
 
 def _streak_subtitle(streak: int, best_streak: int) -> str:
     if streak == 0:
         if best_streak > 0:
-            return f"серия сброшена · рекорд {best_streak} дн."
+            days = _plural_ru(best_streak, ("день", "дня", "дней"))
+            return f"серия сброшена · рекорд {best_streak} {days}"
         return "день в лимите запустит серию"
     if streak < best_streak:
-        return f"до рекорда ({best_streak} дн.) — {best_streak - streak} дн."
+        best_days = _plural_ru(best_streak, ("день", "дня", "дней"))
+        left_days = _plural_ru(best_streak - streak, ("день", "дня", "дней"))
+        return f"до рекорда ({best_streak} {best_days}) — {best_streak - streak} {left_days}"
     if best_streak == 0:
         return "первая серия периода"
     if streak > best_streak:
@@ -1082,7 +1108,7 @@ class _ScaledDraw:
 
 
 def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int) -> bytes:
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFilter
 
     bg = "#0B0F14"
     card_bg = "#111822"
@@ -1097,6 +1123,7 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
     accent_orange = "#FB923C"
     accent_purple = "#A78BFA"
     accent_pink = "#F472B6"
+    fog_color = "#3B4551"
 
     w, h = 900, 840
     margin = 32
@@ -1158,6 +1185,14 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
         while text and text_width(text + tail, font) > max_width:
             text = text[:-1]
         return text.rstrip() + tail
+
+    def cap_center_y(font, top_y):
+        box = font.getbbox("Н")
+        return top_y + (box[1] + box[3]) / (2 * scale)
+
+    def rgba(color, alpha):
+        value = color.lstrip("#")
+        return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4)) + (alpha,)
 
     def axis_label(value):
         if value >= 1_000_000:
@@ -1452,8 +1487,27 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
             y = first_row_y if index < 2 else second_row_y
             accent = accents.get(card.id, text_secondary)
             rounded((x, y, x + card_w, y + card_h), 16, card_bg, border, 1)
-            draw.ellipse([x + 20, y + 20, x + 28, y + 28], fill=accent)
-            draw.text((x + 36, y + 14), card.title, font=font_card_title, fill=accent)
+            title_top = y + 14
+            dot_x = x + 24
+            dot_y = cap_center_y(font_card_title, title_top)
+            glow_radius = 10
+            glow_side = glow_radius * 2 * scale
+            glow = Image.new("RGBA", (glow_side, glow_side), (0, 0, 0, 0))
+            glow_draw = ImageDraw.Draw(glow)
+            inset = 3 * scale
+            glow_draw.ellipse(
+                [inset, inset, glow_side - inset - 1, glow_side - inset - 1],
+                fill=rgba(accent, 100),
+            )
+            glow = glow.filter(ImageFilter.GaussianBlur(radius=2.5 * scale))
+            img.paste(
+                glow,
+                (round(dot_x * scale - glow_side / 2), round(dot_y * scale - glow_side / 2)),
+                glow,
+            )
+            draw = _ScaledDraw(ImageDraw.Draw(img), scale)
+            draw.ellipse([dot_x - 4, dot_y - 4, dot_x + 4, dot_y + 4], fill=accent)
+            draw.text((x + 36, title_top), card.title, font=font_card_title, fill=accent)
             value_w = card_w - 40 - 68
             value_font = fit_font(card.value, "bold", [32, 28, 24, 20], value_w)
             draw.text(
@@ -1481,54 +1535,82 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
                         accent,
                     )
             elif card.bar_kind == "badge":
-                badge_h = 22
-                badge_y = footer_y - badge_h
-                rounded((bar_x0, badge_y, bar_x1, footer_y), 11, bg, border, 1)
-                badge_w = bar_x1 - bar_x0 - 16
-                badge_font = fit_font(card.badge, "semibold", [11, 10], badge_w)
+                draw.rectangle(
+                    [bar_x0, footer_y - 13, bar_x0 + 2, footer_y],
+                    fill=accent,
+                )
+                meta_x = bar_x0 + 11
+                meta_w = bar_x1 - meta_x
+                meta_font = fit_font(card.badge, "semibold", [11, 10], meta_w)
                 draw.text(
-                    ((bar_x0 + bar_x1) / 2, badge_y + 4),
-                    truncate(card.badge, badge_font, badge_w),
-                    font=badge_font,
+                    (meta_x, footer_y - 7),
+                    truncate(card.badge, meta_font, meta_w),
+                    font=meta_font,
                     fill=text_secondary,
-                    anchor="ma",
+                    anchor="lm",
                 )
             elif card.bar_kind == "milestones":
-                thresholds, next_target = _streak_milestones(metrics.streak)
+                thresholds, _ = _streak_milestones(metrics.streak)
+                states = _milestone_states(thresholds, metrics.streak)
                 line_y = footer_y - 8
                 step_x = (bar_x1 - bar_x0) / (len(thresholds) - 1)
                 positions = [bar_x0 + index * step_x for index in range(len(thresholds))]
+
                 for index in range(len(thresholds) - 1):
-                    reached = thresholds[index + 1] <= metrics.streak
-                    draw.line(
-                        [(positions[index], line_y), (positions[index + 1], line_y)],
-                        fill=accent_green if reached else border,
-                        width=2,
-                    )
+                    left_x = positions[index]
+                    right_x = positions[index + 1]
+                    right_state = states[index + 1]
+                    if right_state == "passed":
+                        draw.line(
+                            [(left_x, line_y), (right_x, line_y)],
+                            fill=accent_green,
+                            width=2,
+                        )
+                    elif right_state in {"next", "horizon"}:
+                        draw.line(
+                            [(left_x, line_y), (right_x, line_y)],
+                            fill=text_secondary,
+                            width=2,
+                        )
+                    else:
+                        dashed_horizontal(
+                            left_x, right_x, line_y, fog_color, dash=3, gap=4, width=1
+                        )
+
                 for index, threshold in enumerate(thresholds):
+                    state = states[index]
                     center_x = positions[index]
-                    if threshold <= metrics.streak:
+                    if state == "passed":
                         draw.ellipse(
                             [center_x - 3.5, line_y - 3.5, center_x + 3.5, line_y + 3.5],
                             fill=accent_green,
                         )
-                    elif threshold == next_target:
+                        color = accent_green
+                    elif state == "next":
                         draw.ellipse(
                             [center_x - 4, line_y - 4, center_x + 4, line_y + 4],
                             fill=card_bg,
                             outline=accent_green,
                             width=2,
                         )
-                    else:
+                        color = accent_green
+                    elif state == "horizon":
                         draw.ellipse(
                             [center_x - 3, line_y - 3, center_x + 3, line_y + 3],
-                            fill=border,
+                            fill=text_secondary,
                         )
+                        color = text_secondary
+                    else:
+                        draw.ellipse(
+                            [center_x - 2.5, line_y - 2.5, center_x + 2.5, line_y + 2.5],
+                            fill=fog_color,
+                        )
+                        color = fog_color
                     draw.text(
                         (center_x, line_y + 7),
                         f"{threshold}д",
                         font=font_micro,
-                        fill=accent_green if threshold <= metrics.streak else text_secondary,
+                        fill=color,
                         anchor="ma",
                     )
             _paste_frog(
