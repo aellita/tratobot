@@ -166,6 +166,8 @@ class CardMetric:
     subtitle: str
     bar: float = 0.0
     frog: str = ""
+    bar_kind: str = "bar"
+    badge: str = ""
 
 
 @dataclass(frozen=True)
@@ -408,11 +410,11 @@ def _month_short(value: date) -> str:
 
 
 def _x_label_indices(n: int) -> list[int]:
-    """Return 5–6 evenly spaced indices, always including the last day."""
+    """Return every index for short windows and 5–6 evenly spaced labels otherwise."""
     if n <= 0:
         return []
-    if n == 1:
-        return [0]
+    if n <= 7:
+        return list(range(n))
     target = min(n, 6)
     return sorted({round(i * (n - 1) / (target - 1)) for i in range(target)})
 
@@ -431,6 +433,37 @@ def _league_for(score: int) -> tuple[str, str | None, int | None, str]:
             points = threshold - score if next_name else None
             return name, next_name, points, key
     return "Ниндзя", None, None, "ninja"
+
+
+STREAK_MILESTONES = (1, 3, 5, 7, 10)
+STREAK_MILESTONES_LONG = (3, 7, 14, 21, 30)
+
+
+def _streak_milestones(streak: int) -> tuple[tuple[int, ...], int | None]:
+    thresholds = STREAK_MILESTONES_LONG if streak > 10 else STREAK_MILESTONES
+    next_target = next((value for value in thresholds if value > streak), None)
+    return thresholds, next_target
+
+
+def _streak_subtitle(streak: int, best_streak: int) -> str:
+    if streak == 0:
+        if best_streak > 0:
+            return f"серия сброшена · рекорд {best_streak} дн."
+        return "день в лимите запустит серию"
+    if streak < best_streak:
+        return f"до рекорда ({best_streak} дн.) — {best_streak - streak} дн."
+    if best_streak == 0:
+        return "первая серия периода"
+    if streak > best_streak:
+        return "новая лучшая серия"
+    return "повторяешь лучшую"
+
+
+def _score_subtitle(league: str, next_league: str | None, points: int | None) -> str:
+    if next_league is not None and points is not None:
+        points_text = _plural_ru(points, ("балл", "балла", "баллов"))
+        return f"Лига: {league} · до {next_league} {points} {points_text}"
+    return f"Лига: {league} · максимум"
 
 
 def _streak_state(spent: list[float], limits: list[float], count: int) -> tuple[int, int]:
@@ -456,6 +489,8 @@ def _metric(
     subtitle: str,
     bar: float = 0.0,
     frog: str | None = None,
+    bar_kind: str = "bar",
+    badge: str = "",
 ) -> CardMetric:
     return CardMetric(
         id=metric_id,
@@ -464,6 +499,8 @@ def _metric(
         subtitle=subtitle,
         bar=max(0.0, min(1.0, bar)),
         frog=frog or metric_id,
+        bar_kind=bar_kind,
+        badge=badge,
     )
 
 
@@ -611,7 +648,8 @@ def compute_card_metrics(input: MonthlyCardInput) -> CardMetrics:
             "СРЕДНИЙ ДЕНЬ",
             f"{_fmt_money(avg_day)} ₽",
             f"за {passed_days} {_plural_ru(passed_days, ('день', 'дня', 'дней'))}",
-            bar=(avg_day / max(days, default=1)) if days else 0.0,
+            bar=(avg_day / max(max(days, default=0.0), 1.0)) if days else 0.0,
+            bar_kind="none",
         )
 
     def top_expense_card() -> CardMetric:
@@ -621,6 +659,7 @@ def compute_card_metrics(input: MonthlyCardInput) -> CardMetrics:
             f"{_fmt_money(top_expense_amount)} ₽",
             top_expense_category,
             bar=(top_expense_amount / total_spent) if total_spent > 0 else 0.0,
+            bar_kind="none",
         )
 
     def top_category_card() -> CardMetric:
@@ -667,12 +706,15 @@ def compute_card_metrics(input: MonthlyCardInput) -> CardMetrics:
             else None
         )
         night_share = (night_amount / total_spent) if total_spent > 0 else 0.0
+        night_count = sum(1 for expense in input.expenses if _is_night_expense(expense))
+        night_pct = int(round(night_share * 100))
         night = (
             _metric(
                 "night_food",
                 "НОЧНОЙ ДОЖОР",
                 f"{_fmt_money(night_amount)} ₽",
-                "с 21:00 до 5:00",
+                f"{night_pct}% трат после 21:00 · {night_count} "
+                f"{_plural_ru(night_count, ('чек', 'чека', 'чеков'))}",
                 bar=night_share,
             )
             if night_amount > 0
@@ -770,30 +812,23 @@ def compute_card_metrics(input: MonthlyCardInput) -> CardMetrics:
         slot1 = avg_card()
     elif active:
         if streak == 0:
-            subtitle = "серия сброшена" if best_streak > 0 else "серия начнётся с траты"
             frog = "limit_streak_zero"
         elif best_streak == 0:
-            subtitle = "первая серия периода"
             frog = "limit_streak_first"
         elif streak > best_streak:
-            subtitle = "новая лучшая серия"
             frog = "limit_streak_record"
         elif streak == best_streak:
-            subtitle = "повторяешь лучшую"
             frog = "limit_streak_repeat"
         else:
-            subtitle = (
-                f"до лучшей {best_streak - streak} "
-                f"{_plural_ru(best_streak - streak, ('день', 'дня', 'дней'))}"
-            )
             frog = "limit_streak_chasing"
         slot1 = _metric(
             "limit_streak",
             "СЕРИЯ",
             f"{streak} {_plural_ru(streak, ('день', 'дня', 'дней'))}",
-            subtitle,
+            _streak_subtitle(streak, best_streak),
             bar=(streak / tracked) if tracked else 0.0,
             frog=frog,
+            bar_kind="milestones",
         )
     else:
         winrate_frog = (
@@ -818,15 +853,11 @@ def compute_card_metrics(input: MonthlyCardInput) -> CardMetrics:
         else:
             peak_used = True
     elif score is not None:
-        if next_league is not None and points_to_next is not None:
-            subtitle = f"{league} · до {next_league} {points_to_next} б."
-        else:
-            subtitle = f"{league} · максимум"
         slot2 = _metric(
             "bro_score",
             "ФИН-СКОР",
             f"{score}/100",
-            subtitle,
+            _score_subtitle(league or "", next_league, points_to_next),
             bar=score / 100,
             frog=f"bro_score_{league_key}",
         )
@@ -839,6 +870,7 @@ def compute_card_metrics(input: MonthlyCardInput) -> CardMetrics:
             subtitle,
             bar=(forecast / (base * total_days)) if base > 0 else 0.0,
             frog="forecast_early" if tracked == 1 else "forecast",
+            bar_kind="none",
         )
     else:
         slot2 = avg_card()
@@ -848,12 +880,15 @@ def compute_card_metrics(input: MonthlyCardInput) -> CardMetrics:
     if slot3 is None or slot3.id in used:
         slot3 = top_category_card()
 
+    total_tx = input.expenses_count
     tx_card = _metric(
         "tx_per_day",
         "ПОКУПОК В ДЕНЬ",
-        f"{tx_per_day:.1f}".replace(".", ","),
-        f"медиана чека {_fmt_money(median_check)} ₽",
+        f"{tx_per_day:.1f}".replace(".", ",") + " чека/день",
+        f"типичный чек — {_fmt_money(median_check)} ₽",
         bar=min(1.0, tx_per_day / 5),
+        bar_kind="badge",
+        badge=(f"{total_tx} {_plural_ru(total_tx, ('покупка', 'покупки', 'покупок'))} за период"),
     )
 
     cards = (slot1, slot2, slot3, tx_card)
@@ -1059,6 +1094,7 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
     limit_yellow = "#FACC15"
     accent_red = "#FF4433"
     accent_green = "#4CC38A"
+    accent_orange = "#FB923C"
     accent_purple = "#A78BFA"
     accent_pink = "#F472B6"
 
@@ -1100,6 +1136,7 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
     font_callout = font("semibold", 13)
     font_card_title = font("semibold", 12)
     font_card_sub = font("regular", 14)
+    font_micro = font("semibold", 10)
 
     def rounded(xy, radius, fill, outline=None, width=1):
         draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
@@ -1288,13 +1325,14 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
                     x1 = inner_x + (i + 1) * inner_w / (n - 1) if i < n - 1 else x0
                 else:
                     x0, x1 = inner_x, inner_x + inner_w
-                dashed_horizontal(x0, x1, y_of(limits[i]), limit_yellow)
+                dashed_horizontal(x0, x1, y_of(limits[i]), limit_yellow, width=2)
                 if i < n - 1 and limits[i] != limits[i + 1]:
                     dashed_vertical(
                         x1,
                         y_of(limits[i]),
                         y_of(limits[i + 1]),
                         limit_yellow,
+                        width=2,
                     )
 
             if n > 1:
@@ -1326,6 +1364,23 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
                         fill=accent_red,
                     )
 
+            limit_label = "ЛИМИТ"
+            label_w = text_width(limit_label, font_micro)
+            label_x = inner_x + inner_w
+            label_y = max(inner_y + 2, y_of(limits[-1]) - 16)
+            rounded(
+                (label_x - label_w - 8, label_y - 1, label_x, label_y + 12),
+                4,
+                card_bg,
+            )
+            draw.text(
+                (label_x - 4, label_y),
+                limit_label,
+                font=font_micro,
+                fill=limit_yellow,
+                anchor="ra",
+            )
+
             completed = metrics.today_index if metrics.today_index is not None else n
             peak_scope = completed if completed else n
             peak_idx = max(range(peak_scope), key=lambda i: days[i]) if peak_scope else None
@@ -1343,7 +1398,7 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
                     callout_h = 26
                     tx = peak_x - callout_w / 2
                     tx = max(inner_x, min(tx, inner_x + inner_w - callout_w))
-                    ty = max(chart_y + 56, peak_y - callout_h - 10)
+                    ty = max(chart_y + 4, peak_y - callout_h - 20)
                     rounded((tx, ty, tx + callout_w, ty + callout_h), 6, card_bg, accent_red, 1)
                     draw.text((tx + 10, ty + 5), callout, font=font_callout, fill=text_primary)
 
@@ -1389,7 +1444,7 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
             "weekend_tax": accent_purple,
             "night_food": accent_pink,
             "latte_effect": accent_pink,
-            "tx_per_day": text_secondary,
+            "tx_per_day": accent_orange,
         }
 
         for index, card in enumerate(metrics.cards[:4]):
@@ -1413,21 +1468,74 @@ def _render_monthly_card_png_from_dict(data: dict, scale: int, output_width: int
                 font=font_card_sub,
                 fill=text_secondary,
             )
-            bar_y = y + 144
+            footer_y = y + card_h - 24
             bar_x0 = x + 20
             bar_x1 = x + card_w - 84
-            rounded((bar_x0, bar_y, bar_x1, bar_y + 6), 3, border)
-            if card.bar > 0:
-                rounded(
-                    (bar_x0, bar_y, bar_x0 + (bar_x1 - bar_x0) * card.bar, bar_y + 6),
-                    3,
-                    accent,
+            if card.bar_kind == "bar":
+                bar_y = footer_y - 6
+                rounded((bar_x0, bar_y, bar_x1, footer_y), 3, border)
+                if card.bar > 0:
+                    rounded(
+                        (bar_x0, bar_y, bar_x0 + (bar_x1 - bar_x0) * card.bar, footer_y),
+                        3,
+                        accent,
+                    )
+            elif card.bar_kind == "badge":
+                badge_h = 22
+                badge_y = footer_y - badge_h
+                rounded((bar_x0, badge_y, bar_x1, footer_y), 11, bg, border, 1)
+                badge_w = bar_x1 - bar_x0 - 16
+                badge_font = fit_font(card.badge, "semibold", [11, 10], badge_w)
+                draw.text(
+                    ((bar_x0 + bar_x1) / 2, badge_y + 4),
+                    truncate(card.badge, badge_font, badge_w),
+                    font=badge_font,
+                    fill=text_secondary,
+                    anchor="ma",
                 )
+            elif card.bar_kind == "milestones":
+                thresholds, next_target = _streak_milestones(metrics.streak)
+                line_y = footer_y - 8
+                step_x = (bar_x1 - bar_x0) / (len(thresholds) - 1)
+                positions = [bar_x0 + index * step_x for index in range(len(thresholds))]
+                for index in range(len(thresholds) - 1):
+                    reached = thresholds[index + 1] <= metrics.streak
+                    draw.line(
+                        [(positions[index], line_y), (positions[index + 1], line_y)],
+                        fill=accent_green if reached else border,
+                        width=2,
+                    )
+                for index, threshold in enumerate(thresholds):
+                    center_x = positions[index]
+                    if threshold <= metrics.streak:
+                        draw.ellipse(
+                            [center_x - 3.5, line_y - 3.5, center_x + 3.5, line_y + 3.5],
+                            fill=accent_green,
+                        )
+                    elif threshold == next_target:
+                        draw.ellipse(
+                            [center_x - 4, line_y - 4, center_x + 4, line_y + 4],
+                            fill=card_bg,
+                            outline=accent_green,
+                            width=2,
+                        )
+                    else:
+                        draw.ellipse(
+                            [center_x - 3, line_y - 3, center_x + 3, line_y + 3],
+                            fill=border,
+                        )
+                    draw.text(
+                        (center_x, line_y + 7),
+                        f"{threshold}д",
+                        font=font_micro,
+                        fill=accent_green if threshold <= metrics.streak else text_secondary,
+                        anchor="ma",
+                    )
             _paste_frog(
                 img,
                 card.frog,
                 x + card_w - 68,
-                y + (card_h - 48) // 2,
+                footer_y - 48,
                 48,
                 scale,
             )

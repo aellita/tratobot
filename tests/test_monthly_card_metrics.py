@@ -6,6 +6,9 @@ from src.services.monthly_chart import (
     _league_for,
     _limit_delta_text,
     _pills_enabled,
+    _score_subtitle,
+    _streak_milestones,
+    _streak_subtitle,
     _x_label_indices,
     compute_card_metrics,
 )
@@ -104,7 +107,7 @@ def test_active_cards_include_streak_and_score():
     assert metrics.score == 85
     assert metrics.league == "Профи"
     assert _ids(metrics)[:2] == ["limit_streak", "bro_score"]
-    assert metrics.cards[1].subtitle == "Профи · до Ниндзя 5 б."
+    assert metrics.cards[1].subtitle == "Лига: Профи · до Ниндзя 5 баллов"
     assert metrics.streak == 0
     assert metrics.best_streak == 8
 
@@ -156,6 +159,8 @@ def test_closed_cards_include_winrate_and_score():
     assert metrics.score == 85
     assert _ids(metrics)[:2] == ["limit_winrate", "bro_score"]
     assert metrics.cards[0].value == "20 из 25"
+    assert metrics.cards[0].bar_kind == "bar"
+    assert metrics.cards[1].bar_kind == "bar"
     assert metrics.budget_saved == 100000.0
 
 
@@ -193,7 +198,7 @@ def test_streak_breaks_on_overrun():
 
     assert metrics.streak == 1
     assert metrics.best_streak == 2
-    assert "до лучшей 1 день" in metrics.cards[0].subtitle
+    assert metrics.cards[0].subtitle == "до рекорда (2 дн.) — 1 дн."
 
 
 def test_best_streak_excludes_current_run():
@@ -204,6 +209,42 @@ def test_best_streak_excludes_current_run():
     assert metrics.streak == 2
     assert metrics.best_streak == 2
     assert metrics.cards[0].subtitle == "повторяешь лучшую"
+
+
+def test_streak_subtitles_for_zero_and_chasing_states():
+    assert _streak_subtitle(0, 0) == "день в лимите запустит серию"
+    assert _streak_subtitle(0, 8) == "серия сброшена · рекорд 8 дн."
+    assert _streak_subtitle(2, 8) == "до рекорда (8 дн.) — 6 дн."
+    assert _streak_subtitle(8, 8) == "повторяешь лучшую"
+    assert _streak_subtitle(9, 8) == "новая лучшая серия"
+
+
+def test_streak_milestones_switch_after_ten_days():
+    assert _streak_milestones(0) == ((1, 3, 5, 7, 10), 1)
+    assert _streak_milestones(4) == ((1, 3, 5, 7, 10), 5)
+    assert _streak_milestones(10) == ((1, 3, 5, 7, 10), None)
+    assert _streak_milestones(11) == ((3, 7, 14, 21, 30), 14)
+    assert _streak_milestones(30) == ((3, 7, 14, 21, 30), None)
+
+
+def test_streak_card_uses_milestones_without_bar():
+    metrics = compute_card_metrics(_make_input([1000.0, 1000.0, 0.0], as_of=date(2026, 11, 5)))
+
+    streak_card = metrics.cards[0]
+    assert streak_card.id == "limit_streak"
+    assert streak_card.bar_kind == "milestones"
+
+
+def test_cards_without_percent_scale_have_no_bar():
+    forecast = compute_card_metrics(_make_input([1000.0, 0.0, 0.0], as_of=date(2026, 11, 4)))
+    assert forecast.cards[1].id == "forecast"
+    assert forecast.cards[1].bar_kind == "none"
+
+    no_plan = compute_card_metrics(
+        _make_input([5000.0, 3000.0, 0.0], base=0.0, as_of=date(2026, 11, 4))
+    )
+    assert no_plan.cards[0].id == "avg_day"
+    assert no_plan.cards[0].bar_kind == "none"
 
 
 def test_green_uses_each_day_limit():
@@ -496,7 +537,26 @@ def test_night_food_uses_15_percent_threshold():
     )
 
     assert metrics.cards[2].id == "night_food"
-    assert metrics.cards[2].subtitle == "с 21:00 до 5:00"
+    assert metrics.cards[2].subtitle == "17% трат после 21:00 · 1 чек"
+
+
+def test_night_food_subtitle_counts_checks_with_plural():
+    expenses = [
+        {"date": "2026-11-02T22:00:00", "amount": 500.0},
+        {"date": "2026-11-03T01:00:00", "amount": 500.0},
+    ]
+    metrics = compute_card_metrics(
+        _make_input(
+            [1000.0, 1000.0, 1000.0],
+            start=date(2026, 11, 2),
+            period_end=date(2026, 11, 4),
+            active=False,
+            expenses=expenses,
+        )
+    )
+
+    assert metrics.cards[2].id == "night_food"
+    assert metrics.cards[2].subtitle == "33% трат после 21:00 · 2 чека"
 
 
 def test_night_food_active_exact_15_percent_shown():
@@ -651,8 +711,20 @@ def test_tx_per_day_and_median_check():
 
     tx_card = metrics.cards[3]
     assert tx_card.id == "tx_per_day"
-    assert tx_card.value == "0,8"
-    assert tx_card.subtitle == "медиана чека 2 000 ₽"
+    assert tx_card.value == "0,8 чека/день"
+    assert tx_card.subtitle == "типичный чек — 2 000 ₽"
+    assert tx_card.badge == "3 покупки за период"
+    assert tx_card.bar_kind == "badge"
+
+
+def test_tx_badge_pluralizes_purchases():
+    expenses = [{"date": "2026-11-02T12:00:00", "amount": 100.0} for _ in range(21)]
+    metrics = compute_card_metrics(
+        _make_input([2100.0, 0.0, 0.0, 0.0], as_of=date(2026, 11, 6), expenses=expenses)
+    )
+
+    tx_card = metrics.cards[3]
+    assert tx_card.badge == "21 покупка за период"
 
 
 def test_pills_and_delta():
@@ -703,6 +775,13 @@ def test_limit_delta_text_omits_zero():
     assert _limit_delta_text(-1500.0) == (" (-1 500 ₽)", "down")
 
 
+def test_score_subtitle_uses_full_declension():
+    assert _score_subtitle("Новичок", "Свой", 43) == "Лига: Новичок · до Свой 43 балла"
+    assert _score_subtitle("Новичок", "Свой", 1) == "Лига: Новичок · до Свой 1 балл"
+    assert _score_subtitle("Профи", "Ниндзя", 5) == "Лига: Профи · до Ниндзя 5 баллов"
+    assert _score_subtitle("Ниндзя", None, None) == "Лига: Ниндзя · максимум"
+
+
 def test_score_league_boundaries():
     assert _league_for(54) == ("Новичок", "Свой", 1, "novice")
     assert _league_for(55) == ("Свой", "Профи", 20, "own")
@@ -747,17 +826,17 @@ def test_weekend_tax_uses_completed_total_on_active_period():
     assert metrics.cards[2].value == "44%"
 
 
-def test_x_axis_label_count_stays_at_most_six():
-    for n in (0, 1, 2, 5, 6, 7, 10, 20, 30, 31):
+def test_x_axis_labels_show_every_day_for_short_windows():
+    for n in (0, 1, 2, 5, 6, 7):
         indices = _x_label_indices(n)
-        if n == 0:
-            assert indices == []
-            continue
+        assert indices == list(range(n))
+
+    for n in (8, 10, 20, 30, 31):
+        indices = _x_label_indices(n)
         assert indices[0] == 0
         assert indices[-1] == n - 1
         assert len(indices) <= 6
-        if n >= 5:
-            assert len(indices) >= 5
+        assert len(indices) >= 5
 
 
 def test_no_duplicate_metric_ids_across_states():

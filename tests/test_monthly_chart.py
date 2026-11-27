@@ -247,6 +247,33 @@ class TestRenderMonthlyCardPng:
         )
         assert len(png_bytes) > 1000
 
+    def test_active_streak_uses_shifted_milestones(self):
+        png_bytes = render_monthly_card_png(
+            _make_input(
+                daily_spent=[100.0] * 18,
+                total_spent=1800.0,
+                expenses_count=18,
+                as_of=date(2026, 11, 19),
+                is_active=True,
+                daily_limits=[5000.0] * 18,
+            )
+        )
+        assert len(png_bytes) > 1000
+
+    def test_short_windows_render_all_axis_labels(self):
+        for days in (7, 8):
+            png_bytes = render_monthly_card_png(
+                _make_input(
+                    daily_spent=[100.0] * days,
+                    total_spent=100.0 * days,
+                    expenses_count=days,
+                    as_of=date(2026, 11, days + 1),
+                    is_active=True,
+                    daily_limits=[5000.0] * days,
+                )
+            )
+            assert len(png_bytes) > 1000
+
     def test_upcoming_period(self):
         png_bytes = render_monthly_card_png(
             _make_input(
